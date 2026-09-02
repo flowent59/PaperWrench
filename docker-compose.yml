@@ -1,0 +1,59 @@
+# PaperWrench, production-style deployment.
+#
+# This file starts PaperWrench ALONE. It deliberately does not start a
+# Paperless-ngx instance: PaperWrench connects to the one you already run, and
+# Paperless-ngx remains the sole source of truth.
+#
+# Point PAPERLESS_URL at your existing instance and provide a token that has
+# only the permissions you are willing to delegate (see docs/security.md).
+
+services:
+  paperwrench:
+    image: ghcr.io/flowent59/paperwrench:latest
+    # Build locally instead of pulling:
+    #   docker compose build
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: paperwrench
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      # --- Paperless-ngx connection (required) ---------------------------
+      PAPERLESS_URL: ${PAPERLESS_URL:?set PAPERLESS_URL in your .env}
+      # Prefer PAPERLESS_TOKEN_FILE with a Docker secret over an inline token.
+      PAPERLESS_TOKEN: ${PAPERLESS_TOKEN:-}
+      PAPERLESS_TOKEN_FILE: ${PAPERLESS_TOKEN_FILE:-}
+      # Pinned explicitly rather than relying on the server default (ADR-0003).
+      PAPERLESS_API_VERSION: "10"
+
+      # --- PaperWrench runtime -------------------------------------------
+      PAPERWRENCH_DATABASE_URL: sqlite+pysqlite:////data/paperwrench.db
+      PAPERWRENCH_LOG_LEVEL: ${PAPERWRENCH_LOG_LEVEL:-INFO}
+      PAPERWRENCH_LOG_FORMAT: json
+      # Bounded write concurrency against Paperless (hard ceiling: 16).
+      PAPERWRENCH_MAX_CONCURRENCY: ${PAPERWRENCH_MAX_CONCURRENCY:-4}
+      PAPERWRENCH_DEFAULT_PAGE_SIZE: "100"
+    volumes:
+      # Jobs, operations and history. Back this up: it is what makes a
+      # rollback possible after a bulk write.
+      - paperwrench_data:/data
+    # PaperWrench never needs to write anywhere except /data.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/v1/system/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  paperwrench_data:

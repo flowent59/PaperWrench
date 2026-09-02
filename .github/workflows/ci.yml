@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A PR that supersedes itself should not keep burning runners.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  backend:
+    name: Backend (lint, types, tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check . ../tests
+
+      - name: mypy (strict)
+        run: mypy src ../tests
+
+      - name: Tests
+        run: pytest --cov=paperwrench --cov-report=term-missing
+
+      - name: Migrations apply from scratch
+        env:
+          PAPERWRENCH_DATABASE_URL: sqlite+pysqlite:///./ci-migrate.db
+          PAPERLESS_URL: http://paperless.invalid
+          PAPERLESS_TOKEN: ci-placeholder
+        run: alembic upgrade head
+
+      - name: No pending model changes
+        # Autogenerating against an up-to-date database must produce nothing;
+        # otherwise a model was edited without a migration.
+        env:
+          PAPERWRENCH_DATABASE_URL: sqlite+pysqlite:///./ci-migrate.db
+          PAPERLESS_URL: http://paperless.invalid
+          PAPERLESS_TOKEN: ci-placeholder
+        run: |
+          alembic revision --autogenerate -m "ci drift check" >/dev/null
+          latest=$(ls -t src/paperwrench/migrations/versions/*.py | head -1)
+          if grep -qE '^\s+op\.(create|drop|add|alter)_' "$latest"; then
+            echo "::error::Model changes are not covered by a migration:"
+            cat "$latest"
+            exit 1
+          fi
+          rm -f "$latest"
+
+  frontend:
+    name: Frontend (lint, types, tests, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript
+        run: npx tsc -b
+
+      - name: Tests
+        run: npm run test
+
+      - name: Build
+        run: npx vite build
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: paperwrench:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Container starts, migrates and answers /system/health
+        run: |
+          docker run -d --name pw \
+            -e PAPERLESS_URL=http://paperless.invalid \
+            -e PAPERLESS_TOKEN=ci-placeholder \
+            -p 8000:8000 paperwrench:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/api/v1/system/health; then
+              echo && echo "healthy"
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8000/api/v1/system/health | grep -q '"status":"ok"'
+          # The SPA must be served from the same origin as the API.
+          curl -fsS http://127.0.0.1:8000/ | grep -qi '<div id="root">'
+
+      - name: Runs as a non-root user
+        run: |
+          uid=$(docker exec pw id -u)
+          test "$uid" != "0" || { echo "::error::container runs as root"; exit 1; }
+
+      - name: Logs never contain the token
+        run: |
+          if docker logs pw 2>&1 | grep -q "ci-placeholder"; then
+            echo "::error::the Paperless token leaked into the logs"
+            docker logs pw
+            exit 1
+          fi
+
+      - name: Teardown
+        if: always()
+        run: docker rm -f pw || true
