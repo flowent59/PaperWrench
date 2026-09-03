@@ -1,7 +1,4 @@
-"""System endpoints: health and instance info.
-
-``/system/paperless`` (connection + API compatibility check) arrives in M1.
-"""
+"""System endpoints: health, instance info and the Paperless connection probe."""
 
 from __future__ import annotations
 
@@ -19,6 +16,8 @@ from paperwrench.config import Settings
 from paperwrench.config import get_settings
 from paperwrench.db.session import get_db
 from paperwrench.logging import get_logger
+from paperwrench.paperless import ConnectionStatus
+from paperwrench.paperless import PaperlessClient
 
 logger = get_logger(__name__)
 
@@ -72,3 +71,33 @@ def info(settings: Settings = Depends(get_settings)) -> InfoResponse:
         default_page_size=settings.default_page_size,
         max_concurrency=settings.max_concurrency,
     )
+
+
+@router.get(
+    "/paperless",
+    response_model=ConnectionStatus,
+    summary="Paperless connection and API compatibility",
+)
+async def paperless_status(settings: Settings = Depends(get_settings)) -> ConnectionStatus:
+    """Probe the configured Paperless instance.
+
+    Always answers ``200``: an unreachable or incompatible Paperless is a
+    *state* the UI has to render, not a failure of this endpoint. The details
+    are in the body.
+
+    The response carries no credential - see
+    :class:`~paperwrench.paperless.models.ConnectionStatus`.
+    """
+    async with PaperlessClient(settings) as client:
+        status = await client.check_connection()
+
+    logger.info(
+        "paperless_probe",
+        configured=status.configured,
+        connected=status.connected,
+        compatible=status.compatible,
+        api_version=status.api_version,
+        paperless_version=status.paperless_version,
+        error_code=status.error_code,
+    )
+    return status

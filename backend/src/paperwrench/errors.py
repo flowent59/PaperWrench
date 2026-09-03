@@ -56,6 +56,19 @@ class ErrorResponse(BaseModel):
     error: ErrorDetail
 
 
+def _scrub_details(value: Any) -> Any:
+    """Recursively scrub registered secrets out of an error ``details`` blob."""
+    from paperwrench.logging import scrub_secrets
+
+    if isinstance(value, str):
+        return scrub_secrets(value)
+    if isinstance(value, dict):
+        return {key: _scrub_details(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_scrub_details(item) for item in value]
+    return value
+
+
 class PaperWrenchError(Exception):
     """Base class for errors that map onto the envelope."""
 
@@ -72,6 +85,17 @@ class PaperWrenchError(Exception):
         code: ErrorCode | None = None,
         retryable: bool | None = None,
     ) -> None:
+        # Errors are serialised into API responses and rendered in the
+        # browser, so they are a credential sink just like logs are. Scrub
+        # here, once, rather than trusting every raise site: an upstream error
+        # body that reflects the Authorization header would otherwise walk
+        # straight through to the frontend.
+        from paperwrench.logging import scrub_secrets
+
+        message = scrub_secrets(message)
+        if details is not None:
+            details = _scrub_details(details)
+
         super().__init__(message)
         self.message = message
         self.details = details

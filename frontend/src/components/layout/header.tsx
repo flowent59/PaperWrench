@@ -1,6 +1,6 @@
 import { Moon, Sun } from 'lucide-react'
 
-import { useHealth, useInfo } from '@/api/queries'
+import { useHealth, usePaperlessStatus } from '@/api/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/components/theme-provider'
@@ -23,18 +23,31 @@ function BackendStatus() {
 }
 
 function PaperlessStatus() {
-  const info = useInfo()
+  const status = usePaperlessStatus()
 
-  if (info.isPending || info.isError) {
+  if (status.isPending) {
+    return <Badge variant="outline">{messages.status.checking}</Badge>
+  }
+  // A rejection means the PaperWrench backend itself is unreachable; the probe
+  // endpoint reports Paperless failures in its payload, never by throwing.
+  if (status.isError) {
     return <Badge variant="outline">{messages.status.unknown}</Badge>
   }
-  // M0 only knows whether credentials are present; the real reachability
-  // probe (GET /system/paperless) lands in M1.
-  return info.data.paperless_configured ? (
-    <Badge variant="outline">{messages.status.unknown}</Badge>
-  ) : (
-    <Badge variant="warning">{messages.status.notConfigured}</Badge>
-  )
+
+  const { configured, connected, compatible } = status.data
+  if (!configured) {
+    return <Badge variant="warning">{messages.status.notConfigured}</Badge>
+  }
+  if (!connected) {
+    return <Badge variant="destructive">{messages.status.disconnected}</Badge>
+  }
+  // Reachable but speaking a version we cannot safely write against. This is
+  // deliberately not shown as "connected": every write assumption behind it is
+  // unverified, so the honest signal is a failure one.
+  if (!compatible) {
+    return <Badge variant="destructive">{messages.status.incompatible}</Badge>
+  }
+  return <Badge variant="success">{messages.status.connected}</Badge>
 }
 
 export function Header() {

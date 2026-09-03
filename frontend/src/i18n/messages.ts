@@ -44,6 +44,7 @@ export const messages = {
     checking: 'Checking...',
     degraded: 'Degraded',
     unknown: 'Unknown',
+    incompatible: 'Incompatible',
   },
   system: {
     title: 'System status',
@@ -56,6 +57,10 @@ export const messages = {
     pageSize: 'Default page size',
     healthy: 'Healthy',
     unreachable: 'Unreachable',
+    paperlessVersion: 'Paperless version',
+    documents: 'Documents',
+    maxApiVersion: 'Highest API version',
+    url: 'URL',
   },
   dashboard: {
     title: 'Dashboard',
@@ -63,6 +68,8 @@ export const messages = {
     notConfiguredTitle: 'Paperless-ngx is not configured',
     notConfiguredBody:
       'Set PAPERLESS_URL and PAPERLESS_TOKEN, then restart PaperWrench. The token is read from the environment and is never stored in the database nor sent to the browser.',
+    unreachableTitle: 'Paperless-ngx cannot be reached',
+    incompatibleTitle: 'Paperless-ngx API version is not supported',
   },
   placeholder: {
     comingSoon: 'Coming soon',

@@ -4,6 +4,17 @@
 
 Accepted (M0).
 
+**Reinforced by an M1 live finding.** Paperless-ngx 3.1.2 **silently ignores an
+unknown filter parameter**: `?not_a_real_filter=42` returns the full, unfiltered
+result set with HTTP 200 (`VERIFIED_LIVE`; an unknown `ordering` value behaves
+the same way). There is therefore no server-side signal distinguishing "filter
+applied" from "filter discarded". A typo in a saved FilterSet would silently
+widen a transformation's blast radius from a handful of documents to the entire
+library, while every response looked successful. This converts the allowlist
+below from a design preference into a hard safety requirement: PaperWrench must
+validate every filter key **before** sending it, because Paperless will not.
+See `docs/paperless-api.md` §6.
+
 ## Context
 
 A FilterSet is how a user selects the documents a transformation will act on.

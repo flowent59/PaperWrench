@@ -4,6 +4,17 @@
 
 Accepted (M0). This is the most important safety decision in the project.
 
+**Confirmed empirically in M1.** When this record was written, the hazard was
+inferred from the upstream source (`VERIFIED_SOURCE`). It has since been
+reproduced against a real Paperless-ngx 3.1.2 instance (`VERIFIED_LIVE`): a
+document holding **5** custom field values received a PATCH containing **1**,
+and came back **HTTP 200 with 4 values silently deleted**. The read-modify-write
+mitigation described below was then applied to the same document and preserved
+all 5. The decision stands unchanged; it is no longer a precaution against a
+suspected behaviour but a mitigation of a measured one. See
+`docs/paperless-api.md` §5.1 and `tests/backend/live/test_paperless_live.py`
+(`TestCustomFieldHazard`).
+
 ## Context
 
 Paperless-ngx serialises documents with `DocumentSerializer`, which inherits

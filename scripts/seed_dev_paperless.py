@@ -119,14 +119,13 @@ def build_client() -> httpx.Client:
     username = os.environ.get("PAPERLESS_USERNAME", "admin")
     password = os.environ.get("PAPERLESS_PASSWORD", "admin")
 
-    client = httpx.Client(
+    return httpx.Client(
         base_url=url,
         auth=(username, password),
         headers={"Accept": f"application/json; version={api_version()}"},
         timeout=30.0,
         follow_redirects=True,
     )
-    return client
 
 
 def guard_not_a_real_library(client: httpx.Client) -> None:

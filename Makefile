@@ -53,7 +53,7 @@ lint: lint-backend lint-frontend ## Lint everything
 
 .PHONY: lint-backend
 lint-backend:
-	cd $(BACKEND) && .venv/bin/ruff check . ../tests
+	$(VENV)/bin/ruff check .
 
 .PHONY: lint-frontend
 lint-frontend:
@@ -61,14 +61,14 @@ lint-frontend:
 
 .PHONY: format
 format: ## Autofix formatting and import order
-	cd $(BACKEND) && .venv/bin/ruff check --fix . ../tests && .venv/bin/ruff format . ../tests
+	$(VENV)/bin/ruff check --fix . && $(VENV)/bin/ruff format .
 
 .PHONY: typecheck
 typecheck: typecheck-backend typecheck-frontend ## Type-check everything
 
 .PHONY: typecheck-backend
 typecheck-backend:
-	cd $(BACKEND) && .venv/bin/mypy src ../tests
+	$(VENV)/bin/mypy $(BACKEND)/src tests scripts
 
 .PHONY: typecheck-frontend
 typecheck-frontend:
@@ -79,7 +79,7 @@ test: test-backend test-frontend ## Run every test suite
 
 .PHONY: test-backend
 test-backend:
-	cd $(BACKEND) && .venv/bin/pytest
+	$(PY) -m pytest
 
 .PHONY: test-frontend
 test-frontend:
@@ -87,7 +87,7 @@ test-frontend:
 
 .PHONY: coverage
 coverage: ## Backend tests with a coverage report
-	cd $(BACKEND) && .venv/bin/pytest --cov=paperwrench --cov-report=term-missing
+	$(PY) -m pytest --cov=paperwrench --cov-report=term-missing
 
 # ---------------------------------------------------------------------------
 # Build
@@ -132,9 +132,36 @@ dev-paperless-up: ## Start the disposable Paperless-ngx 3.1.2 sandbox on :8010
 dev-paperless-seed: ## Seed the sandbox with the reference dataset
 	docker compose -f docker-compose.dev.yml --profile seed run --rm seed
 
+.PHONY: dev-paperless-golden
+dev-paperless-golden: ## Seed the sandbox with the Golden Dataset (deliberately imperfect cases)
+	docker compose -f docker-compose.dev.yml --profile golden run --rm golden
+
 .PHONY: dev-paperless-down
 dev-paperless-down: ## Stop the sandbox and DELETE its data
 	docker compose -f docker-compose.dev.yml down -v
+
+# ---------------------------------------------------------------------------
+# Live tests against a real Paperless-ngx
+#
+# Opt-in and double-gated on purpose: the suite WRITES and DELETES. It refuses
+# to run without PAPERWRENCH_ALLOW_LIVE_TESTS=true AND a target host on the
+# authorised allowlist, and it bails out if the instance looks like a real
+# library. Never point this at your own Paperless.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-unit
+test-unit: ## Backend unit tests only (no I/O whatsoever)
+	$(PY) -m pytest tests/backend/unit
+
+.PHONY: test-mocked
+test-mocked: ## Backend integration tests against a MOCKED Paperless (respx)
+	$(PY) -m pytest tests/backend/integration_mocked
+
+.PHONY: test-live
+test-live: ## Opt-in tests against the REAL sandbox Paperless on :8010
+	PAPERWRENCH_ALLOW_LIVE_TESTS=true \
+		PAPERWRENCH_PAPERLESS_URL=$${PAPERWRENCH_PAPERLESS_URL:-http://127.0.0.1:8010} \
+		$(PY) -m pytest tests/backend/live -v
 
 .PHONY: clean
 clean: ## Remove build artefacts and caches

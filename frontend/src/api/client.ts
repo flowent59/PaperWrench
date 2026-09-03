@@ -10,7 +10,11 @@
  * one place.
  */
 
-import type { HealthResponse, InfoResponse } from './types'
+import type {
+  HealthResponse,
+  InfoResponse,
+  PaperlessStatusResponse,
+} from './types'
 
 export const API_PREFIX = '/api/v1'
 
@@ -91,4 +95,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 export const systemApi = {
   health: () => apiFetch<HealthResponse>('/system/health'),
   info: () => apiFetch<InfoResponse>('/system/info'),
+  // Always answers 200, even when Paperless is down or unconfigured: the
+  // failure is described in the payload rather than thrown, so the UI can
+  // render *why* it is not connected instead of a bare network error.
+  paperless: () => apiFetch<PaperlessStatusResponse>('/system/paperless'),
 }
