@@ -27,7 +27,10 @@ that it can be previewed, resumed and undone.
 |     /api/v1/jobs/../events -> SSE progress stream          |
 |                                                            |
 |   Domain services                                          |
-|     filter compiler   - FilterSet -> query params          |
+|     filter engine     - FilterSet -> validate -> compile   |
+|                         -> Paperless query params, or a    |
+|                         structured refusal. Never a        |
+|                         local fallback.                    |
 |     transformations   - preview and value computation      |
 |     job engine        - asyncio, bounded concurrency       |
 |                                                            |
@@ -61,8 +64,13 @@ The backend is organised so that the dangerous parts are small and isolated.
 dependency wiring. No business logic, so that a route handler is never the
 place a data-safety rule lives.
 
-**`services/`** — the domain. Filter compilation, transformation preview, the
-job engine. This layer is where the rules from the ADRs are implemented and
+**`filters/`** — the Filter Engine (M4). The domain model, the field
+catalogue, validation and the compiler. Pure once the catalogue is built:
+only `filters/service.py` touches the Metadata Registry, so a filter can be
+validated, compiled or refused without a single request leaving the process.
+
+**`services/`** — the rest of the domain. Transformation preview and the job
+engine (M6+). This layer is where the rules from the ADRs are implemented and
 where the tests that matter point.
 
 **`paperless/`** — the client. One place that knows how to talk to Paperless:
@@ -97,7 +105,7 @@ data-layer inspection surface only — it is not the Explorer API and carries
 none of its concepts (filters, saved views, bulk operations), which belong to
 M3/M4.
 
-### The Explorer's documents API (M3)
+### The Explorer's documents API (M3, rebuilt on the Filter Engine in M4)
 
 `api/v1/documents.py` is the first real consumer of the Metadata Registry
 as an app-lifecycle singleton rather than a short-lived per-request client:
@@ -110,7 +118,7 @@ Explorer's document list, which must resolve tags/correspondents/document
 types/custom fields on every page without a fresh registry warm-up per
 request, is that consumer.
 
-`GET /api/v1/documents` is a normalized read model — a list of
+`POST /api/v1/documents/query` is a normalized read model — a list of
 `DocumentListItem` inside a `DocumentPage` envelope
 (`{items, page, page_size, total, page_count}`), never a passthrough of
 Paperless's own `DocumentSerializer` or its `{count, next, previous,
@@ -142,20 +150,107 @@ never passed through blindly:
   finding) — a typo would otherwise look like sorting worked while quietly
   not sorting at all. An unrecognised value is rejected with
   `InvalidOrderingError` (422) and is **never forwarded**.
-- **`search`** and **`query`** are mutually exclusive, mirroring Paperless's
-  own rule for its four search-mode parameters
-  (`_TANTIVY_SEARCH_PARAM_NAMES`) — `search` maps to `title_search` (a
-  plain string, never parsed as Tantivy syntax by PaperWrench), `query` is
-  an optional opaque passthrough for users who want Paperless's full search
-  syntax.
+- **`search`** is a `SearchSpec {mode, text}` with exactly one mode
+  (`title` → `title_search`, `content` → `text`, `advanced` → `query`),
+  mirroring Paperless's own rule that its four search parameters are
+  mutually exclusive (`_TANTIVY_SEARCH_PARAM_NAMES`). M3 had a single
+  `search` parameter that always meant *title* search and said so nowhere;
+  naming the mode is the point. `advanced` is passed through opaquely —
+  PaperWrench never parses Tantivy syntax. An all-whitespace search text is
+  **refused**, not dropped: sending `title_search=` puts Paperless into
+  search mode with an empty query, a different code path from not
+  searching, and dropping it silently would make an empty search box mean
+  "everything" without saying so.
+- **`filters`** is a `FilterSet`, validated and compiled by the Filter
+  Engine before a request is built (below). There is no other filtering
+  path.
 
-`document_type`, `correspondent` and `tag` are basic direct filters mapping
-onto `DocumentFilterSet` fields already proven (M1) to compose with
-pagination and ordering. This is intentionally *not* a filter engine: there
-is no FilterSet, no compiler, no nested AND/OR, no saved filters here —
-that is M4's `ADR-0007` scope. The shape is chosen so that M4 can later
-replace these three ad-hoc query parameters with a compiled FilterSet
-without changing anything the grid or the frontend depend on.
+M3's `document_type`, `correspondent` and `tag` parameters were removed in
+M4. Keeping them alongside the Filter Engine would have left two filtering
+paths with different capabilities and different failure modes — they would
+have disagreed the first time one of them had an opinion about "no value".
+
+### The Filter Engine (M4)
+
+`paperwrench/filters/` is a **domain primitive, not an Explorer feature**.
+The same `FilterSet` is what Transform (M6), Dry Run (M7), Jobs (M8),
+Quality (M11), Schemas (M10), Collections (M12), Analytics, Exports and
+Recipes are all meant to mean by "these documents".
+
+The pipeline is always the same, and always in this order:
+
+```
+FilterSet → validation → compiler → PaperlessQuery
+```
+
+with a hard stop at either step and **no fallback behind it** (ADR-0007).
+
+**The domain model** (`filters/model.py`) is independent of Paperless HTTP
+syntax: `FilterSet → FilterGroup → FilterCondition | FilterGroup |
+FilterNot`, discriminated on `kind`. A `FieldRef` is a discriminated union —
+a core field is a closed enum, a custom field is referenced by its **stable
+Paperless id**. `display_name` exists so a stored filter renders without a
+metadata round-trip; it is never matched against, so renaming a custom
+field cannot change what a saved filter means.
+
+**Two verdicts, deliberately separate.** *Structurally valid* (the fields
+exist, the operators belong to their type, the values have the right shape)
+and *compilable* (Paperless can express this exact question) are different
+answers that call for different things from the user, so
+`POST /api/v1/filters/validate` returns both. `valid: true, compilable:
+false` is a common and useful state — the filter is fine, the server simply
+has no form for it.
+
+**The compilable subset.** Core conditions AND together as query
+parameters; custom-field conditions compile into the single nested
+`custom_field_query` expression; the two intersect. An OR whose branches are
+all custom fields is supported at any depth. Refused, with a structured
+reason and **zero requests**: OR across core fields, OR mixing core and
+custom, `NOT`, two conditions collapsing onto one query parameter with
+different values, and anything beyond Paperless's own depth-10 / 20-atom
+limits. See `docs/paperless-api.md` §6.4–6.5 for the provenance of every
+mapping.
+
+**Empty and missing are five states, not two** — `is_missing`,
+`is_present`, `is_null`, `has_value`, `is_empty`, each with one server-side
+expression, verified live before being frozen (ADR-0011). `is_empty` is
+null-or-empty-string and deliberately **not** ABSENT.
+
+**The catalogue is served, not duplicated.**
+`GET /api/v1/filters/capabilities` returns the compiler's own tables —
+fields, types, allowed operators per type, value shapes, grouping rules —
+so the Filter Builder *renders* the rules instead of reimplementing them.
+Two copies of a capability matrix drift apart at the first change.
+
+**Counting is not fetching.** `POST /api/v1/filters/count` compiles the
+filter and reads Paperless's own `count` from the paginated envelope
+(`PaperlessClient.count_documents`, which never parses the results array).
+The cost is one request regardless of whether the filter matches twelve
+documents or fifty thousand.
+
+The engine is **pure after the catalogue is built**: `validate_filterset`
+and `compile_filterset` take a `FieldCatalog` snapshot and do no I/O at all.
+That is what makes the compiler exhaustively unit-testable and makes "a
+refused filter costs zero requests to Paperless" a property of the code
+rather than a promise about its callers.
+
+### Dataset identity
+
+A dataset is `SearchSpec + FilterSet + Ordering` (`DatasetQuery`, with a
+stable fingerprint). Pagination describes a *view* of a dataset, not a
+different one, and is therefore not part of its identity.
+
+Nothing in M4 persists a dataset. The type exists so the API shipped now can
+already express one: Transform, Dry Run, "select all matching", Jobs and
+Collections all need to name "the documents this operation is about", and
+would otherwise each invent their own encoding and then disagree.
+
+Search is **not** folded into the FilterSet — see **ADR-0010**. It runs
+against a Tantivy index whose ids are intersected with the ORM queryset,
+which is a fundamentally different mechanism from a field lookup, and
+`advanced` carries a query language PaperWrench does not own. Forcing it
+into a `FilterCondition` would have made the model look uniform while making
+it less truthful.
 
 **`db/`** — models, engine, session, migrations, runtime lock. Owns durability.
 

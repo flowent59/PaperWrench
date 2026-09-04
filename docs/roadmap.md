@@ -79,7 +79,7 @@ Paperless JSON.
 - Internal metadata API exposing PaperWrench models (not raw Paperless
   serializer copies) — no Explorer API yet
 
-## M3 — Explorer + server-side DataGrid · Next
+## M3 — Explorer + server-side DataGrid · Done
 
 Read-only. Turns the normalized model layer into a usable way to browse a
 real library without ever loading it whole into the browser.
@@ -92,7 +92,8 @@ real library without ever loading it whole into the browser.
 - Simple search (`search` → `title_search`) and an optional opaque `query`
   passthrough, mutually exclusive, mirroring Paperless's own
   `_TANTIVY_SEARCH_PARAM_NAMES` rule — no Tantivy syntax parsing in
-  PaperWrench
+  PaperWrench. *(Superseded in M4 by an explicit `SearchSpec {mode, text}`:
+  M3's `search` always meant title search and documented that nowhere.)*
 - Ordering restricted to a **server-defined allowlist**, validated and
   translated before any request reaches Paperless — an unrecognised value
   is rejected with 422, never silently forwarded (Paperless itself silently
@@ -102,7 +103,9 @@ real library without ever loading it whole into the browser.
 - Basic direct filters (document type, correspondent, tag) mapping onto
   `DocumentFilterSet` fields already proven to compose with pagination and
   ordering — explicitly **not** a filter engine: no FilterSet, no
-  compiler, no nested AND/OR, no saved filters (that is M4)
+  compiler, no nested AND/OR, no saved filters (that is M4).
+  *(Removed in M4 and replaced by the Filter Engine, so there is one
+  filtering path rather than two.)*
 - TanStack Table grid: server-side pagination and sorting, search, column
   visibility (persisted to `localStorage`), multi-selection with
   select-one/select-several/select-current-page (never "select all N
@@ -122,21 +125,73 @@ real library without ever loading it whole into the browser.
   documents endpoint from anything in this milestone (verified by a
   dedicated backend test)
 
-## M4 — Filter Engine · Planned
+## M4 — Filter Engine · Done
 
-- FilterSet and FilterCondition models, persistence
-- Compiler to Paperless query parameters, including `custom_field_query`
-- No dynamically generated filter or ordering parameter is ever sent to
-  Paperless without being validated by PaperWrench's own allowlist/compiler
-  first; a non-compilable filter fails explicitly instead of being sent "to
-  see if Paperless accepts it" (Paperless silently ignores unknown filters
-  and returns 200, so silent send-and-hope is not an option)
-- `FILTER_NOT_COMPILABLE` with a specific reason, and no client-side fallback
-  ([ADR-0007](decisions/0007-filterset-compilable-subset.md))
-- Filter builder UI that shows its limits before submission
-- Server-provided result count
-- Job target document sets are materialized into IDs at job creation time;
-  a Job never re-evaluates its FilterSet during execution
+The reusable query primitive the rest of PaperWrench is built on, not a set
+of filters bolted onto the Explorer. `FilterSet` is what Transform, Dry Run,
+Jobs, Quality, Schemas, Collections, Analytics, Exports and Recipes are all
+meant to mean by "these documents".
+
+- **Domain model** (`paperwrench/filters/model.py`) independent of Paperless
+  HTTP syntax: `FilterSet → FilterGroup → FilterCondition | FilterGroup |
+  FilterNot`, discriminated on `kind`
+- **`FieldRef`** as a discriminated union — a core field is a closed enum, a
+  custom field is referenced by its **stable Paperless id**. A display name
+  is carried for rendering and is never the identity, so renaming a custom
+  field cannot change what a saved filter means
+- **Strict compiler**: `FilterSet → validation → compiler → PaperlessQuery`,
+  with a hard stop at either step and **no local fallback** —
+  `FILTER_NOT_COMPILABLE` is never a signal to fetch a wider set and filter
+  in Python ([ADR-0007](decisions/0007-filterset-compilable-subset.md)),
+  covered by a guard test whose mock Paperless accepts every parameter and
+  still must not be reached
+- **Compilable subset**: core conditions AND together as query parameters,
+  custom-field conditions compile into the single nested `custom_field_query`
+  expression, and the two intersect. A custom-field-only OR is supported at
+  any depth; OR across core fields, OR mixing core and custom, `NOT`,
+  parameter collisions and anything beyond Paperless's depth-10/20-atom
+  limits are refused with a structured reason and zero requests
+- **Core fields**: title, correspondent, document type, storage path, tags,
+  created, added, modified, archive serial number — each with only the
+  operators its column actually supports
+- **Custom fields** by data type, with the operator matrix taken from
+  Paperless's own `SUPPORTED_EXPR_CATEGORIES`: no `contains` on a Boolean,
+  no `is_empty` on a Monetary
+- **Empty/missing semantics** as five distinct operators — `is_missing`,
+  `is_present`, `is_null`, `has_value`, `is_empty` — verified live before
+  being frozen ([ADR-0011](decisions/0011-empty-and-missing-are-not-the-same-question.md)).
+  `is_empty` is null-or-empty-string and deliberately **not** ABSENT
+- **Monetary** stays `Decimal` end to end, normalised to a bare decimal
+  string so Paperless's currency-prefix heuristic has nothing to guess at;
+  `EUR0.00` is a real, comparable value distinct from ABSENT
+- **Select** filters on the stored option id, never the label — Paperless
+  would resolve a label, which means a rename would silently retarget a
+  saved filter
+- **Tags**: `has_all_of` / `has_any_of` / `has_none_of` mapped to the three
+  genuinely different Paperless semantics, verified live; no simulated
+  set operations
+- **`POST /api/v1/filters/validate`** reporting `valid` and `compilable`
+  separately, with structured, path-addressed issues
+- **`POST /api/v1/filters/count`** using Paperless's own count — no document
+  is fetched to produce it
+- **`GET /api/v1/filters/capabilities`** serving the compiler's own tables so
+  the frontend renders the rules instead of reimplementing them
+- **Explorer rebuilt on it**: `POST /api/v1/documents/query` replaces
+  `GET /api/v1/documents` and its three ad-hoc filter parameters, so there is
+  one filtering path. Body is `search + filters + ordering + page +
+  page_size`
+- **Search kept separate** from FilterSet as an explicit `SearchSpec
+  {mode, text}` ([ADR-0010](decisions/0010-search-is-not-a-filter.md)); a
+  dataset is `SearchSpec + FilterSet + Ordering`, with pagination only a view
+  of it
+- **Filter Builder UI** constrained by the real capabilities: it cannot
+  construct a shape the compiler is known to refuse
+- Still no fetch-all, still read-only: no PATCH/POST/PUT/DELETE reaches
+  Paperless from anything in this milestone
+
+Deferred to a later milestone, deliberately: FilterSet **persistence** (saved
+filters — nothing here writes to SQLite), `NOT` compilation, and materialising
+a job's target document ids (that belongs with the Job Engine, M8).
 
 ## M5 — Inspector + inline editing · Planned
 

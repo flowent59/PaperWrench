@@ -174,6 +174,42 @@ always be covered:
 - concurrency never exceeds the configured bound;
 - no log line contains the token.
 
+### Working on the Filter Engine
+
+`paperwrench/filters/` decides which documents a later transformation will
+touch, and Paperless gives it no feedback when it gets that wrong — an
+unknown filter parameter returns 200 and the whole library. Two rules follow.
+
+**Every parameter the compiler can emit must be traceable to the 3.1.2
+source.** Not to the OpenAPI schema, not to the upstream docs, and not to
+what seems reasonable. `docs/paperless-api.md` §6.4–6.5 records the mappings
+and where each was read; add to it when you add an operator.
+
+**The engine stays pure.** `validate_filterset` and `compile_filterset` take
+a `FieldCatalog` snapshot and perform no I/O. `filters/service.py` is the
+only module that touches the Metadata Registry. Keep it that way: it is what
+makes the compiler exhaustively testable, and it is what makes "a refused
+filter costs zero requests to Paperless" true by construction rather than by
+convention. `test_filter_no_fallback.py` asserts the absence of any
+document-fetching call in the package, so adding one fails the suite.
+
+Adding an operator means all of:
+
+1. reading its behaviour in the Paperless source and recording it in
+   `docs/paperless-api.md`;
+2. adding it to the catalogue's operator matrix (`filters/catalog.py`) — for
+   the *field*, not just the type, if it is a core field;
+3. a compiler test asserting the exact parameters or expression it produces;
+4. a validation test for each way its value can be wrong;
+5. a live test if the semantics are anything other than obvious — and they
+   usually are not: `is_null` requiring the field instance to exist, tags
+   `all`/`any`/`none` being three different questions, and monetary
+   comparison ignoring the currency code were all surprises.
+
+If the operator cannot be compiled exactly, it does not go in. A filter that
+is approximately right is the one failure mode this whole subsystem exists
+to prevent.
+
 Frontend tests use Vitest and jsdom:
 
 ```bash
@@ -197,6 +233,10 @@ non-root user with a read-only root filesystem.
 backend/
   src/paperwrench/
     api/v1/        HTTP layer only
+    filters/       the Filter Engine: domain model, catalogue, validation,
+                   compiler. Pure after the catalogue is built - only
+                   service.py touches the Metadata Registry
+    paperless/     the sole HTTP boundary + normalized models + registry
     db/            models, engine, session, lock, migrations
     config.py      settings and secrets
     logging.py     structured logs with secret redaction

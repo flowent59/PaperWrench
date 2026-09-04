@@ -305,6 +305,33 @@ lock inside PaperWrench, or a combination of these.
 **`VERIFIED_LIVE`** — `title_search`, `title__icontains`, `content__icontains`
 and the full-text `query` parameter all work, and all compose with pagination.
 
+### Search is not filtering, and `search` is not one thing
+
+**`VERIFIED_SOURCE`** (`documents/views.py`, `_TANTIVY_SEARCH_PARAM_NAMES`) —
+there are **four** search parameters, they are mutually exclusive (more than
+one is a 400), and they search different things:
+
+| Parameter | Searches | PaperWrench `SearchSpec` mode |
+| --- | --- | --- |
+| `title_search` | the title, via the full-text index | `title` |
+| `text` | the extracted document text | `content` |
+| `query` | the whole index, in raw Tantivy syntax | `advanced` |
+| `more_like_id` | similarity to another document | *not modelled* |
+
+**These are not field lookups.** When one is present, `DocumentViewSet.list`
+leaves the ordinary queryset path entirely: it queries a **Tantivy index**,
+gets a ranked list of ids back, and intersects those with the ORM-filtered
+queryset. Filters narrow a queryset; search produces ids from a different
+engine. That they intersect is an implementation convenience, not evidence
+that they are the same kind of thing.
+
+Consequence, and the reason this is spelled out here: **M3's single `search`
+parameter always meant `title_search`** and documented that nowhere, so
+"search" silently meant something much narrower than a user would assume.
+M4 replaced it with an explicit `SearchSpec {mode, text}`; `advanced` is
+passed through opaquely and PaperWrench claims nothing about Tantivy syntax.
+Search is therefore **not** part of a FilterSet — see **ADR-0010**.
+
 **`VERIFIED_LIVE` — and this is a trap for the future filter engine:** an
 **unknown filter parameter is silently ignored**. `?not_a_real_filter=42`
 returns the full unfiltered result set with HTTP 200. An unknown `ordering`
@@ -445,6 +472,207 @@ Paperless's trash simply stops appearing, exactly like a document that was
 permanently deleted. Retrieving/restoring trashed documents (Paperless's
 `/api/trash/` endpoint) is out of scope for M3 and is not modelled at all
 yet.
+
+---
+
+## 6.4 Filtering — the surface the M4 Filter Engine compiles to
+
+**`VERIFIED_SOURCE`** (`src/documents/filters.py`, `DocumentFilterSet`) — the
+lookups PaperWrench's compiler is built on. The generated names come from
+`Meta.fields` plus the explicitly declared filters; note that django-filter
+**strips a trailing `__exact`**, so `correspondent__id__exact` is exposed as
+`correspondent__id`.
+
+| Field | Lookups | Notes |
+| --- | --- | --- |
+| `title` | `istartswith`, `iendswith`, `icontains`, `iexact` | `CHAR_KWARGS`. **No case-sensitive exact match exists.** |
+| `archive_serial_number` | `exact`, `gt`, `gte`, `lt`, `lte`, `isnull` | `INT_KWARGS` |
+| `created` | `year`, `month`, `day`, `gt`, `gte`, `lt`, `lte` | `DATE_KWARGS`. **No `exact`.** `created` is a `DateField`. |
+| `added`, `modified` | `year`, `month`, `day`, `gt`, `gte`, `lt`, `lte`, `date__gt`, `date__gte`, `date__lt`, `date__lte` | `DATETIME_KWARGS`. Both are `DateTimeField`s. |
+| `correspondent`, `document_type`, `storage_path` | `isnull`; `__id`, `__id__in`, `__id__none`; `__name` char lookups | `__id__none` is a declared `ObjectFilter(exclude=True)` |
+| `tags` | `tags__id__all`, `tags__id__in`, `tags__id__none`, `is_tagged` | see below |
+| custom fields | `custom_field_query`, plus the deprecated `custom_fields__icontains` | see §6.5 |
+
+**`VERIFIED_SOURCE` + `VERIFIED_LIVE`** — the **tag semantics**, which are
+three different questions and are easy to get quietly wrong. `ObjectFilter`:
+
+```python
+if self.in_list:                             # tags__id__in
+    qs = qs.filter(tags__id__in=object_ids).distinct()     # has ANY of
+else:
+    for obj_id in object_ids:
+        if self.exclude:                     # tags__id__none
+            qs = qs.exclude(tags__id=obj_id)               # has NONE of
+        else:                                # tags__id__all
+            qs = qs.filter(tags__id=obj_id)                # has ALL of
+```
+
+Confirmed live (`TestFilterEngineTagsLive`) on a document carrying exactly one
+of two tags. PaperWrench exposes these as `has_all_of` / `has_any_of` /
+`has_none_of` and never simulates any of them. `is_tagged` is a `BooleanFilter`
+on `tags__isnull` with `exclude=True`, i.e. "has at least one tag".
+
+A consequence for the compiler: two `has_all_of` conditions can be **merged**
+into one parameter over the union of their ids (the loop ANDs them anyway),
+but two `has_any_of` conditions **cannot** — "any of {A,B} and any of {C,D}"
+is not "any of {A,B,C,D}", and merging would silently widen the filter. Same
+for `tags__id__none`, which merges (each id is a separate `.exclude()`).
+
+**`VERIFIED_LIVE`** — filter parameters **compose with AND** and nothing else.
+Django filter backends narrow the queryset in turn; there is no union form. So
+"title contains X OR correspondent is Y" has no server-side expression, which
+is why PaperWrench refuses it (`CORE_OR_UNSUPPORTED`) rather than
+approximating it. See ADR-0007.
+
+**`VERIFIED_LIVE`** — filters compose with full-text search too, by
+intersection. VERIFIED_SOURCE for the mechanism: when a search parameter is
+present, `DocumentViewSet.list` computes `filtered_qs =
+self.filter_queryset(self.get_queryset())` and intersects the Tantivy hit ids
+with it. Confirmed live including with a `custom_field_query` in the mix
+(`TestFilterEngineCompositionLive`), which matters because custom fields are
+evaluated through a separate annotated subquery.
+
+### An empty filter value is silently DROPPED
+
+**`VERIFIED_LIVE`** — `?title__icontains=` returns the **entire library**, not
+the documents with an empty title.
+
+This is django-filter, not Paperless: `Filter.filter()` starts with
+
+```python
+if value in EMPTY_VALUES:      # ([], (), {}, '', None)
+    return qs
+```
+
+so a filter whose value is the empty string is skipped altogether and the
+queryset comes back untouched. Nothing in the response distinguishes this from
+a filter that matched everything.
+
+This is the same failure family as the silently-ignored *unknown* parameter in
+§6, and it is arguably worse, because the parameter name is perfectly valid.
+Consequence for PaperWrench: the Filter Engine **refuses an empty text value at
+validation time** rather than emitting one (`VALUE_EMPTY`), and points the
+user at `is_empty` / `is_missing`, which are real, server-side questions. Pinned
+by `TestFilterEngineServerLimitsLive::test_an_empty_filter_value_is_silently_ignored_by_django_filter`.
+
+---
+
+## 6.5 `custom_field_query` — the nested boolean expression language
+
+**`VERIFIED_SOURCE`** (`CustomFieldQueryParser`) — a single query parameter
+carrying JSON. Three forms:
+
+```
+[<field id or name>, <operator>, <value>]   an atom
+["AND" | "OR", [expr, expr, ...]]           n-ary
+["NOT", expr]                                negation
+```
+
+Limits: **depth ≤ 10**, **≤ 20 atoms** (`CUSTOM_FIELD_QUERY_MAX_DEPTH`,
+`CUSTOM_FIELD_QUERY_MAX_ATOMS`). Depth counts every expression node, atoms
+included, so an atom is depth 1. Exceeding either is a 400 (`VERIFIED_LIVE`).
+PaperWrench enforces both itself so an over-complex filter is refused locally
+rather than costing a round trip.
+
+**`VERIFIED_SOURCE`** — operators are gated by data type
+(`SUPPORTED_EXPR_CATEGORIES` × `EXPR_BY_CATEGORY`):
+
+| Data type | basic (`exact`, `in`, `isnull`, `exists`) | string (`icontains`, `istartswith`, `iendswith`) | arithmetic (`gt`, `gte`, `lt`, `lte`, `range`) | containment (`contains`) |
+| --- | :-: | :-: | :-: | :-: |
+| `string`, `longtext`, `url` | ✅ | ✅ | — | — |
+| `monetary` | ✅ | ✅ | ✅ | — |
+| `date` | ✅ | — | ✅ (+ `year__`/`month__`/… prefixes) | — |
+| `int`, `float` | ✅ | — | ✅ | — |
+| `bool`, `select` | ✅ | — | — | — |
+| `documentlink` | ✅ | — | — | ✅ |
+
+`icontains` on a Boolean is a **400** (`VERIFIED_LIVE`), not a silently-ignored
+parameter — a welcome exception to §6's rule, though PaperWrench does not rely
+on it and refuses such a pair itself before building a request.
+
+**`VERIFIED_LIVE`** — an unknown custom field **id** in a `custom_field_query`
+is also a 400 (`{name!r} is not a valid custom field`). Again: useful, not
+relied upon. A filter that referenced a deleted field would otherwise be a
+silent widening, so PaperWrench validates against its own Metadata Registry
+snapshot first.
+
+### `exists` vs `isnull` — why ABSENT and NULL stay separable
+
+**`VERIFIED_SOURCE`, then `VERIFIED_LIVE`.** `exists` counts *field instances*:
+
+```python
+annotation = Count("custom_fields", filter=Q(custom_fields__field=custom_field))
+```
+
+Every other operator counts instances that also satisfy the value condition:
+
+```python
+field_filter = has_field & Q(**{f"custom_fields__{value_field}__{op}": value})
+```
+
+So **`isnull=true` means "the field is attached AND its value is null"** and
+can never match a document that does not carry the field at all. That
+asymmetry is what makes the M4 empty/missing operators possible; see
+**ADR-0011** for the full table. Confirmed live by walking one document
+through ABSENT → NULL → `""` → a real value
+(`TestFilterEngineEmptyMissingLive`).
+
+`exact: ""` is accepted for `CharField`-backed types only — the parser sets
+`allow_blank = True` for them explicitly (upstream issue #7361). On a
+monetary/date/int/bool/select field it is a 400, which is why PaperWrench only
+offers `is_empty` on Text, Long text and URL.
+
+### Monetary comparison ignores the currency code
+
+**`VERIFIED_SOURCE`** — arithmetic and `exact`/`in` on a monetary field compare
+against `value_monetary_amount`, a **generated column** that strips a leading
+three-character currency code:
+
+```python
+value_monetary_amount = models.GeneratedField(
+    expression=Case(
+        models.When(value_monetary__regex=r"^\d+", then=Cast(Substr("value_monetary", 1), ...)),
+        default=Cast(Substr("value_monetary", 4), ...),          # drop "EUR"
+        output_field=models.DecimalField(decimal_places=2, max_digits=65),
+    ),
+    db_persist=True,
+)
+```
+
+`MonetaryAmountField` applies the same heuristic to the *filter* value: "if it
+does not start with a digit or a minus, drop three characters".
+
+Two consequences PaperWrench acts on:
+
+1. **`EUR10.00` and `USD10.00` compare equal.** There is no currency-aware
+   comparison available. This is surfaced as a note on the operator in
+   `/filters/capabilities` rather than hidden.
+2. **PaperWrench sends a bare, normalised decimal string** (`0.00`, not
+   `EUR0.00`), so there is no prefix for the heuristic to guess at. The value
+   travels as a string end to end and is parsed with `Decimal`; no float is
+   ever constructed. `EUR0.00` therefore stays an exact, comparable, non-null
+   zero — distinct from ABSENT, as the Golden Dataset's deliberate zero rows
+   confirm live.
+
+String lookups on a monetary field run against the raw `value_monetary`
+string instead (currency prefix included). PaperWrench does not expose them:
+comparing an amount as text matches on digits of unrelated magnitude.
+
+### Select accepts a label where an id belongs
+
+**`VERIFIED_SOURCE` + `VERIFIED_LIVE`** — `SelectField.to_internal_value`
+tries to resolve the supplied value as an option **label** first, falling back
+to treating it as an id:
+
+```python
+data = next(option.get("id") for option in self._options if option.get("label") == data)
+```
+
+Convenient, and a trap for anything that stores filters: a filter written with
+a label would silently retarget the day someone renames the option.
+PaperWrench only ever compiles the stored option id, and its validator rejects
+a value that is not one of the field's known option ids — which also rejects a
+label. See ADR-0011's sibling rule in `filters/validation.py`.
 
 ---
 
