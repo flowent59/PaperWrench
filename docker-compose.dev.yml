@@ -1,0 +1,92 @@
+# PaperWrench development sandbox.
+#
+# Starts a DEDICATED, DISPOSABLE Paperless-ngx 3.1.2 instance plus a seeder.
+# This exists precisely so that destructive tests never touch a real library.
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml run --rm seed
+#
+# The pinned tag is not cosmetic: 3.1.2 is the version whose serialisers,
+# filters and API version negotiation the architecture review was verified
+# against (see docs/paperless-api.md). Bumping it means re-verifying.
+#
+# Credentials here are intentionally weak and public: this stack must never be
+# exposed outside a development machine.
+
+services:
+  broker:
+    image: docker.io/library/redis:7
+    restart: unless-stopped
+    volumes:
+      - dev_redis:/data
+
+  db:
+    image: docker.io/library/postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: paperless
+      POSTGRES_USER: paperless
+      POSTGRES_PASSWORD: paperless
+    volumes:
+      - dev_pgdata:/var/lib/postgresql/data
+
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.1.2
+    restart: unless-stopped
+    depends_on:
+      - db
+      - broker
+    ports:
+      - "127.0.0.1:8010:8000"
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_DBHOST: db
+      PAPERLESS_DBNAME: paperless
+      PAPERLESS_DBUSER: paperless
+      PAPERLESS_DBPASS: paperless
+      PAPERLESS_URL: http://localhost:8010
+      PAPERLESS_SECRET_KEY: dev-only-not-a-secret
+      PAPERLESS_TIME_ZONE: Europe/Paris
+      # French data must round-trip perfectly: accents, EUR, dd/mm/yyyy.
+      PAPERLESS_OCR_LANGUAGE: fra+eng
+      PAPERLESS_FILENAME_DATE_ORDER: DMY
+      PAPERLESS_ADMIN_USER: admin
+      PAPERLESS_ADMIN_PASSWORD: admin
+      PAPERLESS_ADMIN_MAIL: admin@example.invalid
+    volumes:
+      - dev_paperless_data:/usr/src/paperless/data
+      - dev_paperless_media:/usr/src/paperless/media
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  # One-shot seeder: creates the document type, the custom fields and the
+  # documents used by the acceptance scenarios.
+  seed:
+    image: docker.io/library/python:3.11-slim
+    depends_on:
+      paperless:
+        condition: service_healthy
+    environment:
+      PAPERLESS_URL: http://paperless:8000
+      PAPERLESS_USERNAME: admin
+      PAPERLESS_PASSWORD: admin
+      PAPERLESS_API_VERSION: "10"
+      SEED_DOCUMENT_COUNT: ${SEED_DOCUMENT_COUNT:-24}
+    volumes:
+      - ./scripts:/scripts:ro
+    working_dir: /scripts
+    command: >
+      sh -c "pip install --quiet --no-cache-dir httpx==0.28.1 &&
+             python seed_dev_paperless.py"
+    profiles: ["seed"]
+    restart: "no"
+
+volumes:
+  dev_redis:
+  dev_pgdata:
+  dev_paperless_data:
+  dev_paperless_media:

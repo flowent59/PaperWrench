@@ -1,0 +1,40 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.token
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Databases (never commit a job history)
+*.db
+*.db-wal
+*.db-shm
+backend/data/
+data/
+
+# Frontend
+node_modules/
+frontend/dist/
+# Built SPA, copied into the package at build time
+backend/src/paperwrench/static/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
