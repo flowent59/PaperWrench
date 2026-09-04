@@ -30,6 +30,7 @@ import httpx
 import structlog
 
 from paperwrench.config import Settings
+from paperwrench.errors import PaperlessForbiddenError
 from paperwrench.errors import PaperlessIncompatibleError
 from paperwrench.errors import PaperlessNotConfiguredError
 from paperwrench.errors import PaperlessUnauthorizedError
@@ -40,10 +41,14 @@ from paperwrench.paperless.errors import PaperlessConflictError
 from paperwrench.paperless.errors import PaperlessNotFoundError
 from paperwrench.paperless.errors import PaperlessValidationError
 from paperwrench.paperless.models import ConnectionStatus
+from paperwrench.paperless.models import Correspondent
 from paperwrench.paperless.models import CustomField
 from paperwrench.paperless.models import CustomFieldValue
 from paperwrench.paperless.models import Document
+from paperwrench.paperless.models import DocumentType
 from paperwrench.paperless.models import Page
+from paperwrench.paperless.models import StoragePath
+from paperwrench.paperless.models import Tag
 from paperwrench.paperless.models import merge_custom_fields
 
 logger = structlog.get_logger(__name__)
@@ -208,9 +213,22 @@ class PaperlessClient:
 
         body = response.text
 
-        if status in (401, 403):
+        if status == 401:
+            # VERIFIED_LIVE (3.1.2): an invalid/unknown token -> 401 with
+            # {"detail": "Invalid token."}. The credential itself is bad.
             raise PaperlessUnauthorizedError(
                 "Paperless rejected the API token.",
+                details={"upstream_status": status},
+            )
+        if status == 403:
+            # VERIFIED_LIVE (3.1.2), reproduced with a deliberately
+            # unprivileged sandbox user: a *valid* token with no permission
+            # -> 403 with {"detail": "You do not have permission to perform
+            # this action."}. The credential is fine; this actor may not do
+            # this. Kept distinct from 401 - see PaperlessForbiddenError.
+            raise PaperlessForbiddenError(
+                "Paperless authenticated the request but refused it "
+                f"({method} {path}).",
                 details={"upstream_status": status},
             )
         if status == 406:
@@ -269,6 +287,7 @@ class PaperlessClient:
         except (
             PaperlessUnreachableError,
             PaperlessUnauthorizedError,
+            PaperlessForbiddenError,
             PaperlessIncompatibleError,
             PaperlessApiError,
         ) as exc:
@@ -395,6 +414,28 @@ class PaperlessClient:
     async def list_custom_fields(self) -> list[CustomField]:
         raw = await self.iter_pages("/api/custom_fields/")
         return [CustomField.model_validate(item) for item in raw]
+
+    # -------------------------------------------------------------- metadata
+    # Reference data (M2): tags, correspondents, document types and storage
+    # paths. Every one of these is a small, fully-paginated list - none of
+    # them are expected to be large enough to need anything beyond
+    # `iter_pages`, and this is deliberately the same shape as
+    # `list_custom_fields` above rather than a bespoke path per endpoint.
+    async def list_tags(self) -> list[Tag]:
+        raw = await self.iter_pages("/api/tags/")
+        return [Tag.model_validate(item) for item in raw]
+
+    async def list_correspondents(self) -> list[Correspondent]:
+        raw = await self.iter_pages("/api/correspondents/")
+        return [Correspondent.model_validate(item) for item in raw]
+
+    async def list_document_types(self) -> list[DocumentType]:
+        raw = await self.iter_pages("/api/document_types/")
+        return [DocumentType.model_validate(item) for item in raw]
+
+    async def list_storage_paths(self) -> list[StoragePath]:
+        raw = await self.iter_pages("/api/storage_paths/")
+        return [StoragePath.model_validate(item) for item in raw]
 
     async def update_document(self, document_id: int, payload: dict[str, Any]) -> Document:
         """PATCH a document with an explicit payload.

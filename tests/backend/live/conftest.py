@@ -189,6 +189,52 @@ async def raw_live(live_settings: Settings) -> AsyncIterator[httpx.AsyncClient]:
 
 
 @pytest_asyncio.fixture
+async def restricted_user(
+    raw_live: httpx.AsyncClient, live_url: str
+) -> AsyncIterator[dict[str, object]]:
+    """A Paperless user with a valid token and NO permissions at all.
+
+    Created and torn down per test so no live test leaves a stray account
+    behind. This is the fixture that lets the 401-vs-403 distinction
+    (PaperlessUnauthorizedError vs PaperlessForbiddenError) be proven
+    against the real server instead of assumed.
+
+    Yields ``{"id": ..., "token": ...}``. Deliberately does not grant any
+    ``user_permissions``: the point is to observe what a genuinely
+    unprivileged, but authenticated, actor gets back.
+    """
+    import uuid
+
+    username = f"pw-live-restricted-{uuid.uuid4().hex[:8]}"
+    password = f"pw-{uuid.uuid4().hex}"
+
+    created = await raw_live.post(
+        "/api/users/",
+        json={
+            "username": username,
+            "password": password,
+            "is_active": True,
+            "is_staff": False,
+            "is_superuser": False,
+        },
+    )
+    created.raise_for_status()
+    user_id = int(created.json()["id"])
+
+    async with httpx.AsyncClient(base_url=live_url, timeout=10.0) as anon_client:
+        token_response = await anon_client.post(
+            "/api/token/", data={"username": username, "password": password}
+        )
+    token_response.raise_for_status()
+    token = str(token_response.json()["token"])
+
+    try:
+        yield {"id": user_id, "token": token, "username": username}
+    finally:
+        await raw_live.delete(f"/api/users/{user_id}/")
+
+
+@pytest_asyncio.fixture
 async def scratch_document(raw_live: httpx.AsyncClient) -> AsyncIterator[int]:
     """A disposable document, deleted afterwards.
 

@@ -15,6 +15,7 @@ import pytest
 import respx
 
 from paperwrench.config import Settings
+from paperwrench.errors import PaperlessForbiddenError
 from paperwrench.errors import PaperlessIncompatibleError
 from paperwrench.errors import PaperlessNotConfiguredError
 from paperwrench.errors import PaperlessUnauthorizedError
@@ -109,13 +110,32 @@ class TestRequestConstruction:
 # ------------------------------------------------------------------ error map
 class TestErrorNormalisation:
     @respx.mock
-    @pytest.mark.parametrize("status", [401, 403])
-    async def test_auth_failures(self, paperless_settings: Settings, status: int) -> None:
+    async def test_401_maps_to_unauthorized(self, paperless_settings: Settings) -> None:
+        """401: the credential itself is rejected. VERIFIED_LIVE (3.1.2)."""
         respx.get(f"{BASE}/api/documents/1/").mock(
-            return_value=httpx.Response(status, json={"detail": "Invalid token."})
+            return_value=httpx.Response(401, json={"detail": "Invalid token."})
         )
         async with PaperlessClient(paperless_settings) as client:
             with pytest.raises(PaperlessUnauthorizedError):
+                await client.get_document(1)
+
+    @respx.mock
+    async def test_403_maps_to_forbidden_not_unauthorized(
+        self, paperless_settings: Settings
+    ) -> None:
+        """403: authenticated, but not permitted - a distinct case from 401.
+
+        VERIFIED_LIVE (3.1.2) with a deliberately unprivileged sandbox user:
+        a valid token with zero permissions gets exactly this body on both
+        list and detail endpoints.
+        """
+        respx.get(f"{BASE}/api/documents/1/").mock(
+            return_value=httpx.Response(
+                403, json={"detail": "You do not have permission to perform this action."}
+            )
+        )
+        async with PaperlessClient(paperless_settings) as client:
+            with pytest.raises(PaperlessForbiddenError):
                 await client.get_document(1)
 
     @respx.mock
@@ -207,7 +227,7 @@ class TestErrorNormalisation:
         assert (excinfo.value.details or {}).get("reason") == "timeout"
 
     @respx.mock
-    @pytest.mark.parametrize("status", [401, 404, 500])
+    @pytest.mark.parametrize("status", [401, 403, 404, 500])
     async def test_no_error_ever_leaks_the_token(
         self, paperless_settings: Settings, status: int
     ) -> None:
@@ -286,8 +306,95 @@ class TestPagination:
             await client.iter_documents(params={"document_type__id": 3})
         assert route.calls.last.request.url.params["document_type__id"] == "3"
 
+    @respx.mock
+    async def test_out_of_range_page_raises_not_found_cleanly(
+        self, paperless_settings: Settings
+    ) -> None:
+        """Mirrors the live behaviour (VERIFIED_LIVE: 404 'Invalid page.').
+
+        A page number beyond the last one must surface as
+        ``PaperlessNotFoundError``, not as a raw JSON decode error or an
+        unhandled exception - list_documents() must not assume every 200
+        response is the shape it expects.
+        """
+        respx.get(f"{BASE}/api/documents/", params={"page": "999"}).mock(
+            return_value=httpx.Response(404, json={"detail": "Invalid page."})
+        )
+        async with PaperlessClient(paperless_settings) as client:
+            with pytest.raises(PaperlessNotFoundError):
+                await client.list_documents(page=999)
+
+    @respx.mock
+    async def test_iter_pages_never_requests_a_page_past_the_last(
+        self, paperless_settings: Settings
+    ) -> None:
+        """The iterator must stop the moment ``next`` is null - not probe further.
+
+        Two pages exist; a third route is registered but must never be hit.
+        If the iterator ever requested page 3 "just to check", this test
+        would fail on the assertion, not merely happen to pass.
+        """
+        respx.get(f"{BASE}/api/documents/", params={"page": "1"}).mock(
+            return_value=httpx.Response(
+                200,
+                json=_page([_doc(1)], count=2, next_url=f"{BASE}/api/documents/?page=2"),
+                headers=V10_HEADERS,
+            )
+        )
+        respx.get(f"{BASE}/api/documents/", params={"page": "2"}).mock(
+            return_value=httpx.Response(200, json=_page([_doc(2)], count=2), headers=V10_HEADERS)
+        )
+        page_3 = respx.get(f"{BASE}/api/documents/", params={"page": "3"}).mock(
+            return_value=httpx.Response(404, json={"detail": "Invalid page."})
+        )
+        async with PaperlessClient(paperless_settings) as client:
+            documents = await client.iter_documents()
+        assert [d.id for d in documents] == [1, 2]
+        assert page_3.call_count == 0, "iterator must stop as soon as next is null"
+
 
 # ------------------------------------------------------------- custom fields
+class TestListCustomFields:
+    @respx.mock
+    async def test_null_extra_data_does_not_break_list_custom_fields(
+        self, paperless_settings: Settings
+    ) -> None:
+        """Regression: VERIFIED_LIVE, most real custom fields have extra_data=null.
+
+        Only select/monetary fields carry a real extra_data dict on 3.1.2;
+        every other data type serves ``null``. list_custom_fields() must not
+        raise a validation error on the common case.
+        """
+        respx.get(f"{BASE}/api/custom_fields/").mock(
+            return_value=httpx.Response(
+                200,
+                json=_page(
+                    [
+                        {
+                            "id": 7,
+                            "name": "Commentaire",
+                            "data_type": "string",
+                            "extra_data": None,
+                        },
+                        {
+                            "id": 2,
+                            "name": "Montant",
+                            "data_type": "monetary",
+                            "extra_data": {"default_currency": "EUR"},
+                        },
+                    ]
+                ),
+                headers=V10_HEADERS,
+            )
+        )
+        async with PaperlessClient(paperless_settings) as client:
+            fields = await client.list_custom_fields()
+
+        by_id = {f.id: f for f in fields}
+        assert by_id[7].extra_data == {}
+        assert by_id[2].extra_data == {"default_currency": "EUR"}
+
+
 class TestCustomFieldSafety:
     @respx.mock
     async def test_patch_sends_the_complete_merged_collection(

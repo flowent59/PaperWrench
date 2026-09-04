@@ -70,6 +70,33 @@ version negotiation, pagination, error mapping, and the read-modify-write
 helper for custom fields. Because it is the only door, a hazard fixed here is
 fixed everywhere.
 
+Since M2, this package also owns the **normalized model layer** and the
+**Metadata Registry**:
+
+- `models.py` defines every PaperWrench-facing shape derived from a Paperless
+  response — `Document`, `CustomField`, `CustomFieldValue`, `Tag`,
+  `Correspondent`, `DocumentType`, `StoragePath` — plus the typed-value layer
+  (`TypedCustomFieldValue`, `CustomFieldValueKind`, `MonetaryAmount`) that
+  keeps *absent* / *null* / `""` / `0` / `False` genuinely distinct instead of
+  collapsing them, and keeps a select field's stored option id separate from
+  its display label. `field_kind()` classifies a document field name as
+  core (`CORE_DOCUMENT_FIELDS`) or custom — the distinction the Filter Engine
+  (M4) and Transformation Engine (M6) will build on.
+- `registry.py` defines `MetadataRegistry`: a small in-memory, per-kind TTL
+  cache over the five reference kinds (tags, correspondents, document types,
+  storage paths, custom fields) with `by_id` / `by_name` lookups,
+  `refresh()` / `invalidate()`, and an explicit `AmbiguousMetadataName` error
+  instead of ever silently picking one match. The cache is not a second
+  source of truth — Paperless remains authoritative, and there is no SQLite
+  mirror of it.
+
+`api/v1/metadata.py` exposes these five reference kinds read-only
+(`/api/v1/metadata/tags`, `.../correspondents`, `.../document-types`,
+`.../storage-paths`, `.../custom-fields`) as PaperWrench models. This is a
+data-layer inspection surface only — it is not the Explorer API and carries
+none of its concepts (filters, saved views, bulk operations), which belong to
+M3/M4.
+
 **`db/`** — models, engine, session, migrations, runtime lock. Owns durability.
 
 **Cross-cutting** — `config.py` (settings, secrets), `logging.py` (structured

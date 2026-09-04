@@ -19,6 +19,7 @@ class ErrorCode(StrEnum):
     PAPERLESS_NOT_CONFIGURED = "PAPERLESS_NOT_CONFIGURED"
     PAPERLESS_UNREACHABLE = "PAPERLESS_UNREACHABLE"
     PAPERLESS_UNAUTHORIZED = "PAPERLESS_UNAUTHORIZED"
+    PAPERLESS_FORBIDDEN = "PAPERLESS_FORBIDDEN"
     PAPERLESS_INCOMPATIBLE = "PAPERLESS_INCOMPATIBLE"
     PAPERLESS_ERROR = "PAPERLESS_ERROR"
 
@@ -129,8 +130,46 @@ class PaperlessUnreachableError(PaperWrenchError):
 
 
 class PaperlessUnauthorizedError(PaperWrenchError):
+    """401 from Paperless: the credential itself is not accepted.
+
+    VERIFIED_LIVE (3.1.2): an invalid or unknown token returns 401 with
+    ``{"detail": "Invalid token."}``. This is an authentication problem -
+    PaperWrench is not who it claims to be, as far as Paperless is
+    concerned. See :class:`PaperlessForbiddenError` for the (different) 403
+    case: authenticated, but not allowed.
+    """
+
     status_code = 502
     code = ErrorCode.PAPERLESS_UNAUTHORIZED
+
+
+class PaperlessForbiddenError(PaperWrenchError):
+    """403 from Paperless: authenticated, but not permitted.
+
+    VERIFIED_LIVE (3.1.2), using a second, deliberately unprivileged user
+    created in the sandbox: a *valid* token with no permission at all gets
+    403 with ``{"detail": "You do not have permission to perform this
+    action."}`` on both ``GET /api/documents/`` (list) and
+    ``GET /api/documents/<id>/`` (detail).
+
+    Distinct from 401 on purpose: 401 means "the token itself is rejected",
+    403 means "the token is fine, this actor may not do this". Collapsing
+    both into one error would erase a distinction the Inspector, Dry Run and
+    the future JobOperation model will need (`user_can_change`, per-object
+    Paperless permissions).
+
+    VERIFIED_LIVE nuance worth keeping in mind: Paperless enforces object
+    -level permissions *silently* for reads. A user with the global
+    ``view_document`` permission but no object-level grant on a given
+    document does not get a 403 for that document - it simply does not
+    appear in the list, and ``GET`` on its id returns 404, exactly as if the
+    document did not exist. 403 is reserved for actions the user has no
+    permission for at all (no ``view_document``/``change_document``/
+    ``delete_document``/``add_tag`` permission whatsoever).
+    """
+
+    status_code = 502
+    code = ErrorCode.PAPERLESS_FORBIDDEN
 
 
 class PaperlessIncompatibleError(PaperWrenchError):

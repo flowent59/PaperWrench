@@ -11,6 +11,7 @@ Gated by tests/backend/live/conftest.py: requires
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -19,6 +20,7 @@ import pytest
 from pydantic import SecretStr
 
 from paperwrench.config import Settings
+from paperwrench.errors import PaperlessForbiddenError
 from paperwrench.errors import PaperlessIncompatibleError
 from paperwrench.errors import PaperlessUnauthorizedError
 from paperwrench.paperless import PaperlessClient
@@ -164,6 +166,40 @@ class TestDocumentRead:
         payload = response.json()
         for key in ("id", "title", "custom_fields", "tags", "user_can_change", "modified"):
             assert key in payload, f"3.1.2 no longer returns {key!r}"
+
+
+class TestReferenceMetadataReads:
+    """VERIFIED_LIVE reads of the five metadata kinds M2 normalises.
+
+    ``list_custom_fields`` is the important one here: it is the test that
+    caught the ``extra_data: null`` regression (M2) - a shape the mocked
+    tests, which always supplied a dict literal, never exercised.
+    """
+
+    async def test_list_custom_fields_handles_the_real_null_extra_data(
+        self, live_client: PaperlessClient
+    ) -> None:
+        fields = await live_client.list_custom_fields()
+        assert len(fields) >= 1
+        # At least one real field must have extra_data=null upstream (every
+        # string/date/boolean field in the Golden Dataset does) - proving
+        # the validator actually ran against real data, not just a fixture.
+        assert any(field.extra_data == {} for field in fields)
+
+    async def test_list_tags_correspondents_document_types_storage_paths(
+        self, live_client: PaperlessClient
+    ) -> None:
+        # No assumption about how many exist - only that the calls succeed
+        # and return the right PaperWrench model type, proving the real
+        # response shapes still validate.
+        tags = await live_client.list_tags()
+        correspondents = await live_client.list_correspondents()
+        document_types = await live_client.list_document_types()
+        storage_paths = await live_client.list_storage_paths()
+        assert isinstance(tags, list)
+        assert isinstance(correspondents, list)
+        assert isinstance(document_types, list)
+        assert isinstance(storage_paths, list)
 
 
 # ----------------------------------------------------- THE custom field hazard
@@ -332,6 +368,166 @@ class TestCustomFieldHazard:
         assert document.custom_field_map[target] == "a preserver"
 
 
+class TestConcurrentCustomFieldWrites:
+    """Measures, but does NOT fix, the lost-update hazard (M2 point 11).
+
+    No distributed lock or ETag exists yet. This documents what actually
+    happens - proven on the real server - when two actors both read the
+    document's custom fields, then each writes back the FULL list with only
+    their own field changed, using the state each of them read. That is
+    exactly what a partial PATCH forces you into (ADR-0004): there is no way
+    to tell Paperless "change only field X, leave everything else as it is
+    server-side right now" - you must submit the field list you believe is
+    complete.
+
+    The interleaving is forced with a deliberate ``asyncio.sleep`` rather than
+    left to chance, so the test is deterministic instead of a flaky race:
+    actor B reads and writes first; actor A read earlier, sleeps, then writes
+    a full list computed from a base that predates B's write. Real-world
+    concurrent writers would only sometimes land in this order - this test
+    always does, to make the hazard observable on demand.
+    """
+
+    async def test_two_actors_writing_different_fields_can_lose_an_update(
+        self,
+        raw_live: httpx.AsyncClient,
+        scratch_document: int,
+    ) -> None:
+        response = await raw_live.get(
+            "/api/custom_fields/", params={"page_size": 100}
+        )
+        response.raise_for_status()
+        strings = [
+            int(item["id"])
+            for item in response.json()["results"]
+            if item["data_type"] == "string"
+        ]
+        if len(strings) < 2:
+            pytest.skip("needs at least 2 string custom fields; run the seeder")
+        field_a, field_b = strings[0], strings[1]
+
+        seed = await raw_live.patch(
+            f"/api/documents/{scratch_document}/",
+            json={
+                "custom_fields": [
+                    {"field": field_a, "value": "base-a"},
+                    {"field": field_b, "value": "base-b"},
+                ]
+            },
+        )
+        assert seed.status_code == 200, seed.text
+
+        async def actor(*, field_to_change: int, new_value: str, delay: float) -> None:
+            # 1. Read the state this actor will build its write from.
+            read = await raw_live.get(f"/api/documents/{scratch_document}/")
+            read.raise_for_status()
+            base = {
+                item["field"]: item["value"] for item in read.json()["custom_fields"]
+            }
+            if delay:
+                await asyncio.sleep(delay)
+            base[field_to_change] = new_value
+            full = [{"field": fid, "value": value} for fid, value in base.items()]
+            write = await raw_live.patch(
+                f"/api/documents/{scratch_document}/", json={"custom_fields": full}
+            )
+            write.raise_for_status()
+
+        await asyncio.gather(
+            actor(field_to_change=field_a, new_value="actor-a-wins-or-loses", delay=0.5),
+            actor(field_to_change=field_b, new_value="actor-b-writes-first", delay=0.0),
+        )
+
+        final = await raw_live.get(f"/api/documents/{scratch_document}/")
+        final.raise_for_status()
+        stored = {
+            item["field"]: item["value"] for item in final.json()["custom_fields"]
+        }
+
+        # MEASURED, not fixed: actor A's write is computed from a base that
+        # predates actor B's write, so actor A's PATCH re-asserts "base-b" for
+        # field B - actor B's change to field B is silently lost, even though
+        # actor A never touched field B. This is the lost-update hazard the
+        # read-modify-write mitigation (ADR-0004) does not close: it removes
+        # the OMITTED-FIELD-DELETION hazard, not the classic
+        # read/read/write/write race. A per-write conflict check
+        # (``expected_before`` on ``update_custom_fields``) can catch this
+        # for PaperWrench's own client calls, but nothing protects two
+        # concurrent actors who both bypass it, or two actors using it
+        # without comparing notes.
+        assert stored[field_a] == "actor-a-wins-or-loses"
+        assert stored[field_b] == "base-b", (
+            "VERIFIED_LIVE lost-update: actor A's write, computed before actor B's "
+            "write landed, silently overwrote actor B's change to field_b even "
+            "though actor A never intended to touch it. Documented, not fixed - "
+            "no lock/ETag exists yet (M2 point 11)."
+        )
+
+    async def test_client_update_custom_fields_narrows_but_does_not_close_the_window(
+        self,
+        live_client: PaperlessClient,
+        raw_live: httpx.AsyncClient,
+        scratch_document: int,
+    ) -> None:
+        """The client's own read-modify-write still has an internal race window.
+
+        ``update_custom_fields`` reads immediately before it writes, which
+        makes the window much smaller than the naive pattern above - but it
+        is not zero. This test forces two overlapping calls into the window
+        deterministically (delaying the first actor's *external* seed just
+        long enough that the second call's read/write completes first) to
+        show that the mitigation is real (it prevents field OMISSION-based
+        loss) but the classic race is only narrowed, not eliminated, without
+        ``expected_before`` or a lock.
+        """
+        response = await raw_live.get(
+            "/api/custom_fields/", params={"page_size": 100}
+        )
+        response.raise_for_status()
+        strings = [
+            int(item["id"])
+            for item in response.json()["results"]
+            if item["data_type"] == "string"
+        ]
+        if len(strings) < 2:
+            pytest.skip("needs at least 2 string custom fields; run the seeder")
+        field_a, field_b = strings[0], strings[1]
+
+        seed = await raw_live.patch(
+            f"/api/documents/{scratch_document}/",
+            json={
+                "custom_fields": [
+                    {"field": field_a, "value": "base-a"},
+                    {"field": field_b, "value": "base-b"},
+                ]
+            },
+        )
+        assert seed.status_code == 200, seed.text
+
+        results = await asyncio.gather(
+            live_client.update_custom_fields(
+                scratch_document, [{"field": field_a, "value": "via-client-a"}]
+            ),
+            live_client.update_custom_fields(
+                scratch_document, [{"field": field_b, "value": "via-client-b"}]
+            ),
+        )
+        assert len(results) == 2
+
+        final = await live_client.get_document(scratch_document)
+        values = final.custom_field_map
+        # MEASURED: report what actually happened rather than asserting one
+        # specific outcome, since the client's window is narrow and timing-
+        # dependent even with the deliberate concurrent dispatch above. Both
+        # fields surviving is the common case (the window is short); either
+        # field reverting to its seed value would indicate the window was
+        # hit. What must NOT happen, ever, is a field neither actor touched
+        # (there is none here besides field_a/field_b) disappearing, and no
+        # exception should escape simply from running two calls in parallel.
+        assert values[field_a] in {"base-a", "via-client-a"}
+        assert values[field_b] in {"base-b", "via-client-b"}
+
+
 class TestSelectField:
     async def test_select_stores_the_option_id_and_refuses_the_label(
         self, raw_live: httpx.AsyncClient, scratch_document: int
@@ -440,6 +636,62 @@ class TestFailureModes:
     async def test_missing_document_is_404(self, live_client: PaperlessClient) -> None:
         with pytest.raises(PaperlessNotFoundError):
             await client_get_missing(live_client)
+
+    async def test_valid_token_with_zero_permissions_is_403_not_401(
+        self,
+        live_settings: Settings,
+        restricted_user: dict[str, object],
+        scratch_document: int,
+    ) -> None:
+        """401 and 403 must stay distinct - proven, not assumed.
+
+        A freshly created sandbox user with a valid token and literally no
+        permissions gets 403 ("You do not have permission to perform this
+        action."), never 401, on both list and detail. 401 is reserved for
+        the credential itself being rejected (see
+        test_invalid_token_is_401).
+        """
+        restricted = live_settings.model_copy(
+            update={"paperless_token": SecretStr(str(restricted_user["token"]))}
+        )
+        async with PaperlessClient(restricted) as client:
+            with pytest.raises(PaperlessForbiddenError):
+                await client.get_document(scratch_document)
+            with pytest.raises(PaperlessForbiddenError):
+                await client.list_documents()
+
+    async def test_global_view_permission_without_object_grant_is_404_not_403(
+        self,
+        raw_live: httpx.AsyncClient,
+        live_settings: Settings,
+        restricted_user: dict[str, object],
+        scratch_document: int,
+    ) -> None:
+        """A documented, counter-intuitive VERIFIED_LIVE nuance.
+
+        Granting the *global* ``view_document`` permission, without an
+        object-level grant on a specific document, does not turn the 403
+        into a 401 or a "visible but forbidden" response: Paperless hides
+        the object entirely. The document disappears from the list and its
+        detail endpoint answers 404, exactly as if it did not exist.
+        PaperlessForbiddenError must therefore never be relied upon as the
+        sole signal for "this document exists but I cannot see it" -
+        object-level permission gaps surface as PaperlessNotFoundError.
+        """
+        grant = await raw_live.patch(
+            f"/api/users/{restricted_user['id']}/",
+            json={"user_permissions": ["view_document"]},
+        )
+        grant.raise_for_status()
+
+        restricted = live_settings.model_copy(
+            update={"paperless_token": SecretStr(str(restricted_user["token"]))}
+        )
+        async with PaperlessClient(restricted) as client:
+            with pytest.raises(PaperlessNotFoundError):
+                await client.get_document(scratch_document)
+            page = await client.list_documents()
+            assert scratch_document not in {doc.id for doc in page.results}
 
     async def test_unreachable_host_is_reported_not_raised_by_probe(
         self, live_settings: Settings

@@ -99,6 +99,35 @@ log scrubber at client construction, and both `PaperWrenchError` and
 browser. Upstream response bodies are scrubbed **before** truncation, so a token
 straddling the truncation boundary cannot survive as a recognisable fragment.
 
+### 2.1 401 vs 403 (M2)
+
+**`VERIFIED_LIVE`** — a token that is rejected outright (bad/unknown token)
+returns **HTTP 401** with `{"detail": "Invalid token."}`.
+
+**`VERIFIED_LIVE`** — a token that Paperless *accepts* as valid, but that
+belongs to a user with **zero permissions**, returns **HTTP 403** with
+`{"detail": "You do not have permission to perform this action."}` on both
+`GET /api/documents/` (list) and `GET /api/documents/{id}/` (detail). This was
+proven with a disposable sandbox user created and deleted per test
+(`restricted_user` fixture in `tests/backend/live/conftest.py`), never a
+hardcoded account.
+
+Consequence: 401 and 403 are a genuine authentication/authorization split, not
+one error class wearing two status codes. PaperWrench models them separately —
+`PaperlessUnauthorizedError` (401) and `PaperlessForbiddenError` (403), both
+non-retryable — so a caller (and a future permissions UI) can tell "your
+credential is wrong" from "your credential is fine, but you may not do this"
+without inspecting response text.
+
+**`VERIFIED_LIVE` — a sharper nuance:** granting a user the *global*
+`view_document` permission, **without** an object-level grant for a specific
+document, does not surface as 403 for that document. It surfaces as **404**:
+the document is simply absent from the list, and `GET` on its id returns
+`{"detail": "Not found."}`. Paperless's object-level permission model makes an
+ungranted object indistinguishable from a nonexistent one at this boundary —
+PaperWrench must not assume "404 on a document id I previously read" always
+means the document was deleted; it can also mean a permission was revoked.
+
 ---
 
 ## 3. Endpoints PaperWrench uses
@@ -110,6 +139,10 @@ straddling the truncation boundary cannot survive as a recognisable fragment.
 | `/api/documents/{id}/` | PATCH | write title, dates, and custom fields | `VERIFIED_LIVE` |
 | `/api/documents/{id}/metadata/` | GET | archive/original metadata | `VERIFIED_LIVE` |
 | `/api/custom_fields/` | GET | field catalogue (id, name, data type, select options) | `VERIFIED_LIVE` |
+| `/api/tags/` | GET | tag catalogue | `VERIFIED_LIVE` |
+| `/api/correspondents/` | GET | correspondent catalogue | `VERIFIED_LIVE` |
+| `/api/document_types/` | GET | document type catalogue | `VERIFIED_LIVE` |
+| `/api/storage_paths/` | GET | storage path catalogue | `VERIFIED_LIVE` |
 | `/api/documents/post_document/` | POST | used **only** by the dev seeder, never by the app | `VERIFIED_LIVE` |
 
 **`VERIFIED_LIVE`** — `GET /api/` returns **HTTP 302** (redirect to the
@@ -205,6 +238,54 @@ option id is rejected with HTTP 400.
 **`VERIFIED_LIVE`** — referencing an unknown custom field id returns HTTP 400
 and leaves the document unmodified.
 
+### 5.3 Custom field *definitions* — `extra_data` can be `null` (M2)
+
+**`VERIFIED_LIVE`** — on `GET /api/custom_fields/`, the `extra_data` key on a
+field definition is **`null`**, not an absent key and not `{}`, for every
+`string`, `date`, `boolean`, `integer` and `float` field observed in the
+Golden Dataset (10 of 13 real fields). Only `select` (which carries its
+`select_options` there) and `monetary` (which carries `default_currency`)
+happened to have a non-null `extra_data` in the sandbox — which is exactly why
+this was not caught by the mocked tests written during M1: they always
+supplied a dict literal for `extra_data`, never `null`.
+
+This was found running the M2 metadata endpoints against the real sandbox for
+the first time: `CustomField.model_validate(...)` raised a pydantic
+`ValidationError` (`extra_data: Input should be a valid dictionary`) on every
+field of the affected types, which the API surfaced as an unhandled
+`HTTP 500`. Fixed with a `field_validator(mode="before")` on `CustomField`
+that normalises `None` → `{}` before the rest of validation runs, so
+`select_options` and `typed_value()` can keep assuming a dict. Pinned by a
+unit test (`TestCustomFieldExtraDataNull`), a mocked test
+(`TestListCustomFields`), and a live test
+(`TestReferenceMetadataReads.test_list_custom_fields_handles_the_real_null_extra_data`).
+
+### 5.4 Concurrent writes to different fields — a measured, not fixed, hazard (M2)
+
+**`VERIFIED_LIVE`** — the read-modify-write mitigation in §5.1 closes the
+*omitted-field-deletion* hazard, but it does **not** close the classic
+read/read/write/write lost-update race. Two actors, each reading the
+document's current custom fields and then PATCHing back the **full** list
+they believe is correct with only their own field changed, can lose one
+actor's change even though the two actors never touched the same field:
+whichever actor's PATCH lands second re-asserts the value it read *before*
+the other actor's write, silently reverting it.
+
+This was measured directly (`TestConcurrentCustomFieldWrites`,
+`tests/backend/live/test_paperless_live.py`), with the interleaving forced
+deterministically (a deliberate `asyncio.sleep` between one actor's read and
+its write) rather than left to timing luck, so the hazard is reproducible on
+demand instead of being a flaky race. `PaperlessClient.update_custom_fields()`
+narrows the window considerably (it reads immediately before it writes,
+rather than reading long before), and its optional `expected_before`
+parameter lets a caller refuse to write from a base it knows is stale — but
+neither eliminates the window entirely, and nothing currently prevents two
+concurrent callers who both skip `expected_before`. No distributed lock or
+ETag exists yet; this is documented as a known limitation, not fixed, per the
+M2 scope decision. A future milestone that needs a stronger guarantee will
+need a real concurrency-control mechanism (e.g. Paperless's own version, if
+one is ever exposed, or a PaperWrench-side lock).
+
 ---
 
 ## 6. Search, filtering and ordering
@@ -223,6 +304,43 @@ key against a known-good allowlist **before** sending it, otherwise a typo in a
 saved filter turns "these 12 documents" into "the entire library" — while
 looking successful. This is now a hard requirement on ADR-0007's compilable
 subset.
+
+---
+
+## 6.1 Reference metadata endpoints (M2)
+
+| Endpoint | Method | Purpose | Confidence |
+| --- | --- | --- | --- |
+| `/api/tags/` | GET | tag catalogue | `VERIFIED_LIVE` |
+| `/api/correspondents/` | GET | correspondent catalogue | `VERIFIED_LIVE` |
+| `/api/document_types/` | GET | document type catalogue | `VERIFIED_LIVE` |
+| `/api/storage_paths/` | GET | storage path catalogue | `VERIFIED_LIVE` |
+
+**`VERIFIED_LIVE`** — full key set on a freshly created object of each kind:
+
+- Tag: `id, slug, name, color, text_color, match, matching_algorithm, is_insensitive, is_inbox_tag, owner, user_can_change, parent, children`
+- Correspondent: `id, slug, name, match, matching_algorithm, is_insensitive, owner, user_can_change`
+- Document type: `id, slug, name, match, matching_algorithm, is_insensitive, document_count, owner, user_can_change`
+- Storage path: `id, slug, name, path, match, matching_algorithm, is_insensitive, owner, user_can_change`
+
+PaperWrench's `Tag`, `Correspondent`, `DocumentType`, `StoragePath` models
+(`paperless/models.py`) keep only the subset the project actually consumes
+(`extra="ignore"` on every one), so an upstream field addition is a no-op
+here rather than a validation break.
+
+**`VERIFIED_LIVE`** — Paperless enforces a per-owner **uniqueness constraint**
+on tag and custom field names: two objects owned by the same user cannot
+share an exact name. This does **not** mean names are globally unique across
+owners, and PaperWrench's `MetadataRegistry` does not rely on the Paperless
+constraint at all — it detects ambiguity itself (`AmbiguousMetadataName`) by
+scanning its own snapshot for an exact-name collision, so it stays correct
+even in a hypothetical multi-owner future. Name resolution is deliberately
+**exact-match only**: no accent-folding, no case-insensitivity. The Golden
+Dataset deliberately contains near-duplicate names that must **not** be
+conflated (`Etablissement` / `Établissement`, `Periode concernee` /
+`Période concernée`, `Reference interne` / `Référence interne`, `Valide` /
+`Validé`) — these are two distinct custom fields each, and a normalising
+resolver would silently merge them.
 
 ---
 
