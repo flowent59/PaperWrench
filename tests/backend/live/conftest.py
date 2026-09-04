@@ -234,6 +234,29 @@ async def restricted_user(
         await raw_live.delete(f"/api/users/{user_id}/")
 
 
+@pytest_asyncio.fixture(scope="session")
+async def golden_custom_field_ids(live_settings: Settings) -> dict[str, int]:
+    """Name -> id for the Golden Dataset's custom fields, resolved live.
+
+    M3's custom-field-ordering live tests need real ids, not assumed ones -
+    the seed scripts create these fields idempotently (``get_or_create``),
+    so their ids are stable across a given sandbox but not hardcodable
+    across sandboxes. Session-scoped: every test in this module reads the
+    same, already-seeded definitions rather than re-fetching per test.
+    """
+    async with httpx.AsyncClient(
+        base_url=live_settings.paperless_url,
+        headers={
+            "Authorization": f"Token {live_settings.paperless_token.get_secret_value()}",
+            "Accept": "application/json; version=10",
+        },
+        timeout=30.0,
+    ) as client:
+        response = await client.get("/api/custom_fields/", params={"page_size": 100})
+        response.raise_for_status()
+        return {item["name"]: int(item["id"]) for item in response.json()["results"]}
+
+
 @pytest_asyncio.fixture
 async def scratch_document(raw_live: httpx.AsyncClient) -> AsyncIterator[int]:
     """A disposable document, deleted afterwards.

@@ -50,7 +50,7 @@ The client, and proving we can talk to a real instance safely.
 - Golden Dataset seeder for the sandbox, idempotent and title-trim-aware
 - Tests with `respx`, plus `live` tests against the real 3.1.2 sandbox
 
-## M2 — PaperlessClient + normalized models · Next
+## M2 — PaperlessClient + normalized models · Done
 
 Finishing the data boundary: nothing downstream of this milestone touches raw
 Paperless JSON.
@@ -79,12 +79,48 @@ Paperless JSON.
 - Internal metadata API exposing PaperWrench models (not raw Paperless
   serializer copies) — no Explorer API yet
 
-## M3 — Explorer + DataGrid · Planned
+## M3 — Explorer + server-side DataGrid · Next
 
-- Paginated document list backed by server-side pagination and ordering
-- TanStack Table grid with column selection and virtualisation
-- Document detail with native PDF preview (`<object>`/`<iframe>`)
-- Ordering restricted to the server whitelist, including `custom_field_<id>`
+Read-only. Turns the normalized model layer into a usable way to browse a
+real library without ever loading it whole into the browser.
+
+- `GET /api/v1/documents`: a normalized, paginated document list
+  (`DocumentPage`/`DocumentListItem`), never a passthrough of Paperless's
+  `DocumentSerializer` or `{count, next, previous, results}` envelope
+- Server-side pagination only — no fetch-all, ever; `page_size` restricted
+  to `{25, 50, 100, 250}`, no "ALL" option
+- Simple search (`search` → `title_search`) and an optional opaque `query`
+  passthrough, mutually exclusive, mirroring Paperless's own
+  `_TANTIVY_SEARCH_PARAM_NAMES` rule — no Tantivy syntax parsing in
+  PaperWrench
+- Ordering restricted to a **server-defined allowlist**, validated and
+  translated before any request reaches Paperless — an unrecognised value
+  is rejected with 422, never silently forwarded (Paperless itself silently
+  ignores an unknown ordering value, M1 finding). `custom_field_<id>`
+  ordering exposed only for Text/Long text, Monetary and Date custom
+  fields, and only once VERIFIED_LIVE against the Golden Dataset
+- Basic direct filters (document type, correspondent, tag) mapping onto
+  `DocumentFilterSet` fields already proven to compose with pagination and
+  ordering — explicitly **not** a filter engine: no FilterSet, no
+  compiler, no nested AND/OR, no saved filters (that is M4)
+- TanStack Table grid: server-side pagination and sorting, search, column
+  visibility (persisted to `localStorage`), multi-selection with
+  select-one/select-several/select-current-page (never "select all N
+  matching" — that needs FilterSet materialization and belongs to
+  M4/M6/M7), loading/empty/error states
+- Dynamic custom-field columns sourced from the M2 Metadata Registry, never
+  hardcoded; ABSENT/NULL/PRESENT and Decimal-safe monetary amounts
+  preserved through to the grid; select fields keep their stored option id
+  distinct from their display label
+- Unresolved metadata references render as `Unknown (#id)`, never crash and
+  never silently collapse to `null`
+- `user_can_change` preserved through to the frontend for later milestones
+  (no special UI treatment yet)
+- Explorer replaces the disabled "Documents" sidebar entry as the first
+  real functional page
+- No write path: zero PATCH/POST/PUT/DELETE requests to Paperless's
+  documents endpoint from anything in this milestone (verified by a
+  dedicated backend test)
 
 ## M4 — Filter Engine · Planned
 

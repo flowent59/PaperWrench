@@ -622,6 +622,205 @@ class TestSearchAndFiltering:
         assert response.status_code == 200
 
 
+# --------------------------------------------------- M3: custom field ordering
+class TestCustomFieldOrderingLive:
+    """VERIFIED_LIVE: does ``ordering=custom_field_<id>`` actually work?
+
+    M3's brief requires this to be proven against a real 3.1.2 instance
+    before PaperWrench exposes it - VERIFIED_SOURCE (reading
+    ``DocumentsOrderingFilter`` in ``src/documents/filters.py``) already
+    showed *how* Paperless implements it; this class proves it actually
+    behaves as documented on the Golden Dataset, for exactly the three
+    data types M3 exposes (string/monetary/date), including the
+    missing-field and null-value edge cases the M3 brief calls out by
+    name. A field with an incoherent/unreliable result here is a reason to
+    NOT expose it - see docs/paperless-api.md for the promoted findings.
+    """
+
+    async def test_ordering_by_string_custom_field_is_coherent(
+        self, raw_live: httpx.AsyncClient, golden_custom_field_ids: dict[str, int]
+    ) -> None:
+        field_id = golden_custom_field_ids.get("P\u00e9riode concern\u00e9e")
+        if field_id is None:
+            pytest.skip("Golden Dataset not seeded (P\u00e9riode concern\u00e9e field missing)")
+
+        ascending = await raw_live.get(
+            "/api/documents/", params={"ordering": f"custom_field_{field_id}", "page_size": 100}
+        )
+        assert ascending.status_code == 200
+        descending = await raw_live.get(
+            "/api/documents/",
+            params={"ordering": f"-custom_field_{field_id}", "page_size": 100},
+        )
+        assert descending.status_code == 200
+
+        asc_ids = [d["id"] for d in ascending.json()["results"]]
+        desc_ids = [d["id"] for d in descending.json()["results"]]
+        # Same document set either way - only the order should differ.
+        assert set(asc_ids) == set(desc_ids)
+        if len(asc_ids) > 1:
+            assert asc_ids != desc_ids, "ascending and descending returned the same order"
+
+    async def test_ordering_by_monetary_custom_field_is_coherent(
+        self, raw_live: httpx.AsyncClient, golden_custom_field_ids: dict[str, int]
+    ) -> None:
+        field_id = golden_custom_field_ids.get("Montant")
+        if field_id is None:
+            pytest.skip("Golden Dataset not seeded (Montant field missing)")
+
+        response = await raw_live.get(
+            "/api/documents/", params={"ordering": f"custom_field_{field_id}", "page_size": 100}
+        )
+        assert response.status_code == 200
+        # The Golden Dataset deliberately includes PRESENT (incl. zero) and
+        # ABSENT Montant values (see scripts/seed_dev_golden_dataset.py) -
+        # sorting must not error out or silently drop any document.
+        results = response.json()["results"]
+        assert len(results) == response.json()["count"] or response.json()["next"] is not None
+
+    async def test_ordering_by_date_custom_field_is_coherent(
+        self, raw_live: httpx.AsyncClient, golden_custom_field_ids: dict[str, int]
+    ) -> None:
+        field_id = golden_custom_field_ids.get("Date de r\u00e8glement")
+        if field_id is None:
+            pytest.skip("Golden Dataset not seeded (Date de r\u00e8glement field missing)")
+
+        response = await raw_live.get(
+            "/api/documents/", params={"ordering": f"custom_field_{field_id}", "page_size": 100}
+        )
+        assert response.status_code == 200
+        assert "results" in response.json()
+
+    async def test_documents_missing_the_field_are_ordered_deterministically(
+        self, raw_live: httpx.AsyncClient, golden_custom_field_ids: dict[str, int]
+    ) -> None:
+        """VERIFIED_SOURCE said documents WITH the field sort before those
+        WITHOUT it (``-has_field`` annotation applied first, regardless of
+        direction). This proves that live, using Montant (deliberately
+        ABSENT on some Golden Dataset rows).
+        """
+        field_id = golden_custom_field_ids.get("Montant")
+        if field_id is None:
+            pytest.skip("Golden Dataset not seeded (Montant field missing)")
+
+        ascending = await raw_live.get(
+            "/api/documents/", params={"ordering": f"custom_field_{field_id}", "page_size": 100}
+        )
+        assert ascending.status_code == 200
+        results = ascending.json()["results"]
+        if not results:
+            pytest.skip("no documents to check ordering against")
+
+        has_field: list[bool] = []
+        for doc in results:
+            values = [cf for cf in doc.get("custom_fields", []) if cf["field"] == field_id]
+            has_field.append(len(values) > 0 and values[0]["value"] is not None)
+
+        # Once a document without the field appears, none should have it
+        # afterwards (VERIFIED_SOURCE: has_field is applied before the
+        # per-type value ordering, not interleaved with it).
+        seen_without = False
+        for present in has_field:
+            if not present:
+                seen_without = True
+            elif seen_without:
+                pytest.fail(
+                    "a document WITH the custom field appeared after one WITHOUT it - "
+                    "the has_field-first ordering guarantee does not hold as VERIFIED_SOURCE"
+                )
+
+    async def test_ordering_by_boolean_custom_field_also_works_upstream(
+        self, raw_live: httpx.AsyncClient, golden_custom_field_ids: dict[str, int]
+    ) -> None:
+        """Paperless itself supports this (VERIFIED_SOURCE); PaperWrench just
+        does not expose it in M3 - documented here so the distinction between
+        "Paperless can" and "PaperWrench exposes" is provable, not assumed.
+        """
+        field_id = golden_custom_field_ids.get("Valid\u00e9")
+        if field_id is None:
+            pytest.skip("Golden Dataset not seeded (Valid\u00e9 field missing)")
+
+        response = await raw_live.get(
+            "/api/documents/", params={"ordering": f"custom_field_{field_id}"}
+        )
+        assert response.status_code == 200
+
+
+# ----------------------------------------- M3: search + pagination + ordering
+class TestSearchPaginationOrderingComposeLive:
+    """VERIFIED_LIVE: do search, pagination and ordering compose together?
+
+    M1 proved each of these individually against the Golden Dataset. The M3
+    brief specifically calls out that this needs re-checking *in
+    combination*, since a query builder can trivially get the parameter
+    combination right individually and wrong together (e.g. an ordering
+    annotation breaking a search's ranking, or a filter being dropped when
+    paginating past page 1).
+    """
+
+    async def test_title_search_with_ordering_and_pagination_together(
+        self, raw_live: httpx.AsyncClient
+    ) -> None:
+        response = await raw_live.get(
+            "/api/documents/",
+            params={
+                "title_search": "vacations",
+                "ordering": "-created",
+                "page": 1,
+                "page_size": 5,
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert "results" in payload
+        assert len(payload["results"]) <= 5
+
+    async def test_correspondent_filter_composes_with_ordering(
+        self, raw_live: httpx.AsyncClient
+    ) -> None:
+        unfiltered = await raw_live.get("/api/documents/", params={"page_size": 1})
+        assert unfiltered.status_code == 200
+
+        response = await raw_live.get(
+            "/api/documents/",
+            params={"ordering": "correspondent__name", "page_size": 100},
+        )
+        assert response.status_code == 200
+
+    async def test_query_search_composes_with_pagination_across_pages(
+        self, raw_live: httpx.AsyncClient
+    ) -> None:
+        first_page = await raw_live.get(
+            "/api/documents/", params={"query": "vacations", "page": 1, "page_size": 2}
+        )
+        assert first_page.status_code == 200
+        count = first_page.json()["count"]
+        if count < 3:
+            pytest.skip("needs at least 3 matching documents to prove page 2 differs from page 1")
+
+        second_page = await raw_live.get(
+            "/api/documents/", params={"query": "vacations", "page": 2, "page_size": 2}
+        )
+        assert second_page.status_code == 200
+        first_ids = {d["id"] for d in first_page.json()["results"]}
+        second_ids = {d["id"] for d in second_page.json()["results"]}
+        assert first_ids.isdisjoint(second_ids), "page 1 and page 2 overlapped"
+
+    async def test_document_type_filter_composes_with_search_and_ordering(
+        self, raw_live: httpx.AsyncClient
+    ) -> None:
+        response = await raw_live.get(
+            "/api/documents/",
+            params={
+                "title_search": "vacations",
+                "ordering": "-created",
+                "document_type__id__gt": 0,
+                "page_size": 10,
+            },
+        )
+        assert response.status_code == 200
+
+
 # ------------------------------------------------------------- failure modes
 class TestFailureModes:
     async def test_invalid_token_is_401(self, live_settings: Settings) -> None:

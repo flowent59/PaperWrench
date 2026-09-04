@@ -97,6 +97,66 @@ data-layer inspection surface only — it is not the Explorer API and carries
 none of its concepts (filters, saved views, bulk operations), which belong to
 M3/M4.
 
+### The Explorer's documents API (M3)
+
+`api/v1/documents.py` is the first real consumer of the Metadata Registry
+as an app-lifecycle singleton rather than a short-lived per-request client:
+`main.py`'s `lifespan` now constructs one `PaperlessClient` and one
+`MetadataRegistry` and stores them on `app.state` for the life of the
+process, and `api/deps.py` hands them out as FastAPI dependencies. This is
+the decision `metadata.py`'s M2 docstring explicitly deferred ("out of
+scope for M2, better justified once a real consumer needs it") — the
+Explorer's document list, which must resolve tags/correspondents/document
+types/custom fields on every page without a fresh registry warm-up per
+request, is that consumer.
+
+`GET /api/v1/documents` is a normalized read model — a list of
+`DocumentListItem` inside a `DocumentPage` envelope
+(`{items, page, page_size, total, page_count}`), never a passthrough of
+Paperless's own `DocumentSerializer` or its `{count, next, previous,
+results}` shape (the latter's `next`/`previous` are absolute URLs built
+from Paperless's own idea of its hostname — unusable behind a reverse
+proxy, per M1). Every reference field (`correspondent`, `document_type`,
+`tags`) is already resolved to a display name via the registry, or
+represented as an explicit unresolved reference (`MetadataRef(id, name=
+None)`, which the Explorer renders as `Unknown (#id)`) rather than ever
+being silently coerced to `null` — a real reference and "no reference set"
+must stay distinguishable. Custom fields reuse `Document.
+typed_custom_fields()` unchanged, so the ABSENT/NULL/PRESENT distinction
+and Decimal-safe monetary amounts established in M2 flow straight through
+to the grid with no parallel resolution logic.
+
+Three parameters are validated **before** anything is sent to Paperless,
+never passed through blindly:
+
+- **`page_size`** must be one of `{25, 50, 100, 250}` — deliberately finite,
+  deliberately with no "ALL" option, so the point of a paginated grid
+  cannot be defeated by a single query parameter.
+- **`ordering`** must be on a server-defined allowlist (see
+  `docs/paperless-api.md` §6.2) — core fields (`title`, `created`,
+  `modified`, `added`, `archive_serial_number`, `correspondent`,
+  `document_type`) plus `custom_field_<id>` for custom fields whose data
+  type is Text/Long text, Monetary or Date **and** whose id is actually
+  known to the registry. This exists because Paperless silently *ignores*
+  an ordering value it does not recognise instead of rejecting it (M1
+  finding) — a typo would otherwise look like sorting worked while quietly
+  not sorting at all. An unrecognised value is rejected with
+  `InvalidOrderingError` (422) and is **never forwarded**.
+- **`search`** and **`query`** are mutually exclusive, mirroring Paperless's
+  own rule for its four search-mode parameters
+  (`_TANTIVY_SEARCH_PARAM_NAMES`) — `search` maps to `title_search` (a
+  plain string, never parsed as Tantivy syntax by PaperWrench), `query` is
+  an optional opaque passthrough for users who want Paperless's full search
+  syntax.
+
+`document_type`, `correspondent` and `tag` are basic direct filters mapping
+onto `DocumentFilterSet` fields already proven (M1) to compose with
+pagination and ordering. This is intentionally *not* a filter engine: there
+is no FilterSet, no compiler, no nested AND/OR, no saved filters here —
+that is M4's `ADR-0007` scope. The shape is chosen so that M4 can later
+replace these three ad-hoc query parameters with a compiled FilterSet
+without changing anything the grid or the frontend depend on.
+
 **`db/`** — models, engine, session, migrations, runtime lock. Owns durability.
 
 **Cross-cutting** — `config.py` (settings, secrets), `logging.py` (structured
