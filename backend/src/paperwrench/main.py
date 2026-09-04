@@ -45,6 +45,8 @@ from paperwrench.errors import PaperWrenchError
 from paperwrench.logging import configure_logging
 from paperwrench.logging import get_logger
 from paperwrench.logging import register_secret
+from paperwrench.paperless import MetadataRegistry
+from paperwrench.paperless import PaperlessClient
 
 logger = get_logger(__name__)
 
@@ -215,7 +217,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_secret(settings.paperless_token.get_secret_value())
 
     @asynccontextmanager
-    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Schema first: the runtime lock lives in a migrated table.
         run_migrations(settings.database_url)
         init_engine(settings.database_url)
@@ -224,6 +226,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         with session_scope() as session:
             acquire_lock(session, instance_id, force=force)
+
+        # M3: one app-lifecycle PaperlessClient + MetadataRegistry pair,
+        # shared by every request that needs to resolve tags, correspondents,
+        # document types, storage paths or custom fields (e.g. the documents
+        # list). Building a fresh client and registry per request (as the M2
+        # metadata endpoints still deliberately do - see their docstring)
+        # would mean refetching every reference collection on every single
+        # documents-list call, an N+1-shaped cost the Explorer cannot afford
+        # at 100 documents per page. The TTL cache only pays for itself when
+        # it outlives a single request.
+        app.state.paperless_client = PaperlessClient(settings)
+        app.state.metadata_registry = MetadataRegistry(app.state.paperless_client)
 
         heartbeat = asyncio.create_task(_heartbeat_loop(instance_id))
         logger.info(
@@ -242,6 +256,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     release_lock(session, instance_id)
             except Exception as exc:  # pragma: no cover - shutdown best effort
                 logger.warning("runtime_lock_release_failed", error=str(exc))
+            await app.state.paperless_client.aclose()
             dispose_engine()
             logger.info("paperwrench_stopped")
 

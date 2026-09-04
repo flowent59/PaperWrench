@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from paperwrench.api.v1 import documents
 from paperwrench.api.v1 import metadata
 from paperwrench.api.v1 import system
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(system.router)
 api_router.include_router(metadata.router)
+api_router.include_router(documents.router)
 
 __all__ = ["api_router"]
