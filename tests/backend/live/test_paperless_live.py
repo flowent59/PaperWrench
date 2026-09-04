@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -1703,11 +1704,27 @@ class TestFilterEngineServerLimitsLive:
         )
 
 
+def _live_app_settings(live_settings: Settings, tmp_path: Path) -> Settings:
+    """Live Paperless, throwaway on-disk SQLite for PaperWrench's own state.
+
+    Deliberately a **file** database, not an in-memory one. Every SQLite
+    connection to an in-memory database gets its own private copy, so
+    ``run_migrations()`` - which opens its own connection - creates the
+    schema somewhere the application's engine will never see it, and startup
+    then dies on ``no such table: runtime_lock``. The shared ``client``
+    fixture in ``tests/backend/conftest.py`` uses a tmp file for exactly
+    this reason.
+    """
+    return live_settings.model_copy(
+        update={"database_url": f"sqlite+pysqlite:///{tmp_path / 'live.db'}"}
+    )
+
+
 class TestFilterEngineApiLive:
     """The PaperWrench endpoints, end to end against the real server."""
 
     async def test_validate_count_and_query_agree_on_the_same_dataset(
-        self, raw_live: httpx.AsyncClient, live_settings: Settings
+        self, raw_live: httpx.AsyncClient, live_settings: Settings, tmp_path: Path
     ) -> None:
         from fastapi.testclient import TestClient
 
@@ -1730,11 +1747,7 @@ class TestFilterEngineApiLive:
             }
         }
 
-        app = create_app(
-            live_settings.model_copy(
-                update={"database_url": "sqlite+pysqlite:///:memory:"}
-            )
-        )
+        app = create_app(_live_app_settings(live_settings, tmp_path))
         with TestClient(app) as client:
             validation = client.post("/api/v1/filters/validate", json={"filters": body})
             count = client.post("/api/v1/filters/count", json={"filters": body})
@@ -1748,17 +1761,13 @@ class TestFilterEngineApiLive:
         assert page.json()["total"] >= 1
 
     async def test_capabilities_reflect_the_real_custom_fields(
-        self, live_settings: Settings
+        self, live_settings: Settings, tmp_path: Path
     ) -> None:
         from fastapi.testclient import TestClient
 
         from paperwrench.main import create_app
 
-        app = create_app(
-            live_settings.model_copy(
-                update={"database_url": "sqlite+pysqlite:///:memory:"}
-            )
-        )
+        app = create_app(_live_app_settings(live_settings, tmp_path))
         with TestClient(app) as client:
             payload = client.get("/api/v1/filters/capabilities").json()
 
