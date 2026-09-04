@@ -164,6 +164,33 @@ jobs:
       - name: Seed the Golden Dataset
         run: docker compose -f docker-compose.dev.yml --profile golden run --rm golden
 
+      - name: Wait for the Golden Dataset to be fully consumed
+        # Paperless consumes uploads asynchronously (OCR, thumbnailing, ...).
+        # The seed step above queues 17 documents and only applies custom
+        # field values to whichever of them have already been consumed by
+        # the time it runs its second pass - it does not block until the
+        # queue drains. Starting the live tests immediately after could hit
+        # a library that still has fewer than 17 documents visible, which
+        # made TestPagination::test_client_walks_every_page skip instead of
+        # run (VERIFIED_LIVE regression found post-M2). Poll until all 17
+        # are visible, then re-run the seeder's second pass so every
+        # document that was still "not consumed yet" gets its field values.
+        run: |
+          for i in $(seq 1 60); do
+            count=$(curl -fsS -H "Authorization: Token ${PAPERWRENCH_PAPERLESS_TOKEN}" \
+              'http://127.0.0.1:8010/api/documents/?page_size=1' | jq -r '.count')
+            echo "Documents visible: ${count}/17 (attempt ${i})"
+            if [ "${count}" -ge 17 ]; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::Golden Dataset did not finish consuming within the timeout"
+          exit 1
+
+      - name: Re-apply custom field values to any newly-consumed document
+        run: docker compose -f docker-compose.dev.yml --profile golden run --rm golden
+
       - name: Live tests
         env:
           PAPERWRENCH_ALLOW_LIVE_TESTS: "true"
