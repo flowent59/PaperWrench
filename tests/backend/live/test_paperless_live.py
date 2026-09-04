@@ -299,14 +299,14 @@ class TestCustomFieldHazard:
     @pytest.mark.parametrize(
         ("field_name", "value"),
         [
-            ("Periode concernee", "Février 2024 — Hôpital Saint-Joseph (créé)"),
-            ("Periode concernee", ""),
-            ("Periode concernee", None),
+            ("Période concernée", "Février 2024 — Hôpital Saint-Joseph (créé)"),
+            ("Période concernée", ""),
+            ("Période concernée", None),
             ("Montant", "EUR1234.56"),
             ("Montant", "EUR0.00"),
-            ("Valide", True),
-            ("Valide", False),
-            ("Date de reglement", "2024-03-15"),
+            ("Validé", True),
+            ("Validé", False),
+            ("Date de règlement", "2024-03-15"),
         ],
     )
     async def test_value_round_trips(

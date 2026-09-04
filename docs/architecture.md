@@ -193,6 +193,43 @@ so the UI can react to specific conditions (`PREVIEW_STALE`, `JOB_CONFLICT`,
 Unhandled exceptions return a generic `INTERNAL_ERROR`: internal detail could
 include a Paperless URL or a header, and none of it belongs in a browser.
 
+## Known architectural constraint: concurrent custom-field writes can lose an update
+
+**Status: KNOWN ARCHITECTURAL CONSTRAINT — not fixed, non-blocking for M3 and
+M4, but MUST be addressed before concurrent custom-field writes become
+possible** (in particular before the Inspector and/or the Job Engine can
+write to the same document's custom fields concurrently).
+
+Paperless-ngx serialises documents through `drf_writable_nested`'s
+`NestedUpdateMixin`: a PATCH carrying `custom_fields` **replaces the whole
+collection**. PaperWrench's read-modify-write mitigation (ADR-0004,
+`merge_custom_fields()`) removes the *omitted-field-deletion* hazard by
+merging into a freshly read list before writing it back in full — but it does
+not, and cannot by itself, provide atomicity against a second concurrent
+writer. VERIFIED_LIVE (M2, `TestConcurrentCustomFieldWrites`, forced
+deterministic interleaving):
+
+```text
+Actor A: READ custom_fields
+Actor B: READ custom_fields
+Actor B: WRITE full custom_fields (with B's change to field B)
+Actor A: WRITE full custom_fields (built from A's earlier read, before B's
+         write landed — this re-asserts the pre-B value for field B)
+         → field B's update is silently lost, even though actor A never
+           intended to touch field B.
+```
+
+This is the combination `Paperless full-replacement semantics` +
+`PaperWrench read-modify-write` — a classic lost-update race, not a bug in
+either side individually. No distributed lock, ETag, or global write mutex
+exists yet, and none should be built speculatively: the right mitigation
+(per-document serialization, optimistic conflict detection, a fresh
+immediately-before-write read, an in-process document-level lock, or a
+combination) will be decided at the milestone where concurrent writers
+actually appear, not before. M3 is read-only and is not affected. See
+`docs/paperless-api.md` §5.4 for the full write-up and the live test that
+reproduces this on demand.
+
 ## Security posture
 
 PaperWrench has no authentication of its own and is designed for a trusted

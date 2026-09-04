@@ -282,9 +282,21 @@ parameter lets a caller refuse to write from a base it knows is stale — but
 neither eliminates the window entirely, and nothing currently prevents two
 concurrent callers who both skip `expected_before`. No distributed lock or
 ETag exists yet; this is documented as a known limitation, not fixed, per the
-M2 scope decision. A future milestone that needs a stronger guarantee will
-need a real concurrency-control mechanism (e.g. Paperless's own version, if
-one is ever exposed, or a PaperWrench-side lock).
+M2 scope decision.
+
+**Reclassification (post-M2):** this is a **KNOWN ARCHITECTURAL CONSTRAINT**,
+not a "fix later if it ever matters" item — concurrent custom-field writers
+are a near-certain future case (Inspector and Job Engine both write
+custom-field values). It is **non-blocking for M3 and M4** (M3 is read-only;
+M4's filter/bulk-selection surfaces do not yet write), but it **must be
+addressed before concurrent custom-field writes become possible**, i.e. no
+later than the milestone that lets the Inspector and/or the Job Engine write
+concurrently to the same document. See `docs/architecture.md` §"Known
+architectural constraint" for the canonical statement of this rule. Candidate
+mitigations (none selected yet — a real decision is deferred to that
+milestone): per-document serialization, optimistic conflict detection, a
+fresh read taken immediately before the write, an in-process document-level
+lock inside PaperWrench, or a combination of these.
 
 ---
 
