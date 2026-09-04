@@ -1,6 +1,6 @@
 import { AlertTriangle, Database, Server, ShieldCheck } from 'lucide-react'
 
-import { useHealth, useInfo } from '@/api/queries'
+import { useHealth, useInfo, usePaperlessStatus } from '@/api/queries'
 import {
   Card,
   CardContent,
@@ -22,6 +22,32 @@ function Row({ label, value }: { label: string; value: string }) {
 export function DashboardPage() {
   const health = useHealth()
   const info = useInfo()
+  const paperless = usePaperlessStatus()
+
+  const probe = paperless.data
+  // Only one banner at a time, in decreasing order of "the user must fix this
+  // before anything else works".
+  const banner =
+    probe === undefined
+      ? null
+      : !probe.configured
+        ? {
+            title: messages.dashboard.notConfiguredTitle,
+            body: messages.dashboard.notConfiguredBody,
+          }
+        : !probe.connected
+          ? {
+              title: messages.dashboard.unreachableTitle,
+              // The backend already scrubs secrets out of this message before
+              // it is serialised, so it is safe to render verbatim.
+              body: probe.error_message ?? messages.errors.generic,
+            }
+          : !probe.compatible
+            ? {
+                title: messages.dashboard.incompatibleTitle,
+                body: probe.error_message ?? messages.errors.generic,
+              }
+            : null
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -32,14 +58,14 @@ export function DashboardPage() {
         </p>
       </div>
 
-      {info.isSuccess && !info.data.paperless_configured && (
+      {banner !== null && (
         <Card className="border-warning/40 bg-warning/5">
           <CardHeader className="flex-row items-center gap-2 space-y-0">
             <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
-            <CardTitle>{messages.dashboard.notConfiguredTitle}</CardTitle>
+            <CardTitle>{banner.title}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            {messages.dashboard.notConfiguredBody}
+            {banner.body}
           </CardContent>
         </Card>
       )}
@@ -73,21 +99,41 @@ export function DashboardPage() {
             <CardTitle>{messages.system.paperless}</CardTitle>
           </CardHeader>
           <CardContent>
-            {info.isSuccess ? (
+            {probe !== undefined ? (
               <>
+                {probe.url !== null && (
+                  <Row label={messages.system.url} value={probe.url} />
+                )}
+                <Row
+                  label={messages.system.paperlessVersion}
+                  value={probe.paperless_version ?? messages.status.unknown}
+                />
                 <Row
                   label={messages.system.apiVersion}
-                  value={String(info.data.paperless_api_version)}
+                  value={
+                    probe.requested_api_version === null
+                      ? messages.status.unknown
+                      : String(probe.requested_api_version)
+                  }
                 />
+                {/* Labelled "highest", not "current": Paperless reports its
+                    maximum here regardless of what we negotiated (ADR-0008). */}
                 <Row
-                  label={messages.system.concurrency}
-                  value={String(info.data.max_concurrency)}
+                  label={messages.system.maxApiVersion}
+                  value={probe.api_version ?? messages.status.unknown}
                 />
-                <Row
-                  label={messages.system.pageSize}
-                  value={String(info.data.default_page_size)}
-                />
+                {probe.document_count !== null && (
+                  <Row
+                    label={messages.system.documents}
+                    value={String(probe.document_count)}
+                  />
+                )}
               </>
+            ) : info.isSuccess ? (
+              <Row
+                label={messages.system.apiVersion}
+                value={String(info.data.paperless_api_version)}
+              />
             ) : (
               <p className="text-sm text-muted-foreground">
                 {messages.status.checking}

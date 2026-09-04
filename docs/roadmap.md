@@ -1,15 +1,20 @@
 # Roadmap
 
 Milestones are ordered so that the dangerous capabilities arrive last, on top
-of foundations that make them safe. Nothing writes to Paperless before M9, and
-M9 depends on the preview, conflict detection and durable history built before
-it.
+of foundations that make them safe. Nothing writes to Paperless before M8, and
+M8 depends on the normalized data layer, filters, transformations and dry-run
+preview built before it.
+
+This numbering is **canonical and fixed**: milestone numbers are never
+reassigned to different content once a milestone starts. If scope needs to
+move between milestones, the content moves — the number of the milestone that
+owns "Explorer", "Filter Engine", "Job Engine" or "Rollback" does not.
 
 Status legend: **Done** · **Next** · **Planned**
 
 ---
 
-## M0 — Foundations · Done
+## M0 — Repository + Docker + frontend/backend · Done
 
 Repository, tooling, and the skeleton everything else hangs off.
 
@@ -24,114 +29,176 @@ Repository, tooling, and the skeleton everything else hangs off.
   files, disposable Paperless-ngx 3.1.2 sandbox with a seeded reference dataset
 - CI: lint, strict type checking, tests, image build, container smoke test,
   token-leak check
-- GPL-3.0, README with threat model, seven ADRs
+- GPL-3.0, README with threat model, ADRs
 
 Nothing in M0 writes to Paperless.
 
-## M1 — Paperless connection · Next
+## M1 — Paperless connection + compatibility · Done
 
 The client, and proving we can talk to a real instance safely.
 
 - `httpx.AsyncClient` with explicit API version negotiation
-  (`Accept: application/json; version=10`) and `X-Api-Version` verification
-- Error mapping to `PAPERLESS_UNREACHABLE` / `UNAUTHORIZED` / `INCOMPATIBLE`
-- Pagination helper following `next` to exhaustion
+  (`Accept: application/json; version=10`)
+- Compatibility decided by HTTP status (406), never by echoing
+  `X-Api-Version` back as proof of negotiation
+  ([ADR-0008](decisions/0008-api-compatibility-is-decided-by-status-code.md))
+- Error mapping: `PAPERLESS_UNREACHABLE` / `UNAUTHORIZED` / `INCOMPATIBLE` /
+  `NOT_FOUND` / `VALIDATION_ERROR` / `CONFLICT`
 - `GET /system/paperless` — connection test surfaced in the UI
-- Reference data: tags, correspondents, document types, storage paths, custom
-  field definitions
-- Tests with `respx`, plus `live` tests against the sandbox
+- `custom_fields` PATCH confirmed destructive on partial payloads; safe
+  read-modify-write helper (`merge_custom_fields`) as the only path
+- Golden Dataset seeder for the sandbox, idempotent and title-trim-aware
+- Tests with `respx`, plus `live` tests against the real 3.1.2 sandbox
 
-## M2 — Document browsing · Planned
+## M2 — PaperlessClient + normalized models · Next
+
+Finishing the data boundary: nothing downstream of this milestone touches raw
+Paperless JSON.
+
+- Normalized models: `Document`, `CustomField`, `CustomFieldValue`, `Tag`,
+  `Correspondent`, `DocumentType`, `StoragePath`, `Page[T]`, with an explicit
+  distinction between core fields and custom fields
+- `PaperlessClient` primitives to fetch and normalize tags, correspondents,
+  document types, storage paths, alongside the existing custom-field
+  definitions
+- Metadata Registry: id → metadata and name → id lookups for every metadata
+  type, with explicit, non-silent handling of ambiguous (non-unique) names
+- Small in-memory TTL cache for metadata (refresh / invalidate / expire);
+  the cache is never the source of truth and there is no SQLite mirror of
+  Paperless metadata
+- Typed custom-field values that keep Text / Monetary / Select / Date /
+  Integer / Float / Boolean / `null` / `""` / absent genuinely distinct —
+  nothing collapses into a generic "empty"; monetary values never pass
+  through `float`
+- Select fields expose both the stored option id and the resolvable display
+  label, without ever substituting one for the other
+- HTTP 409 confirmed **non-retryable by default**
+  (`paperwrench.paperless.errors.PaperlessConflictError`)
+- Page-number pagination (not blind `next`-following), with clean handling
+  of the out-of-range "Invalid page." 404
+- Internal metadata API exposing PaperWrench models (not raw Paperless
+  serializer copies) — no Explorer API yet
+
+## M3 — Explorer + DataGrid · Planned
 
 - Paginated document list backed by server-side pagination and ordering
 - TanStack Table grid with column selection and virtualisation
 - Document detail with native PDF preview (`<object>`/`<iframe>`)
 - Ordering restricted to the server whitelist, including `custom_field_<id>`
 
-## M3 — FilterSets · Planned
+## M4 — Filter Engine · Planned
 
 - FilterSet and FilterCondition models, persistence
 - Compiler to Paperless query parameters, including `custom_field_query`
+- No dynamically generated filter or ordering parameter is ever sent to
+  Paperless without being validated by PaperWrench's own allowlist/compiler
+  first; a non-compilable filter fails explicitly instead of being sent "to
+  see if Paperless accepts it" (Paperless silently ignores unknown filters
+  and returns 200, so silent send-and-hope is not an option)
 - `FILTER_NOT_COMPILABLE` with a specific reason, and no client-side fallback
   ([ADR-0007](decisions/0007-filterset-compilable-subset.md))
 - Filter builder UI that shows its limits before submission
 - Server-provided result count
+- Job target document sets are materialized into IDs at job creation time;
+  a Job never re-evaluates its FilterSet during execution
 
-## M4 — Transformations and preview · Planned
+## M5 — Inspector + inline editing · Planned
+
+- Per-document Inspector view built on the M2 normalized `Document` model
+- Inline editing of core fields and custom fields, going exclusively through
+  the safe read-modify-write path — no direct partial PATCH from the UI
+- Clear separation of `before_value` / `intended_value` in the editing UI,
+  ready to receive `written_value` once M8 lands
+- Surfaces `user_can_change` so the UI never offers an edit Paperless would
+  refuse
+
+## M6 — Transformation Engine · Planned
 
 - Transformation model: template rename, set/clear field, find and replace,
   case transforms
 - Template engine over document fields and custom fields, with
   `TEMPLATE_UNRESOLVED` on missing data rather than silent empties
-- **Dry Run preview**: per-document before/after, with a test asserting zero
-  HTTP writes
-- `preview_token` binding a confirmation to the preview it came from
+- Transformations are defined and validated here; nothing is written to
+  Paperless by this milestone
 
-## M5 — Job engine · Planned
+## M7 — Dry Run · Planned
+
+- Per-document before/after preview, with a test asserting zero HTTP writes
+- `preview_token` binding a confirmation to the exact preview it came from
+- Strict distinction preserved end-to-end: `before_value` (what Paperless
+  had), `intended_value` (what the transformation wants) — `written_value`
+  does not exist yet at this stage and must never be guessed from
+  `intended_value`
+
+## M8 — Job Engine + History · Planned
+
+**The first milestone that modifies your library.**
 
 - Job and JobOperation persistence, status transitions
 - asyncio execution with bounded concurrency and a hard ceiling
 - SSE progress stream
+- Per-document PATCH with verify-before-write and verify-after-write
+  ([ADR-0003](decisions/0003-per-document-patch-as-mvp-write-path.md))
+- Safe custom-field read-modify-write, non-bypassable by normal
+  `PaperlessClient` consumers
+  ([ADR-0004](decisions/0004-safe-custom-field-read-modify-write.md))
+- `written_value` capture and optimistic conflict detection, complementary to
+  `preview_token`
+  ([ADR-0005](decisions/0005-written-value-and-optimistic-conflict-detection.md))
 - `INTERRUPTED` detection at startup; explicit, never automatic, resume
 - Idempotent resumption via the uniqueness constraint
+- Job history with the full per-document operation record
+- Filterable operation view (written, skipped, conflicted, failed) and export
+  of a job report
+- The full critical test set green on the sandbox before any real write
 
-## M6 — Data quality · Planned
+## M9 — Rollback · Planned
 
-- Rules: missing field, malformed date, inconsistent type, orphan tag
-- Quality dashboard with drill-down into the offending documents
-- One-click construction of a FilterSet from a finding
+- Rollback as a linked job, built entirely on M8's per-document operation
+  history
+- Refuses per document where the value has moved since the original write
+- Same preview-before-confirm discipline as any other job
 
-## M7 — Schemas · Planned
+## M10 — Schema · Planned
 
 - Per-document-type expected-field definitions
 - Conformance validation and reporting
 - Suggested corrections, always through the normal preview path
 
-## M8 — Execution and history · Planned
+## M11 — Quality · Planned
 
-- Job history with the full per-document operation record
-- Filterable operation view (written, skipped, conflicted, failed)
-- Export of a job report
+- Rules: missing field, malformed date, inconsistent type, orphan tag
+- Never collapses `0` / `false` / `""` / `null` / absent into one "empty"
+  notion when evaluating a rule — this is why M2 keeps them distinct
+- Quality dashboard with drill-down into the offending documents
+- One-click construction of a FilterSet from a finding
 
-## M9 — Writes and rollback · Planned
+## M12 — Collections · Planned
 
-**The first milestone that modifies your library.**
-
-- Per-document PATCH with verify-before-write and verify-after-write
-  ([ADR-0003](decisions/0003-per-document-patch-as-mvp-write-path.md))
-- Safe custom-field read-modify-write
-  ([ADR-0004](decisions/0004-safe-custom-field-read-modify-write.md))
-- `written_value` capture and optimistic conflict detection
-  ([ADR-0005](decisions/0005-written-value-and-optimistic-conflict-detection.md))
-- Rollback as a linked job, refusing per document where the value has moved
-- The full critical test set green on the sandbox before any real write
-
-## M10 — Duplicates · Planned
-
-- Surface Paperless's own `duplicate_documents`
-- Near-duplicate detection on metadata
+- Grouping of documents (duplicates, near-duplicates, related sets) into
+  named collections
+- Surface Paperless's own `duplicate_documents` plus near-duplicate detection
+  on metadata
 - Side-by-side comparison and guided resolution
 
-## M11 — Extraction · Planned
+## M13 — Polish / tests / release · Planned
 
-- Regex extraction from OCR content into custom fields
-- Pattern library per document type
-- Preview before write, like every other transformation
-
-## M12 — Analytics · Planned
-
-- Library statistics: volume over time, distribution by type, correspondent,
-  tag
-- Custom field coverage and completeness
-- Monetary aggregation for monetary fields
-
-## M13 — AI-assisted review · Planned
-
-- Optional, explicitly opt-in, and off by default
-- Suggestions only: never an automatic write
-- Bring-your-own endpoint; no data leaves the instance unless configured
+- Hardening pass across the full stack; closing debt logged by earlier
+  milestones
+- Full regression of the critical test set, docs and ADRs brought up to date
+- Packaging and release readiness
 
 ---
+
+## Vision beyond M13 (not scheduled)
+
+PaperWrench's longer-term ambition includes regex/pattern extraction into
+custom fields, library analytics (volume, distribution, monetary
+aggregation), and an explicitly opt-in, suggestions-only AI-assisted review.
+These stay part of the project's stated scope but are deliberately left
+unscheduled — they are not assigned a milestone number until M0–M13 above are
+delivered, so that adding them later never requires renumbering anything in
+this document.
 
 ## Not planned
 

@@ -70,6 +70,33 @@ version negotiation, pagination, error mapping, and the read-modify-write
 helper for custom fields. Because it is the only door, a hazard fixed here is
 fixed everywhere.
 
+Since M2, this package also owns the **normalized model layer** and the
+**Metadata Registry**:
+
+- `models.py` defines every PaperWrench-facing shape derived from a Paperless
+  response — `Document`, `CustomField`, `CustomFieldValue`, `Tag`,
+  `Correspondent`, `DocumentType`, `StoragePath` — plus the typed-value layer
+  (`TypedCustomFieldValue`, `CustomFieldValueKind`, `MonetaryAmount`) that
+  keeps *absent* / *null* / `""` / `0` / `False` genuinely distinct instead of
+  collapsing them, and keeps a select field's stored option id separate from
+  its display label. `field_kind()` classifies a document field name as
+  core (`CORE_DOCUMENT_FIELDS`) or custom — the distinction the Filter Engine
+  (M4) and Transformation Engine (M6) will build on.
+- `registry.py` defines `MetadataRegistry`: a small in-memory, per-kind TTL
+  cache over the five reference kinds (tags, correspondents, document types,
+  storage paths, custom fields) with `by_id` / `by_name` lookups,
+  `refresh()` / `invalidate()`, and an explicit `AmbiguousMetadataName` error
+  instead of ever silently picking one match. The cache is not a second
+  source of truth — Paperless remains authoritative, and there is no SQLite
+  mirror of it.
+
+`api/v1/metadata.py` exposes these five reference kinds read-only
+(`/api/v1/metadata/tags`, `.../correspondents`, `.../document-types`,
+`.../storage-paths`, `.../custom-fields`) as PaperWrench models. This is a
+data-layer inspection surface only — it is not the Explorer API and carries
+none of its concepts (filters, saved views, bulk operations), which belong to
+M3/M4.
+
 **`db/`** — models, engine, session, migrations, runtime lock. Owns durability.
 
 **Cross-cutting** — `config.py` (settings, secrets), `logging.py` (structured
@@ -165,6 +192,43 @@ so the UI can react to specific conditions (`PREVIEW_STALE`, `JOB_CONFLICT`,
 
 Unhandled exceptions return a generic `INTERNAL_ERROR`: internal detail could
 include a Paperless URL or a header, and none of it belongs in a browser.
+
+## Known architectural constraint: concurrent custom-field writes can lose an update
+
+**Status: KNOWN ARCHITECTURAL CONSTRAINT — not fixed, non-blocking for M3 and
+M4, but MUST be addressed before concurrent custom-field writes become
+possible** (in particular before the Inspector and/or the Job Engine can
+write to the same document's custom fields concurrently).
+
+Paperless-ngx serialises documents through `drf_writable_nested`'s
+`NestedUpdateMixin`: a PATCH carrying `custom_fields` **replaces the whole
+collection**. PaperWrench's read-modify-write mitigation (ADR-0004,
+`merge_custom_fields()`) removes the *omitted-field-deletion* hazard by
+merging into a freshly read list before writing it back in full — but it does
+not, and cannot by itself, provide atomicity against a second concurrent
+writer. VERIFIED_LIVE (M2, `TestConcurrentCustomFieldWrites`, forced
+deterministic interleaving):
+
+```text
+Actor A: READ custom_fields
+Actor B: READ custom_fields
+Actor B: WRITE full custom_fields (with B's change to field B)
+Actor A: WRITE full custom_fields (built from A's earlier read, before B's
+         write landed — this re-asserts the pre-B value for field B)
+         → field B's update is silently lost, even though actor A never
+           intended to touch field B.
+```
+
+This is the combination `Paperless full-replacement semantics` +
+`PaperWrench read-modify-write` — a classic lost-update race, not a bug in
+either side individually. No distributed lock, ETag, or global write mutex
+exists yet, and none should be built speculatively: the right mitigation
+(per-document serialization, optimistic conflict detection, a fresh
+immediately-before-write read, an in-process document-level lock, or a
+combination) will be decided at the milestone where concurrent writers
+actually appear, not before. M3 is read-only and is not affected. See
+`docs/paperless-api.md` §5.4 for the full write-up and the live test that
+reproduces this on demand.
 
 ## Security posture
 

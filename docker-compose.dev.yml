@@ -85,6 +85,35 @@ services:
     profiles: ["seed"]
     restart: "no"
 
+  # The Golden Dataset: a small, hand-curated corpus whose whole purpose is to
+  # be IMPERFECT. Titles that are already correct, wrong, or inconsistent;
+  # "Periode concernee" present and absent; "Montant" present, absent and
+  # zero; French accents; decimal monetary values. It is deliberately NOT a
+  # copy of anyone's real library - 17 documents chosen to break things beat
+  # thousands chosen at random.
+  #
+  #   docker compose -f docker-compose.dev.yml --profile golden run --rm golden
+  #
+  # Idempotent: re-running it uploads nothing new and only re-applies values.
+  golden:
+    image: docker.io/library/python:3.11-slim
+    depends_on:
+      paperless:
+        condition: service_healthy
+    environment:
+      PAPERLESS_URL: http://paperless:8000
+      PAPERLESS_USERNAME: admin
+      PAPERLESS_PASSWORD: admin
+      PAPERLESS_API_VERSION: "10"
+    volumes:
+      - ./scripts:/scripts:ro
+    working_dir: /scripts
+    command: >
+      sh -c "pip install --quiet --no-cache-dir httpx==0.28.1 &&
+             python seed_dev_golden_dataset.py"
+    profiles: ["golden"]
+    restart: "no"
+
 volumes:
   dev_redis:
   dev_pgdata:

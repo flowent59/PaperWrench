@@ -57,6 +57,19 @@ def _scrub_text(text: str) -> str:
     return text
 
 
+def scrub_secrets(text: str) -> str:
+    """Replace every registered secret in ``text``.
+
+    Public because logs are not the only sink that can leak a credential.
+    Exception messages get serialised into API responses and rendered in the
+    browser, so anything echoing an upstream response body must pass through
+    here first - a Paperless (or a reverse proxy in front of it) that reflects
+    the ``Authorization`` header in an error page would otherwise hand the
+    token straight to the frontend.
+    """
+    return _scrub_text(text)
+
+
 def _redact(value: Any, key: str | None = None) -> Any:
     """Recursively redact sensitive keys and known secret values."""
     if key is not None and key.lower() in SENSITIVE_KEYS:

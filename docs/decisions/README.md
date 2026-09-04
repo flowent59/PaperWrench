@@ -17,6 +17,8 @@ edited: a new record supersedes it, and the old one is marked accordingly.
 | [0005](0005-written-value-and-optimistic-conflict-detection.md) | `written_value` and optimistic conflict detection | Accepted |
 | [0006](0006-sqlite-durable-job-engine-single-instance.md) | SQLite durable job engine, single instance | Accepted |
 | [0007](0007-filterset-compilable-subset.md) | FilterSet compilable subset | Accepted |
+| [0008](0008-api-compatibility-is-decided-by-status-code.md) | API compatibility is decided by the status code, not by `X-Api-Version` | Accepted |
+| [0009](0009-metadata-registry-cache-not-source-of-truth.md) | Metadata Registry — a TTL cache, never a second source of truth | Accepted |
 
 ## Format
 

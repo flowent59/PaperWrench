@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ApiError, apiFetch, NetworkError } from './client'
+import { ApiError, apiFetch, NetworkError, systemApi } from './client'
 
 function mockFetch(response: Response | Error) {
   const spy = vi.fn(
@@ -75,5 +75,59 @@ describe('apiFetch', () => {
     expect(headers).not.toContain('authorization')
     expect(headers).not.toContain('token')
     expect(init?.credentials).toBeUndefined()
+  })
+})
+
+describe('systemApi.paperless', () => {
+  it('calls the probe endpoint', async () => {
+    const spy = mockFetch(
+      jsonResponse({ configured: true, connected: true, compatible: true }),
+    )
+
+    await systemApi.paperless()
+
+    expect(spy.mock.calls[0]?.[0]).toBe('/api/v1/system/paperless')
+  })
+
+  it('returns a failure payload rather than throwing when Paperless is down', async () => {
+    // The endpoint answers 200 even on failure, so the UI can explain *why*
+    // instead of rendering a generic network error.
+    mockFetch(
+      jsonResponse({
+        configured: true,
+        connected: false,
+        compatible: false,
+        url: 'http://paperless.invalid',
+        error_code: 'PAPERLESS_UNREACHABLE',
+        error_message: 'Could not reach Paperless.',
+      }),
+    )
+
+    const status = await systemApi.paperless()
+
+    expect(status.connected).toBe(false)
+    expect(status.error_code).toBe('PAPERLESS_UNREACHABLE')
+  })
+
+  it('never exposes a token field, however the backend evolves', async () => {
+    // Structural guard: this payload is rendered in the browser, so a token
+    // appearing here would be a disclosure. Mirrors the backend-side test.
+    mockFetch(
+      jsonResponse({
+        configured: true,
+        connected: true,
+        compatible: true,
+        url: 'http://paperless.example',
+        api_version: '10',
+        paperless_version: '3.1.2',
+      }),
+    )
+
+    const status = await systemApi.paperless()
+
+    const keys = Object.keys(status).join(' ').toLowerCase()
+    expect(keys).not.toContain('token')
+    expect(keys).not.toContain('secret')
+    expect(keys).not.toContain('password')
   })
 })

@@ -1,235 +1,436 @@
-# Paperless-ngx API: verified behaviour and hazards
+# Paperless-ngx REST API — field notes
 
-The Paperless REST API is PaperWrench's entire contract with your documents
-([ADR-0002](decisions/0002-paperless-rest-api-sole-integration-boundary.md)).
-This document records what we rely on, how confident we are in each point, and
-where the sharp edges are.
+This is not a copy of the upstream documentation. It records what PaperWrench
+actually depends on, and how sure we are about each item.
 
-**Reference version: Paperless-ngx 3.1.2.** Findings marked *Verified* were
-read in that release's source, not inferred from documentation. The full
-analysis is in [architecture-review.md](architecture-review.md).
+Everything below was gathered against **Paperless-ngx 3.1.2** (the version the
+project targets first), running as the sandbox stack defined in
+`docker-compose.dev.yml` (Paperless 3.1.2 + PostgreSQL 16 + Redis 7).
 
-Confidence levels used below:
+## Confidence nomenclature
 
-- **Verified** — read in the 3.1.2 source.
-- **Assumed** — consistent with documentation and observed behaviour, not yet
-  confirmed in source.
-- **To confirm** — must be established experimentally against the sandbox
-  before code depends on it.
+Every claim in this document carries exactly one tag.
+
+| Tag | Meaning |
+| --- | --- |
+| `VERIFIED_LIVE` | Observed by executing a request against a real Paperless-ngx 3.1.2 instance, and pinned by an automated test in `tests/backend/live/`. This is the only tag that may be used to justify a write-critical behaviour. |
+| `VERIFIED_SOURCE` | Read in the Paperless-ngx source code of the running container (`/usr/src/paperless/src/...`), but not exercised end-to-end by our own request. |
+| `ASSUMED` | Inferred from documentation, from the shape of the code, or from reasoning. **Not** proof. Anything write-critical must be promoted to `VERIFIED_LIVE` before we rely on it. |
+
+**Rule.** A behaviour that can destroy user data may only be considered
+definitively validated once it has been observed on a real Paperless-ngx 3.1.2
+instance. Until then it stays `ASSUMED`, and the code must be written as if the
+worst plausible interpretation were true.
+
+Live coverage is opt-in and gated; see [Live verification](#live-verification).
 
 ---
 
-## API versioning
+## 1. Versioning and content negotiation
 
-**Verified.** In 3.1.2, `ALLOWED_VERSIONS = ["9", "10"]` and
-`DEFAULT_VERSION = "10"`.
+**`VERIFIED_SOURCE`** — 3.1.2 declares:
 
-PaperWrench negotiates explicitly on every request:
+```python
+# /usr/src/paperless/src/paperless/settings.py
+REST_FRAMEWORK = {
+    "DEFAULT_VERSION": "10",
+    "ALLOWED_VERSIONS": ["9", "10"],
+    ...
+}
+```
+
+**`VERIFIED_LIVE`** — the version is negotiated with the `Accept` header:
 
 ```
 Accept: application/json; version=10
 ```
 
-Relying on the server default would be a latent bug: the default moves between
-releases, and response shapes change with it. An explicit pin produces a clean
-`406` against a server that cannot serve version 10, rather than a silent change
-in payload structure.
+**`VERIFIED_LIVE`** — requesting a version outside `ALLOWED_VERSIONS` (for
+example `version=99`) returns **HTTP 406** with a JSON body containing a
+`detail` key. Requesting `version=9` succeeds and returns a v9-shaped body.
 
-Responses carry `X-Api-Version` and `X-Version`. PaperWrench checks the former
-at connection time and reports `PAPERLESS_INCOMPATIBLE` on a mismatch, so the
-problem is stated once and clearly instead of surfacing as confusing errors
-later.
+### The `X-Api-Version` trap
 
----
+**`VERIFIED_SOURCE`** — the response header is not the negotiated version:
 
-## Hazard 1: `custom_fields` on PATCH is a full replacement
-
-**Verified — this is the single most dangerous behaviour PaperWrench works
-around.**
-
-`DocumentSerializer` inherits from `drf_writable_nested.NestedUpdateMixin`
-(`src/documents/serialisers.py`, 3.1.2). For nested relations, that mixin
-treats the submitted collection as the complete desired state: related objects
-present in the database but absent from the payload are **deleted**.
-
-So this request:
-
-```http
-PATCH /api/documents/42/
-Content-Type: application/json
-
-{ "custom_fields": [ { "field": 2, "value": "EUR450.00" } ] }
+```python
+# /usr/src/paperless/src/paperless/middleware.py
+response["X-Api-Version"] = ALLOWED_VERSIONS[-1]
 ```
 
-does not update field 2 and leave the rest alone. It updates field 2 and
-**deletes every other `CustomFieldInstance` on document 42**.
+**`VERIFIED_LIVE`** — a request sent with `Accept: application/json; version=9`
+comes back with `X-Api-Version: 10` **and** a v9 body (the `all` key is
+present). `X-Api-Version` is therefore the **highest version the server
+supports**, never the version that was actually served.
 
-There is no error, no warning, no partial failure. On a bulk operation across
-300 documents it destroys data on all 300, silently, and Paperless does not
-version custom field instances — the values are simply gone.
+Consequence for us: a naive "is the negotiated version what I asked for?" check
+built on `X-Api-Version` is meaningless — it would compare our requested version
+against the server maximum. The only trustworthy compatibility signal is the
+**status code**: 406 means "this server cannot serve the version PaperWrench
+speaks". `PaperlessClient.check_connection()` is written accordingly, and
+`ConnectionStatus.api_version` is documented as *the highest supported version*,
+not the negotiated one.
 
-**What PaperWrench does:** never sends a partial `custom_fields` array. Every
-write reads the document immediately beforehand, merges into the complete
-existing collection (by integer field id), and sends the whole thing back. The
-pre-write collection is snapshotted into the job history. See
-[ADR-0004](decisions/0004-safe-custom-field-read-modify-write.md).
+`X-Version` carries the Paperless-ngx release string (`3.1.2`). **`VERIFIED_LIVE`**
 
-**If you are writing code that touches `custom_fields`,** this is the rule you
-must satisfy before it ships.
+### v9 → v10 difference that matters to us
 
----
-
-## Hazard 2: `bulk_edit` cannot do what a bulk tool needs
-
-**Verified.**
-
-`POST /api/documents/bulk_edit/` looks like the natural endpoint for this
-project. It is not usable for the MVP write path, for three independent
-reasons:
-
-1. **There is no `set_title` method.** The available methods cover tags,
-   correspondent, document type, storage path, permissions, custom fields,
-   merge, split, rotate and delete. Renaming — the central MVP transformation —
-   is not among them.
-2. **One value for all documents.** `bulk_edit` applies the same change to every
-   id. A template rename computes a *different* title per document from that
-   document's own fields.
-3. **Asynchronous and opaque.** It returns once the task is queued, with no
-   per-document result. Which documents succeeded, which were skipped, and what
-   each value was immediately before the write are precisely the facts a
-   preview, a conflict report and a rollback are built from.
-
-**What PaperWrench does:** per-document `PATCH`, with bounded concurrency and a
-durable per-document record. See
-[ADR-0003](decisions/0003-per-document-patch-as-mvp-write-path.md).
-
-`bulk_edit` stays a legitimate post-MVP optimisation for the operations it
-genuinely supports where all documents get the same value.
+**`VERIFIED_LIVE`** — in v9 a paginated list response carries an extra `all`
+key holding *every* matching id. In v10 that key is gone. PaperWrench must never
+depend on `all`; it walks pages instead. A live test asserts both halves of this
+(absent in v10, present in v9) so a regression is caught immediately.
 
 ---
 
-## Hazard 3: Paperless does not always store what you send
+## 2. Authentication
 
-**Verified for monetary fields; Assumed for the rest.**
+**`VERIFIED_LIVE`** — token auth via `Authorization: Token <token>`.
 
-Values are normalised server-side:
+**`VERIFIED_LIVE`** — an invalid token returns **HTTP 401** with
+`{"detail": "Invalid token."}`.
 
-- **Monetary** custom fields are stored with an ISO-4217 prefix. Send `450` and
-  `EUR450.00` comes back.
-- **Select** custom fields store the option **id**, not its label.
-- **Dates and datetimes** are re-serialised in Paperless's canonical form and
-  timezone.
-- **Titles** are subject to server-side handling and length limits.
+**`VERIFIED_LIVE`** — `GET /api/profile/` returns the caller's profile and it
+**includes the API token in clear text** (`auth_token`). PaperWrench does not
+call this endpoint, and must never proxy it, log it, or store its payload.
 
-**Consequence:** comparing a document's current value against what we *intended*
-to write produces false conflicts on every successfully written document.
-PaperWrench therefore records `written_value` from the PATCH **response body**
-and compares against that. See
-[ADR-0005](decisions/0005-written-value-and-optimistic-conflict-detection.md).
+The token is a secret for the whole of PaperWrench: it is registered with the
+log scrubber at client construction, and both `PaperWrenchError` and
+`PaperlessApiError` scrub their message and details before they can reach the
+browser. Upstream response bodies are scrubbed **before** truncation, so a token
+straddling the truncation boundary cannot survive as a recognisable fragment.
 
----
+### 2.1 401 vs 403 (M2)
 
-## Hazard 4: tag hierarchy side effects
+**`VERIFIED_LIVE`** — a token that is rejected outright (bad/unknown token)
+returns **HTTP 401** with `{"detail": "Invalid token."}`.
 
-**Assumed — to confirm against the sandbox before M9.**
+**`VERIFIED_LIVE`** — a token that Paperless *accepts* as valid, but that
+belongs to a user with **zero permissions**, returns **HTTP 403** with
+`{"detail": "You do not have permission to perform this action."}` on both
+`GET /api/documents/` (list) and `GET /api/documents/{id}/` (detail). This was
+proven with a disposable sandbox user created and deleted per test
+(`restricted_user` fixture in `tests/backend/live/conftest.py`), never a
+hardcoded account.
 
-Tag matching can add or remove tags as a side effect of an unrelated document
-change. A tool that diffs whole documents would report spurious conflicts.
+Consequence: 401 and 403 are a genuine authentication/authorization split, not
+one error class wearing two status codes. PaperWrench models them separately —
+`PaperlessUnauthorizedError` (401) and `PaperlessForbiddenError` (403), both
+non-retryable — so a caller (and a future permissions UI) can tell "your
+credential is wrong" from "your credential is fine, but you may not do this"
+without inspecting response text.
 
-**Consequence:** conflict detection is scoped to the specific field being
-written, never to the document as a whole.
-
----
-
-## Filtering
-
-**Verified.** Paperless exposes Django-filter lookups on core fields:
-
-| Group | Lookups |
-| --- | --- |
-| `CHAR_KWARGS` | `icontains`, `iexact`, `istartswith`, `iendswith` |
-| `ID_KWARGS` | `in`, `exact`, `none` |
-| `INT_KWARGS` | `exact`, `gt`, `gte`, `lt`, `lte`, `isnull` |
-| `DATE_KWARGS` | `year`, `month`, `day`, `date__gt`, `gt`, `date__lt`, `lt` |
-| `DATETIME_KWARGS` | as above, with time components |
-
-Custom fields use `custom_field_query`, which supports nested AND/OR/NOT with
-**maximum depth 10** and **maximum 20 atoms**.
-
-**Limitation.** Django filter backends combine query parameters with AND. There
-is no server-side expression for OR across heterogeneous core fields — "title
-contains X OR correspondent is Y" cannot be compiled.
-
-**What PaperWrench does:** defines a compilable subset. A FilterSet either
-compiles completely to query parameters or is rejected with
-`FILTER_NOT_COMPILABLE`, naming the condition that cannot be expressed. There
-is no client-side filtering fallback, because a capped client-side fetch
-produces a wrong count — and the count is the number a user checks before
-clicking a destructive button. See
-[ADR-0007](decisions/0007-filterset-compilable-subset.md).
+**`VERIFIED_LIVE` — a sharper nuance:** granting a user the *global*
+`view_document` permission, **without** an object-level grant for a specific
+document, does not surface as 403 for that document. It surfaces as **404**:
+the document is simply absent from the list, and `GET` on its id returns
+`{"detail": "Not found."}`. Paperless's object-level permission model makes an
+ungranted object indistinguishable from a nonexistent one at this boundary —
+PaperWrench must not assume "404 on a document id I previously read" always
+means the document was deleted; it can also mean a permission was revoked.
 
 ---
 
-## Pagination
+## 3. Endpoints PaperWrench uses
 
-**Verified.** `StandardPagination`: default `page_size` 25, maximum 100000.
+| Endpoint | Method | Purpose | Confidence |
+| --- | --- | --- | --- |
+| `/api/documents/` | GET | list / search / filter, connection probe | `VERIFIED_LIVE` |
+| `/api/documents/{id}/` | GET | read a single document | `VERIFIED_LIVE` |
+| `/api/documents/{id}/` | PATCH | write title, dates, and custom fields | `VERIFIED_LIVE` |
+| `/api/documents/{id}/metadata/` | GET | archive/original metadata | `VERIFIED_LIVE` |
+| `/api/custom_fields/` | GET | field catalogue (id, name, data type, select options) | `VERIFIED_LIVE` |
+| `/api/tags/` | GET | tag catalogue | `VERIFIED_LIVE` |
+| `/api/correspondents/` | GET | correspondent catalogue | `VERIFIED_LIVE` |
+| `/api/document_types/` | GET | document type catalogue | `VERIFIED_LIVE` |
+| `/api/storage_paths/` | GET | storage path catalogue | `VERIFIED_LIVE` |
+| `/api/documents/post_document/` | POST | used **only** by the dev seeder, never by the app | `VERIFIED_LIVE` |
 
-PaperWrench uses 100 by default — large enough to keep request counts sane,
-small enough not to build enormous responses on a small self-hosted instance.
-
-Always follow the `next` link to exhaustion rather than computing page numbers.
-The `count` field is the authoritative total and is what the UI shows before a
-destructive operation.
-
----
-
-## Ordering
-
-**Verified.** Ordering is restricted to a server-side whitelist, which includes
-`custom_field_<id>` for sorting by a custom field.
-
-An ordering outside the whitelist is not applied. PaperWrench rejects it rather
-than silently dropping it: a preview sorted differently from the executed job
-misrepresents which documents "the first 50" are.
-
----
-
-## Other verified details
-
-- **`document_count`** is exposed on tags, correspondents, document types and
-  storage paths — useful for dashboards without listing documents.
-- **`duplicate_documents`** exists on the document resource and is the starting
-  point for M10 rather than reimplementing detection.
-- **`deleted_at`** and the trash mechanism mean a "deleted" document may still
-  be returned. Filters must account for it.
-- **`user_can_change`** on a document reflects the token's permissions.
-  PaperWrench reads it and records `SKIPPED_PERMISSION` instead of attempting a
-  write that will fail.
+**`VERIFIED_LIVE`** — `GET /api/` returns **HTTP 302** (redirect to the
+browsable schema view), so it is unusable as a health probe. The client probes
+`/api/documents/?page_size=1` instead, and runs with
+`follow_redirects=False` so that an unexpected redirect surfaces as an error
+rather than silently landing somewhere else.
 
 ---
 
-## Still to confirm experimentally
+## 4. Pagination
 
-These must be established against the sandbox before the code that depends on
-them ships:
+**`VERIFIED_LIVE`** — list responses are:
 
-- Exact tag matching side effects on PATCH (Hazard 4).
-- Whether `bulk_edit`'s `modify_custom_fields` merges or replaces — relevant
-  only if `bulk_edit` is adopted post-MVP.
-- Server-side title normalisation and length limits precisely.
-- Behaviour of `custom_field_query` at exactly the documented depth and atom
-  limits.
-- Rate-limiting or throttling behaviour under sustained concurrent writes.
+```json
+{"count": 17, "next": "http://.../api/documents/?page=2", "previous": null, "results": [...]}
+```
+
+- `page` and `page_size` are query parameters. **`VERIFIED_LIVE`**
+- `page_size` is capped server-side; PaperWrench clamps its own requests to 250. **`ASSUMED`** (the clamp is ours; the exact server maximum was not probed)
+- **`VERIFIED_LIVE`** — an out-of-range `page` (e.g. `page=99999`) returns **HTTP 404** with `{"detail": "Invalid page."}`, not an empty page. Any paging loop must treat 404 as "stop", not as "the document vanished".
+
+`PaperlessClient.iter_pages()` walks by **page number**, not by following the
+`next` URL. The `next` URL is built from the server's own idea of its hostname,
+which behind a reverse proxy can point somewhere PaperWrench cannot reach.
 
 ---
 
-## Upgrading the pinned Paperless version
+## 5. Custom fields — the dangerous part
 
-The sandbox pins 3.1.2 on purpose. Raising it is not a string change:
+### 5.1 The hazard, now confirmed
 
-1. Re-read `ALLOWED_VERSIONS` and `DEFAULT_VERSION` in the new release.
-2. Re-check that `DocumentSerializer` still uses `NestedUpdateMixin`, and
-   whether the replacement semantics changed.
-3. Re-check the filter lookup groups and the ordering whitelist.
-4. Run the `live` test suite against the new sandbox.
-5. Update this document with what changed.
+**`VERIFIED_SOURCE`** — `DocumentSerializer` inherits
+`drf_writable_nested.NestedUpdateMixin`, which treats a nested collection as a
+**full replacement**, not a merge.
+
+**`VERIFIED_LIVE` — this is the single most important fact in this document.**
+
+The experiment: a document carrying **5** custom field values received a PATCH
+containing **1** custom field value.
+
+```
+PATCH /api/documents/{id}/   {"custom_fields": [{"field": 3, "value": "..."}]}
+→ HTTP 200
+→ document now has 1 custom field value
+→ 4 custom field values were silently DELETED
+```
+
+There is no warning, no 4xx, no partial-update semantics. **HTTP 200 and four
+destroyed values.** This is exactly the data-loss scenario ADR-0004 was written
+to prevent, and it is now empirically proven rather than merely feared.
+
+**`VERIFIED_LIVE`** — the mitigation works: reading the complete
+`custom_fields` array, merging the single change into it by field id, and
+PATCHing the **complete** array back preserves all 5 values. This is
+`merge_custom_fields()` in `paperless/models.py`, and it is the only supported
+way for PaperWrench to write a custom field.
+
+Because of this, `PaperlessClient.update_custom_fields()` does not accept a
+"partial" mode at all. The unsafe call is not merely discouraged — it is not
+expressible through the client.
+
+### 5.2 Data types and round-trips
+
+**`VERIFIED_LIVE`** for every row: value written, then re-read, then compared.
+
+| Data type | Wire representation | Notes |
+| --- | --- | --- |
+| `string` | JSON string | French accents round-trip byte-for-byte (`Relevé de vacations — août`) |
+| `integer` | JSON number | |
+| `float` | JSON number | |
+| `boolean` | JSON `true` / `false` | `false` is a legitimate value, not "empty" |
+| `date` | `"YYYY-MM-DD"` | |
+| `monetary` | `"EUR1234.56"` | currency prefix + **dot** decimal separator |
+| `select` | opaque option **id** string | not the human label |
+| `url`, `documentlink` | JSON string / list | not exercised beyond read |
+
+**`VERIFIED_LIVE`** — a monetary value using a comma decimal separator
+(`"EUR1234,56"`, the natural French form) is **rejected with HTTP 400**, and the
+rejection is **atomic**: the document is left completely untouched, including
+the other custom fields in the same payload. This matters, because the naive
+French input is the one a user will type.
+
+**`VERIFIED_LIVE`** — `"EUR0.00"` is a perfectly valid stored value and is
+**not** the same thing as an absent field. Empty string `""` and `null` are also
+storable and distinct from absence. Any "is this field filled in?" logic must
+distinguish *absent* from *falsy*; the unit tests pin this with
+`["", None, False, 0, "EUR0.00"]`.
+
+**`VERIFIED_LIVE`** — writing a select field with its human label instead of its
+option id is rejected with HTTP 400.
+
+**`VERIFIED_LIVE`** — referencing an unknown custom field id returns HTTP 400
+and leaves the document unmodified.
+
+### 5.3 Custom field *definitions* — `extra_data` can be `null` (M2)
+
+**`VERIFIED_LIVE`** — on `GET /api/custom_fields/`, the `extra_data` key on a
+field definition is **`null`**, not an absent key and not `{}`, for every
+`string`, `date`, `boolean`, `integer` and `float` field observed in the
+Golden Dataset (10 of 13 real fields). Only `select` (which carries its
+`select_options` there) and `monetary` (which carries `default_currency`)
+happened to have a non-null `extra_data` in the sandbox — which is exactly why
+this was not caught by the mocked tests written during M1: they always
+supplied a dict literal for `extra_data`, never `null`.
+
+This was found running the M2 metadata endpoints against the real sandbox for
+the first time: `CustomField.model_validate(...)` raised a pydantic
+`ValidationError` (`extra_data: Input should be a valid dictionary`) on every
+field of the affected types, which the API surfaced as an unhandled
+`HTTP 500`. Fixed with a `field_validator(mode="before")` on `CustomField`
+that normalises `None` → `{}` before the rest of validation runs, so
+`select_options` and `typed_value()` can keep assuming a dict. Pinned by a
+unit test (`TestCustomFieldExtraDataNull`), a mocked test
+(`TestListCustomFields`), and a live test
+(`TestReferenceMetadataReads.test_list_custom_fields_handles_the_real_null_extra_data`).
+
+### 5.4 Concurrent writes to different fields — a measured, not fixed, hazard (M2)
+
+**`VERIFIED_LIVE`** — the read-modify-write mitigation in §5.1 closes the
+*omitted-field-deletion* hazard, but it does **not** close the classic
+read/read/write/write lost-update race. Two actors, each reading the
+document's current custom fields and then PATCHing back the **full** list
+they believe is correct with only their own field changed, can lose one
+actor's change even though the two actors never touched the same field:
+whichever actor's PATCH lands second re-asserts the value it read *before*
+the other actor's write, silently reverting it.
+
+This was measured directly (`TestConcurrentCustomFieldWrites`,
+`tests/backend/live/test_paperless_live.py`), with the interleaving forced
+deterministically (a deliberate `asyncio.sleep` between one actor's read and
+its write) rather than left to timing luck, so the hazard is reproducible on
+demand instead of being a flaky race. `PaperlessClient.update_custom_fields()`
+narrows the window considerably (it reads immediately before it writes,
+rather than reading long before), and its optional `expected_before`
+parameter lets a caller refuse to write from a base it knows is stale — but
+neither eliminates the window entirely, and nothing currently prevents two
+concurrent callers who both skip `expected_before`. No distributed lock or
+ETag exists yet; this is documented as a known limitation, not fixed, per the
+M2 scope decision.
+
+**Reclassification (post-M2):** this is a **KNOWN ARCHITECTURAL CONSTRAINT**,
+not a "fix later if it ever matters" item — concurrent custom-field writers
+are a near-certain future case (Inspector and Job Engine both write
+custom-field values). It is **non-blocking for M3 and M4** (M3 is read-only;
+M4's filter/bulk-selection surfaces do not yet write), but it **must be
+addressed before concurrent custom-field writes become possible**, i.e. no
+later than the milestone that lets the Inspector and/or the Job Engine write
+concurrently to the same document. See `docs/architecture.md` §"Known
+architectural constraint" for the canonical statement of this rule. Candidate
+mitigations (none selected yet — a real decision is deferred to that
+milestone): per-document serialization, optimistic conflict detection, a
+fresh read taken immediately before the write, an in-process document-level
+lock inside PaperWrench, or a combination of these.
+
+---
+
+## 6. Search, filtering and ordering
+
+**`VERIFIED_LIVE`** — `title_search`, `title__icontains`, `content__icontains`
+and the full-text `query` parameter all work, and all compose with pagination.
+
+**`VERIFIED_LIVE` — and this is a trap for the future filter engine:** an
+**unknown filter parameter is silently ignored**. `?not_a_real_filter=42`
+returns the full unfiltered result set with HTTP 200. An unknown `ordering`
+value is likewise silently ignored.
+
+Consequence: PaperWrench can never treat "Paperless accepted my filter" as
+"Paperless applied my filter". The M4 filter engine must validate every filter
+key against a known-good allowlist **before** sending it, otherwise a typo in a
+saved filter turns "these 12 documents" into "the entire library" — while
+looking successful. This is now a hard requirement on ADR-0007's compilable
+subset.
+
+---
+
+## 6.1 Reference metadata endpoints (M2)
+
+| Endpoint | Method | Purpose | Confidence |
+| --- | --- | --- | --- |
+| `/api/tags/` | GET | tag catalogue | `VERIFIED_LIVE` |
+| `/api/correspondents/` | GET | correspondent catalogue | `VERIFIED_LIVE` |
+| `/api/document_types/` | GET | document type catalogue | `VERIFIED_LIVE` |
+| `/api/storage_paths/` | GET | storage path catalogue | `VERIFIED_LIVE` |
+
+**`VERIFIED_LIVE`** — full key set on a freshly created object of each kind:
+
+- Tag: `id, slug, name, color, text_color, match, matching_algorithm, is_insensitive, is_inbox_tag, owner, user_can_change, parent, children`
+- Correspondent: `id, slug, name, match, matching_algorithm, is_insensitive, owner, user_can_change`
+- Document type: `id, slug, name, match, matching_algorithm, is_insensitive, document_count, owner, user_can_change`
+- Storage path: `id, slug, name, path, match, matching_algorithm, is_insensitive, owner, user_can_change`
+
+PaperWrench's `Tag`, `Correspondent`, `DocumentType`, `StoragePath` models
+(`paperless/models.py`) keep only the subset the project actually consumes
+(`extra="ignore"` on every one), so an upstream field addition is a no-op
+here rather than a validation break.
+
+**`VERIFIED_LIVE`** — Paperless enforces a per-owner **uniqueness constraint**
+on tag and custom field names: two objects owned by the same user cannot
+share an exact name. This does **not** mean names are globally unique across
+owners, and PaperWrench's `MetadataRegistry` does not rely on the Paperless
+constraint at all — it detects ambiguity itself (`AmbiguousMetadataName`) by
+scanning its own snapshot for an exact-name collision, so it stays correct
+even in a hypothetical multi-owner future. Name resolution is deliberately
+**exact-match only**: no accent-folding, no case-insensitivity. The Golden
+Dataset deliberately contains near-duplicate names that must **not** be
+conflated (`Etablissement` / `Établissement`, `Periode concernee` /
+`Période concernée`, `Reference interne` / `Référence interne`, `Valide` /
+`Validé`) — these are two distinct custom fields each, and a normalising
+resolver would silently merge them.
+
+---
+
+## 7. Other observed behaviours
+
+**`VERIFIED_LIVE`** — Paperless **trims leading and trailing whitespace on
+document titles**. PATCHing `"   test   trim   "` stores `"test   trim"`
+(interior runs of spaces are preserved, edges are not).
+
+Consequence for the M3 rename engine: after a write, "what I asked for" and
+"what is stored" can legitimately differ. A verification step that compares them
+literally will report a false failure on every title with edge whitespace. The
+comparison must be made against the **normalised** form. The dev seeder already
+hit this bug and created a duplicate document because of it.
+
+**`VERIFIED_LIVE`** — `GET` on a non-existent document id returns HTTP 404 with
+a `detail` key.
+
+**`VERIFIED_LIVE`** — an unreachable host surfaces as a transport error, which
+the client normalises to `PaperlessUnreachableError`; it never leaks an
+`httpx` exception to the caller.
+
+**`ASSUMED`** — Paperless has no ETag / `If-Match` support on documents, so
+there is no server-side optimistic locking to lean on. PaperWrench therefore
+implements its own forward conflict detection (ADR-0005): the caller passes the
+state it based its decision on, and the client refuses to write from a stale
+base. This is the reason `update_custom_fields()` takes `expected_before`.
+
+**`ASSUMED`** — concurrent writers (another PaperWrench, the Paperless web UI, a
+consumer) can modify a document between our read and our write. The read →
+merge → write window is small but non-zero. We narrow it, we do not close it.
+
+---
+
+## 8. Live verification
+
+The claims tagged `VERIFIED_LIVE` are pinned by `tests/backend/live/`, which is
+**deselected by default**. Running it requires both:
+
+1. `PAPERWRENCH_ALLOW_LIVE_TESTS=true` — an explicit opt-in, and
+2. a target URL whose **host** is in the authorised allowlist (`127.0.0.1`,
+   `localhost`, `::1`, the compose service name, `host.docker.internal`).
+
+The target is read from `PAPERWRENCH_LIVE_PAPERLESS_URL`, falling back to
+`PAPERWRENCH_PAPERLESS_URL`. The allowlist compares **exact hostnames**, never
+substrings: `paperless.someones-real-domain.example` contains an authorised
+name and must still be refused.
+
+> A defect was found in this gate during M1, while testing the gate itself.
+> Only the `..._LIVE_...` spelling was read, so exporting
+> `PAPERWRENCH_PAPERLESS_URL` had no effect at all: the suite silently fell
+> back to its localhost default, ran against an instance the operator had
+> never named, and reported **46 passed**. A destructive suite that ignores
+> the target it was given — and says nothing — is worse than one that refuses
+> to start. Both spellings are now honoured, and the gate has its own unit
+> tests in `tests/backend/unit/test_live_gate.py` which run in the default
+> suite on every CI job.
+
+Both gates must pass. This is deliberate: the live suite **writes and deletes**,
+and it must be impossible for it to run against a real personal library by
+accident. A further guard refuses to run if the target instance holds more than
+500 documents — a crude but effective "this is not a sandbox" detector.
+
+Reproduce the environment with:
+
+```sh
+make dev-paperless-up      # Paperless 3.1.2 + PostgreSQL + Redis on :8010
+make dev-paperless-golden  # 17 deliberately imperfect documents, 7 custom fields
+make test-live             # opt-in live suite
+```
+
+The three backend suites are reported separately and must never be conflated:
+
+```sh
+make test-unit    # no I/O whatsoever
+make test-mocked  # respx; proves our client's behaviour, NOT Paperless's
+make test-live    # the only suite that can promote a claim to VERIFIED_LIVE
+```
+
+A mocked test asserts what we believe Paperless does. Only a live test can
+tell us whether that belief is true.
