@@ -163,6 +163,21 @@ class TestErrorNormalisation:
                 await client.get_document(1)
 
     @respx.mock
+    async def test_409_is_not_retryable_by_default(self, paperless_settings: Settings) -> None:
+        """A 409 must never be treated as retryable by default (see errors.py).
+
+        A conflict reflects the *state* Paperless found, not a transient
+        transport problem. Anything that later builds automatic retries (the
+        Job Engine, forward conflict detection) must be able to rely on this
+        flag to refuse a blind retry loop.
+        """
+        respx.get(f"{BASE}/api/documents/1/").mock(return_value=httpx.Response(409, text="nope"))
+        async with PaperlessClient(paperless_settings) as client:
+            with pytest.raises(PaperlessConflictError) as excinfo:
+                await client.get_document(1)
+        assert excinfo.value.retryable is False
+
+    @respx.mock
     async def test_500_is_retryable(self, paperless_settings: Settings) -> None:
         respx.get(f"{BASE}/api/documents/1/").mock(return_value=httpx.Response(500, text="boom"))
         async with PaperlessClient(paperless_settings) as client:
