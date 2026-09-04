@@ -13,12 +13,18 @@
 import type {
   CorrespondentDefinition,
   CustomFieldDefinition,
+  DatasetPageRequest,
   DocumentPage,
   DocumentTypeDefinition,
+  FilterCapabilities,
+  FilterCountResponse,
+  FilterSet,
+  FilterValidationResponse,
   HealthResponse,
   InfoResponse,
-  ListDocumentsParams,
   PaperlessStatusResponse,
+  SearchSpec,
+  StoragePathDefinition,
   TagDefinition,
 } from './types'
 
@@ -107,25 +113,47 @@ export const systemApi = {
   paperless: () => apiFetch<PaperlessStatusResponse>('/system/paperless'),
 }
 
-function buildQueryString(params: ListDocumentsParams): string {
-  const search = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === null || value === '') {
-      continue
-    }
-    search.set(key, String(value))
-  }
-  const qs = search.toString()
-  return qs ? `?${qs}` : ''
-}
-
 export const documentsApi = {
   // Server-side pagination only - this is the one and only entry point the
   // Explorer uses to fetch documents. There is deliberately no "fetch all
   // pages" helper here: loading the whole library into the browser is
-  // exactly what M3 exists to avoid.
-  list: (params: ListDocumentsParams) =>
-    apiFetch<DocumentPage>(`/documents${buildQueryString(params)}`),
+  // exactly what M3 exists to avoid, and M4 kept that guarantee while
+  // replacing the ad-hoc filter parameters with a real FilterSet.
+  //
+  // A POST for a read is deliberate: the filter tree is a nested structure,
+  // and encoding it into a query string would make it neither readable nor
+  // reliably round-trippable. It writes nothing.
+  query: (request: DatasetPageRequest) =>
+    apiFetch<DocumentPage>('/documents/query', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    }),
+}
+
+/**
+ * The Filter Engine.
+ *
+ * `capabilities` is what keeps the Filter Builder honest: the operator lists
+ * and grouping rules it renders come from the backend compiler's own tables,
+ * so the UI cannot offer a filter that will be refused.
+ *
+ * `validate` reports rather than throws - it is called while the user is
+ * still typing, and both of its verdicts are useful. `count` throws, because
+ * a count is used to decide something and a misleading number is worse than
+ * an error.
+ */
+export const filtersApi = {
+  capabilities: () => apiFetch<FilterCapabilities>('/filters/capabilities'),
+  validate: (filters: FilterSet) =>
+    apiFetch<FilterValidationResponse>('/filters/validate', {
+      method: 'POST',
+      body: JSON.stringify({ filters }),
+    }),
+  count: (filters: FilterSet, search: SearchSpec | null) =>
+    apiFetch<FilterCountResponse>('/filters/count', {
+      method: 'POST',
+      body: JSON.stringify({ filters, search }),
+    }),
 }
 
 // Reference metadata (tags/correspondents/document types/custom field
@@ -136,5 +164,6 @@ export const metadataApi = {
   tags: () => apiFetch<TagDefinition[]>('/metadata/tags'),
   correspondents: () => apiFetch<CorrespondentDefinition[]>('/metadata/correspondents'),
   documentTypes: () => apiFetch<DocumentTypeDefinition[]>('/metadata/document-types'),
+  storagePaths: () => apiFetch<StoragePathDefinition[]>('/metadata/storage-paths'),
   customFields: () => apiFetch<CustomFieldDefinition[]>('/metadata/custom-fields'),
 }
