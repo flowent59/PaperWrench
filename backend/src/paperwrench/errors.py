@@ -187,3 +187,43 @@ class SingleInstanceViolationError(PaperWrenchError):
 
     status_code = 500
     code = ErrorCode.SINGLE_INSTANCE_VIOLATION
+
+
+class InvalidOrderingError(PaperWrenchError):
+    """An ``ordering`` value was rejected before ever reaching Paperless.
+
+    M1 (``docs/paperless-api.md`` §6) proved that Paperless silently ignores
+    an unknown ``ordering`` value instead of rejecting it - a request for
+    ``ordering=totally_made_up`` returns 200 with the default order, looking
+    exactly like success. PaperWrench must never forward an ordering value it
+    has not itself validated against a known-good allowlist, or a frontend
+    bug (a typo'd column key) would silently stop sorting while the UI kept
+    showing sort arrows as if it worked. See ``api/v1/documents.py``.
+    """
+
+    status_code = 422
+    code = ErrorCode.VALIDATION_ERROR
+
+    def __init__(self, ordering: str) -> None:
+        super().__init__(
+            f"{ordering!r} is not a supported ordering value.",
+            details={"ordering": ordering},
+        )
+
+
+class InvalidPageSizeError(PaperWrenchError):
+    """A ``page_size`` outside the explicitly supported set was requested.
+
+    There is deliberately no \"load everything\" option (ADR from the M3
+    brief): the Explorer must never be able to ask for the whole library in
+    one response.
+    """
+
+    status_code = 422
+    code = ErrorCode.VALIDATION_ERROR
+
+    def __init__(self, page_size: int, allowed: tuple[int, ...]) -> None:
+        super().__init__(
+            f"page_size must be one of {allowed}, got {page_size}.",
+            details={"page_size": page_size, "allowed": list(allowed)},
+        )

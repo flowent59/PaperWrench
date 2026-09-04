@@ -6,6 +6,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
 import { ThemeProvider } from '@/components/theme-provider'
 import { DashboardPage } from '@/pages/dashboard'
+import { ExplorerPage } from '@/pages/explorer'
 import { NotFoundPage } from '@/pages/not-found'
 
 import './index.css'
@@ -33,6 +34,7 @@ createRoot(container).render(
           <Routes>
             <Route element={<AppShell />}>
               <Route index element={<DashboardPage />} />
+              <Route path="documents" element={<ExplorerPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

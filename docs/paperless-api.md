@@ -356,6 +356,98 @@ resolver would silently merge them.
 
 ---
 
+## 6.2 Ordering, including `custom_field_<id>` (M3)
+
+**`VERIFIED_SOURCE`** (Paperless-ngx 3.1.2, `src/documents/views.py`,
+`DocumentViewSet.ordering_fields`) — the server's ordering allowlist is:
+
+```
+id, title, correspondent__name, document_type__name, storage_path__name,
+created, modified, added, archive_serial_number, num_notes, owner,
+page_count, custom_field_<id>
+```
+
+PaperWrench's own `GET /api/v1/documents` (`backend/src/paperwrench/api/v1/
+documents.py`) exposes a **deliberately smaller** subset of this — `title`,
+`created`, `modified`, `added`, `archive_serial_number`, `correspondent`
+(→ `correspondent__name`), `document_type` (→ `document_type__name`) — plus
+`custom_field_<id>` for known custom fields. `num_notes`, `owner`,
+`page_count` and `storage_path__name` are not (yet) Explorer columns and are
+intentionally left off the allowlist rather than exposed "because the server
+accepts them" (M3 brief).
+
+**`VERIFIED_SOURCE`** (`src/documents/filters.py`, `DocumentsOrderingFilter`)
+— `custom_field_<id>` ordering is implemented per data type (STRING/
+LONG_TEXT via `value_text`, INT via `value_int`, FLOAT via `value_float`,
+DATE via `value_date`, MONETARY via `value_monetary_amount`, SELECT via a
+`Case`/`When` on the option list, DOCUMENTLINK via `value_document_ids`, URL
+via `value_url`, BOOL via `value_bool`). Every one of these first annotates
+`has_field` (`Exists(...)`) and orders by `-has_field`, so **documents that
+have the field always sort before documents that do not**, regardless of
+ascending/descending direction on the value itself.
+
+**`VERIFIED_LIVE`** (`tests/backend/live/test_paperless_live.py::
+TestCustomFieldOrderingLive`, run against the Golden Dataset) confirms, for
+the three data types M3 actually exposes:
+
+- **String** (`Période concernée`): ascending and descending both return
+  200 with the same document set, in different orders.
+- **Monetary** (`Montant`, deliberately PRESENT/absent/zero on different
+  Golden Dataset rows): ordering succeeds without error and without
+  dropping any document — the ABSENT/zero distinction Paperless itself
+  makes (has-field-first) is exactly the one PaperWrench's `CustomFieldValue
+  Kind` already models.
+- **Date** (`Date de règlement`): ordering succeeds.
+- The has-field-first invariant (documents WITH the field never appear
+  after documents WITHOUT it) holds for `Montant`.
+- Boolean (`Validé`) ordering also works upstream (VERIFIED_LIVE) — proving
+  Paperless supports more types than PaperWrench exposes. PaperWrench does
+  **not** expose ordering for boolean/select/int/float/documentlink/url
+  custom fields in M3: the brief only asked for Text/Monetary/Date, and
+  extending the allowlist to a type that was not asked for is exactly the
+  kind of premature scope creep M3 was told to avoid. Revisit this in a
+  later milestone if a concrete need for it appears.
+
+**`VERIFIED_LIVE`** (unchanged from M1, re-confirmed): an **unknown**
+`ordering` value is silently ignored by Paperless rather than rejected —
+this is precisely why PaperWrench's own `resolve_ordering()` rejects
+anything not on its allowlist **before** ever building the outgoing
+request, with a 422 (`InvalidOrderingError`). A caller-supplied ordering
+value is never forwarded to Paperless unless PaperWrench itself has already
+proven it maps to something real.
+
+**`VERIFIED_LIVE`** (`TestSearchPaginationOrderingComposeLive`) — `search`
+(`title_search`)/`query`, `ordering` and pagination (`page`/`page_size`)
+compose correctly together against the Golden Dataset: results stay within
+the requested page size, distinct pages do not overlap, and adding a filter
+alongside search + ordering does not silently drop either constraint. M1
+had only proven these individually; M3 required (and found) no interaction
+defect when combined.
+
+---
+
+## 6.3 Soft-deleted documents are excluded by default (M3)
+
+**`VERIFIED_SOURCE`** — `Document` (`src/documents/models.py`) is a
+`SoftDeleteModel` (via `django-softdelete`). Reading that package's source
+directly (`softdelete/models.py`, `SoftDeleteManager.get_queryset()`)
+confirms its default `objects` manager already filters
+`deleted_at__isnull=True`. `DocumentViewSet`'s default queryset uses this
+manager, so **Paperless's ordinary list (`GET /api/documents/`) and detail
+(`GET /api/documents/<id>/`) endpoints already exclude trashed documents by
+construction** — this is not something PaperWrench needs to filter for
+itself, and there is no separate "trash" flag to additionally check on the
+document payload.
+
+Consequence for M3: the Explorer needs no client-side or server-side filter
+for `deleted_at`, and no trash UI — a document that has been moved to
+Paperless's trash simply stops appearing, exactly like a document that was
+permanently deleted. Retrieving/restoring trashed documents (Paperless's
+`/api/trash/` endpoint) is out of scope for M3 and is not modelled at all
+yet.
+
+---
+
 ## 7. Other observed behaviours
 
 **`VERIFIED_LIVE`** — Paperless **trims leading and trailing whitespace on

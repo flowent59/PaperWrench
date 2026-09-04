@@ -11,9 +11,15 @@
  */
 
 import type {
+  CorrespondentDefinition,
+  CustomFieldDefinition,
+  DocumentPage,
+  DocumentTypeDefinition,
   HealthResponse,
   InfoResponse,
+  ListDocumentsParams,
   PaperlessStatusResponse,
+  TagDefinition,
 } from './types'
 
 export const API_PREFIX = '/api/v1'
@@ -99,4 +105,36 @@ export const systemApi = {
   // failure is described in the payload rather than thrown, so the UI can
   // render *why* it is not connected instead of a bare network error.
   paperless: () => apiFetch<PaperlessStatusResponse>('/system/paperless'),
+}
+
+function buildQueryString(params: ListDocumentsParams): string {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') {
+      continue
+    }
+    search.set(key, String(value))
+  }
+  const qs = search.toString()
+  return qs ? `?${qs}` : ''
+}
+
+export const documentsApi = {
+  // Server-side pagination only - this is the one and only entry point the
+  // Explorer uses to fetch documents. There is deliberately no "fetch all
+  // pages" helper here: loading the whole library into the browser is
+  // exactly what M3 exists to avoid.
+  list: (params: ListDocumentsParams) =>
+    apiFetch<DocumentPage>(`/documents${buildQueryString(params)}`),
+}
+
+// Reference metadata (tags/correspondents/document types/custom field
+// definitions) is small, changes rarely and is only used to build the
+// Explorer's column definitions and filter dropdowns - never a document
+// list itself, so no pagination parameters here.
+export const metadataApi = {
+  tags: () => apiFetch<TagDefinition[]>('/metadata/tags'),
+  correspondents: () => apiFetch<CorrespondentDefinition[]>('/metadata/correspondents'),
+  documentTypes: () => apiFetch<DocumentTypeDefinition[]>('/metadata/document-types'),
+  customFields: () => apiFetch<CustomFieldDefinition[]>('/metadata/custom-fields'),
 }
