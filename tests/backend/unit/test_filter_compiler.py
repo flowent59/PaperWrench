@@ -577,7 +577,7 @@ def test_exactly_twenty_custom_atoms_still_compiles() -> None:
     compiled = compile_filterset(
         filterset(*[custom(PERIODE, Op.CONTAINS, str(i)) for i in range(20)]), CATALOG
     )
-    assert compiled.custom_field_expression[0] == "AND"  # type: ignore[index]
+    assert compiled.custom_field_expression[0] == "AND"
 
 
 # ================================================================= ordering

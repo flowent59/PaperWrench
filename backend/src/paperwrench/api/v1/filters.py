@@ -30,6 +30,7 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi import Depends
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 
 from paperwrench.api.deps import get_metadata_registry
@@ -67,6 +68,15 @@ class CompiledQuery(BaseModel):
 
 
 class FilterValidationRequest(BaseModel):
+    """Request body. ``extra="forbid"`` throughout this module on purpose.
+
+    Silently ignoring an unrecognised key is the same failure as Paperless
+    silently ignoring an unrecognised filter parameter: the caller believes
+    something was applied and nothing was. A typo must be an error here.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     filters: FilterSet
 
 
@@ -98,8 +108,11 @@ class FilterCountRequest(BaseModel):
     Carries the search spec as well as the filters, because "how many
     documents match" must mean the same set the Explorer is showing, and the
     Explorer's set is search AND filters. Ordering is irrelevant to a count
-    and is not accepted.
+    and is deliberately rejected rather than ignored: a caller who sent one
+    expected it to matter.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     filters: FilterSet | None = None
     search: SearchSpec | None = None

@@ -920,3 +920,851 @@ class TestFailureModes:
 
 async def client_get_missing(client: PaperlessClient) -> None:
     await client.get_document(999_999_999)
+
+
+# =========================================================================
+# M4 - Filter Engine
+# =========================================================================
+#
+# These are the tests entitled to promote a Filter Engine behaviour to
+# VERIFIED_LIVE. They run against a real Paperless-ngx 3.1.2 and the Golden
+# Dataset (17 documents, `Relevé de vacations`, with `Montant` deliberately
+# PRESENT / ABSENT / EUR0.00 and `Période concernée` PRESENT / ABSENT).
+#
+# Two things they are careful about:
+#
+# * They assert **PaperWrench's compiled parameters against the real server**,
+#   not against our own idea of it. Every expression sent here comes out of
+#   `compile_filterset`, so a compiler mistake shows up as a wrong document
+#   set rather than as a passing test about a string.
+# * They never mutate the Golden Dataset. States that the dataset does not
+#   contain (an explicitly NULL value, an empty string) are produced on a
+#   disposable scratch document and torn down.
+
+
+async def _golden_field_ids(raw_live: httpx.AsyncClient) -> dict[str, int]:
+    response = await raw_live.get("/api/custom_fields/", params={"page_size": 100})
+    response.raise_for_status()
+    return {item["name"]: int(item["id"]) for item in response.json()["results"]}
+
+
+async def _matching_ids(raw_live: httpx.AsyncClient, params: dict[str, Any]) -> set[int]:
+    """Every document id matching ``params``, walked page by page.
+
+    Only a *test* may do this. It is how an assertion about "exactly these
+    documents" is made; PaperWrench itself never enumerates a filter's
+    matches (ADR-0007), which is why this helper lives here and not in the
+    Filter Engine.
+    """
+    found: set[int] = set()
+    page = 1
+    while True:
+        response = await raw_live.get(
+            "/api/documents/", params={**params, "page": page, "page_size": 100}
+        )
+        response.raise_for_status()
+        payload = response.json()
+        found |= {int(item["id"]) for item in payload["results"]}
+        if not payload.get("next"):
+            return found
+        page += 1
+
+
+async def _count(raw_live: httpx.AsyncClient, params: dict[str, Any]) -> int:
+    response = await raw_live.get("/api/documents/", params={**params, "page_size": 1})
+    response.raise_for_status()
+    return int(response.json()["count"])
+
+
+def _compile(filterset: Any, catalog: Any) -> dict[str, str]:
+    from paperwrench.filters import compile_filterset
+
+    return compile_filterset(filterset, catalog).params
+
+
+async def _catalog(live_client: PaperlessClient) -> Any:
+    from paperwrench.filters import FieldCatalog
+
+    return FieldCatalog(await live_client.list_custom_fields())
+
+
+def _cf(field_id: int, operator: str, value: Any = None) -> Any:
+    from paperwrench.filters import CustomFieldRef
+    from paperwrench.filters import FilterCondition
+    from paperwrench.filters import FilterOperator
+
+    return FilterCondition(
+        field=CustomFieldRef(field_id=field_id),
+        operator=FilterOperator(operator),
+        value=value,
+    )
+
+
+def _core(name: str, operator: str, value: Any = None) -> Any:
+    from paperwrench.filters import CoreField
+    from paperwrench.filters import CoreFieldRef
+    from paperwrench.filters import FilterCondition
+    from paperwrench.filters import FilterOperator
+
+    return FilterCondition(
+        field=CoreFieldRef(name=CoreField(name)),
+        operator=FilterOperator(operator),
+        value=value,
+    )
+
+
+def _set(*children: Any, operator: str = "and") -> Any:
+    from paperwrench.filters import FilterGroup
+    from paperwrench.filters import FilterSet
+    from paperwrench.filters import GroupOperator
+
+    return FilterSet(
+        root=FilterGroup(operator=GroupOperator(operator), children=list(children))
+    )
+
+
+def _group(*children: Any, operator: str = "or") -> Any:
+    from paperwrench.filters import FilterGroup
+    from paperwrench.filters import GroupOperator
+
+    return FilterGroup(operator=GroupOperator(operator), children=list(children))
+
+
+class TestFilterEngineEmptyMissingLive:
+    """The empty/missing semantics the M4 brief asked to be checked before freezing.
+
+    ABSENT, NULL and ``""`` are three different states, and the whole design
+    of `is_missing` / `is_null` / `is_empty` rests on Paperless keeping them
+    apart. This walks one scratch document through all four states and
+    asserts, at each step, exactly which of PaperWrench's compiled
+    expressions match it.
+    """
+
+    async def test_absent_null_and_empty_string_are_three_distinct_states(
+        self,
+        raw_live: httpx.AsyncClient,
+        live_client: PaperlessClient,
+        scratch_document: int,
+    ) -> None:
+        fields = await _golden_field_ids(raw_live)
+        periode = fields["Période concernée"]
+        catalog = await _catalog(live_client)
+
+        async def matches(operator: str) -> bool:
+            params = _compile(_set(_cf(periode, operator)), catalog)
+            return scratch_document in await _matching_ids(raw_live, params)
+
+        async def set_value(value: Any) -> None:
+            current = await raw_live.get(f"/api/documents/{scratch_document}/")
+            current.raise_for_status()
+            merged = {
+                int(item["field"]): dict(item)
+                for item in current.json().get("custom_fields") or []
+            }
+            merged[periode] = {"field": periode, "value": value}
+            response = await raw_live.patch(
+                f"/api/documents/{scratch_document}/",
+                json={"custom_fields": list(merged.values())},
+            )
+            response.raise_for_status()
+
+        # -- 1. ABSENT: the field is not attached to the document at all ----
+        assert await matches("is_missing") is True
+        assert await matches("is_present") is False
+        assert await matches("is_null") is False, (
+            "is_null must never match an ABSENT document - that is the whole "
+            "reason it compiles to `isnull`, which Paperless evaluates as "
+            "`has_field AND value IS NULL`"
+        )
+        assert await matches("has_value") is False
+        assert await matches("is_empty") is False, (
+            "is_empty must NOT include ABSENT: a field that was never set is "
+            "a different thing from one that was set to nothing"
+        )
+
+        # -- 2. NULL: the field is attached, its value is explicitly null ---
+        await set_value(None)
+        assert await matches("is_missing") is False
+        assert await matches("is_present") is True
+        assert await matches("is_null") is True
+        assert await matches("has_value") is False
+        assert await matches("is_empty") is True
+
+        # -- 3. EMPTY STRING: attached, present, and genuinely "" -----------
+        await set_value("")
+        assert await matches("is_missing") is False
+        assert await matches("is_present") is True
+        assert await matches("is_null") is False, (
+            'an empty string is not null - collapsing "" into null is exactly '
+            "the conflation this engine refuses to make"
+        )
+        assert await matches("has_value") is True
+        assert await matches("is_empty") is True
+
+        # -- 4. A REAL VALUE ------------------------------------------------
+        await set_value("mars 2024")
+        assert await matches("is_missing") is False
+        assert await matches("is_present") is True
+        assert await matches("is_null") is False
+        assert await matches("has_value") is True
+        assert await matches("is_empty") is False
+
+    async def test_golden_dataset_absent_and_present_montant_partition_the_library(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        """is_missing and is_present are exact complements, with nothing lost."""
+        fields = await _golden_field_ids(raw_live)
+        montant = fields["Montant"]
+        catalog = await _catalog(live_client)
+
+        missing = await _matching_ids(raw_live, _compile(_set(_cf(montant, "is_missing")), catalog))
+        present = await _matching_ids(raw_live, _compile(_set(_cf(montant, "is_present")), catalog))
+        everything = await _matching_ids(raw_live, {})
+
+        assert missing and present, "the Golden Dataset must contain both states"
+        assert missing & present == set()
+        assert missing | present == everything
+
+
+class TestFilterEngineMonetaryLive:
+    """Monetary comparisons, including the zero that is not an absence.
+
+    ``EUR0.00`` is falsy in almost every language a template might use, so
+    "amount is missing" and "amount is zero" get conflated constantly. The
+    Golden Dataset keeps them as separate rows precisely so this can be
+    checked against a real server.
+    """
+
+    async def test_zero_is_a_real_value_distinct_from_missing(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        fields = await _golden_field_ids(raw_live)
+        montant = fields["Montant"]
+        catalog = await _catalog(live_client)
+
+        zero = await _matching_ids(
+            raw_live, _compile(_set(_cf(montant, "equals", "EUR0.00")), catalog)
+        )
+        missing = await _matching_ids(raw_live, _compile(_set(_cf(montant, "is_missing")), catalog))
+
+        assert zero, "the Golden Dataset seeds EUR0.00 rows on purpose"
+        assert missing
+        assert zero & missing == set()
+
+    async def test_greater_than_zero_excludes_both_zero_and_missing(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        """The M4 acceptance scenario's step 7."""
+        fields = await _golden_field_ids(raw_live)
+        montant = fields["Montant"]
+        catalog = await _catalog(live_client)
+
+        positive = await _matching_ids(
+            raw_live, _compile(_set(_cf(montant, "greater_than", "EUR0.00")), catalog)
+        )
+        zero = await _matching_ids(
+            raw_live, _compile(_set(_cf(montant, "equals", "EUR0.00")), catalog)
+        )
+        missing = await _matching_ids(raw_live, _compile(_set(_cf(montant, "is_missing")), catalog))
+
+        assert positive
+        assert positive & zero == set()
+        assert positive & missing == set()
+
+    async def test_all_five_comparisons_agree_with_each_other(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        fields = await _golden_field_ids(raw_live)
+        montant = fields["Montant"]
+        catalog = await _catalog(live_client)
+
+        async def ids(operator: str, value: str) -> set[int]:
+            return await _matching_ids(
+                raw_live, _compile(_set(_cf(montant, operator, value)), catalog)
+            )
+
+        threshold = "EUR1000.00"
+        greater = await ids("greater_than", threshold)
+        greater_or_equal = await ids("greater_or_equal", threshold)
+        less = await ids("less_than", threshold)
+        less_or_equal = await ids("less_or_equal", threshold)
+        equal = await ids("equals", threshold)
+
+        assert greater <= greater_or_equal
+        assert less <= less_or_equal
+        assert greater & less == set()
+        assert greater_or_equal == greater | equal
+        assert less_or_equal == less | equal
+        # Every document with a value falls on one side or the other.
+        has_value = await _matching_ids(
+            raw_live, _compile(_set(_cf(montant, "has_value")), catalog)
+        )
+        assert greater_or_equal | less == has_value
+
+    async def test_decimal_precision_survives_the_round_trip(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        """EUR1234.56 must be found by an exact filter, to the cent."""
+        fields = await _golden_field_ids(raw_live)
+        montant = fields["Montant"]
+        catalog = await _catalog(live_client)
+
+        exact = await _matching_ids(
+            raw_live, _compile(_set(_cf(montant, "equals", "EUR1234.56")), catalog)
+        )
+        near = await _matching_ids(
+            raw_live, _compile(_set(_cf(montant, "equals", "EUR1234.57")), catalog)
+        )
+
+        assert exact, "the Golden Dataset seeds EUR1234.56 (case dec-01)"
+        assert near == set()
+
+
+class TestFilterEngineCoreFieldsLive:
+    async def test_document_type_filter_selects_the_golden_dataset(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        types = await raw_live.get("/api/document_types/", params={"page_size": 100})
+        types.raise_for_status()
+        type_id = next(
+            item["id"]
+            for item in types.json()["results"]
+            if item["name"] == "Relevé de vacations"
+        )
+        catalog = await _catalog(live_client)
+
+        matching = await _matching_ids(
+            raw_live, _compile(_set(_core("document_type", "equals", type_id)), catalog)
+        )
+        assert len(matching) >= 17
+
+    async def test_title_contains_is_case_insensitive_as_documented(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        catalog = await _catalog(live_client)
+
+        lower = await _matching_ids(
+            raw_live, _compile(_set(_core("title", "contains", "scan")), catalog)
+        )
+        upper = await _matching_ids(
+            raw_live, _compile(_set(_core("title", "contains", "SCAN")), catalog)
+        )
+
+        assert lower
+        assert lower == upper
+
+    async def test_created_equality_compiles_to_an_exact_single_day(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        """`>= d AND <= d` really is `== d` on a DateField."""
+        catalog = await _catalog(live_client)
+        sample = await raw_live.get("/api/documents/", params={"page_size": 1})
+        sample.raise_for_status()
+        created = str(sample.json()["results"][0]["created"])[:10]
+
+        same_day = await _matching_ids(
+            raw_live, _compile(_set(_core("created", "equals", created)), catalog)
+        )
+        assert same_day
+        for document_id in same_day:
+            detail = await raw_live.get(f"/api/documents/{document_id}/")
+            detail.raise_for_status()
+            assert str(detail.json()["created"])[:10] == created
+
+    async def test_added_comparisons_are_day_granular(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        """`added__date__lte` includes everything added that day.
+
+        The bare `added__lte` would compare against midnight and silently
+        drop the rest of the day - which is why the compiler uses the
+        `date__*` variants for the two DateTime columns.
+        """
+        catalog = await _catalog(live_client)
+        sample = await raw_live.get("/api/documents/", params={"page_size": 1})
+        sample.raise_for_status()
+        added_day = str(sample.json()["results"][0]["added"])[:10]
+
+        params = _compile(_set(_core("added", "less_or_equal", added_day)), catalog)
+        assert params == {"added__date__lte": added_day}
+        assert await _matching_ids(raw_live, params)
+
+    async def test_archive_serial_number_missing_matches_the_golden_dataset(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        catalog = await _catalog(live_client)
+        matching = await _matching_ids(
+            raw_live, _compile(_set(_core("archive_serial_number", "is_missing")), catalog)
+        )
+        # Nothing in the Golden Dataset sets an ASN.
+        assert len(matching) >= 17
+
+
+class TestFilterEngineTagsLive:
+    """The three tag semantics, checked rather than assumed.
+
+    VERIFIED_SOURCE said `tags__id__all` is has-ALL, `tags__id__in` is
+    has-ANY and `tags__id__none` is has-NONE. This proves it on a real
+    server, because getting this wrong silently changes which documents a
+    transformation would touch.
+    """
+
+    async def test_has_all_any_and_none_mean_three_different_things(
+        self,
+        raw_live: httpx.AsyncClient,
+        live_client: PaperlessClient,
+        scratch_document: int,
+    ) -> None:
+        import uuid
+
+        catalog = await _catalog(live_client)
+        marker = uuid.uuid4().hex[:8]
+        tag_ids: list[int] = []
+        for suffix in ("a", "b"):
+            created = await raw_live.post(
+                "/api/tags/", json={"name": f"pw-m4-{marker}-{suffix}", "matching_algorithm": 0}
+            )
+            created.raise_for_status()
+            tag_ids.append(int(created.json()["id"]))
+        tag_a, tag_b = tag_ids
+
+        try:
+            # The scratch document carries ONLY tag A.
+            patched = await raw_live.patch(
+                f"/api/documents/{scratch_document}/", json={"tags": [tag_a]}
+            )
+            patched.raise_for_status()
+
+            async def matches(operator: str, values: list[int]) -> bool:
+                params = _compile(_set(_core("tags", operator, values)), catalog)
+                return scratch_document in await _matching_ids(raw_live, params)
+
+            assert await matches("has_all_of", [tag_a]) is True
+            assert await matches("has_any_of", [tag_a, tag_b]) is True
+            assert await matches("has_all_of", [tag_a, tag_b]) is False, (
+                "has_all_of must require EVERY listed tag"
+            )
+            assert await matches("has_none_of", [tag_b]) is True
+            assert await matches("has_none_of", [tag_a]) is False
+            assert await matches("is_present", []) is True
+
+            # And untagged: is_missing on tags means "no tags at all".
+            cleared = await raw_live.patch(
+                f"/api/documents/{scratch_document}/", json={"tags": []}
+            )
+            cleared.raise_for_status()
+            params = _compile(_set(_core("tags", "is_missing")), catalog)
+            assert scratch_document in await _matching_ids(raw_live, params)
+        finally:
+            for tag_id in tag_ids:
+                await raw_live.delete(f"/api/tags/{tag_id}/")
+
+
+class TestFilterEngineGroupsLive:
+    async def test_an_and_of_a_core_and_two_custom_conditions_is_exact(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        """The M4 acceptance scenario's steps 2-5."""
+        fields = await _golden_field_ids(raw_live)
+        montant, periode = fields["Montant"], fields["Période concernée"]
+        catalog = await _catalog(live_client)
+        types = await raw_live.get("/api/document_types/", params={"page_size": 100})
+        types.raise_for_status()
+        type_id = next(
+            item["id"]
+            for item in types.json()["results"]
+            if item["name"] == "Relevé de vacations"
+        )
+
+        combined = await _matching_ids(
+            raw_live,
+            _compile(
+                _set(
+                    _core("document_type", "equals", type_id),
+                    _cf(montant, "is_missing"),
+                    _cf(periode, "is_present"),
+                ),
+                catalog,
+            ),
+        )
+        montant_missing = await _matching_ids(
+            raw_live, _compile(_set(_cf(montant, "is_missing")), catalog)
+        )
+        periode_present = await _matching_ids(
+            raw_live, _compile(_set(_cf(periode, "is_present")), catalog)
+        )
+
+        assert combined == montant_missing & periode_present
+        assert combined, "the Golden Dataset seeds exactly this case (nomont-01)"
+
+    async def test_an_or_group_of_custom_fields_is_a_real_union(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        """The M4 acceptance scenario's step 10."""
+        fields = await _golden_field_ids(raw_live)
+        montant, periode = fields["Montant"], fields["Période concernée"]
+        catalog = await _catalog(live_client)
+
+        union = await _matching_ids(
+            raw_live,
+            _compile(
+                _set(_group(_cf(montant, "is_missing"), _cf(periode, "is_missing"))), catalog
+            ),
+        )
+        montant_missing = await _matching_ids(
+            raw_live, _compile(_set(_cf(montant, "is_missing")), catalog)
+        )
+        periode_missing = await _matching_ids(
+            raw_live, _compile(_set(_cf(periode, "is_missing")), catalog)
+        )
+
+        assert union == montant_missing | periode_missing
+        assert union > montant_missing, "the OR must widen, not narrow"
+
+    async def test_a_core_condition_intersects_a_custom_or_group(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        fields = await _golden_field_ids(raw_live)
+        montant, periode = fields["Montant"], fields["Période concernée"]
+        catalog = await _catalog(live_client)
+
+        params = _compile(
+            _set(
+                _core("title", "contains", "scan"),
+                _group(_cf(montant, "is_missing"), _cf(periode, "is_missing")),
+            ),
+            catalog,
+        )
+        combined = await _matching_ids(raw_live, params)
+        titles = await _matching_ids(
+            raw_live, _compile(_set(_core("title", "contains", "scan")), catalog)
+        )
+        union = await _matching_ids(
+            raw_live,
+            _compile(
+                _set(_group(_cf(montant, "is_missing"), _cf(periode, "is_missing"))), catalog
+            ),
+        )
+
+        assert combined == titles & union
+
+    async def test_an_unsupported_mixed_or_is_refused_before_any_request(
+        self, live_client: PaperlessClient
+    ) -> None:
+        """The M4 acceptance scenario's steps 11-13.
+
+        Nothing is sent. There is no request to observe here, and that is the
+        assertion: the refusal happens in PaperWrench, purely, and does not
+        depend on Paperless noticing anything (it would not - it silently
+        ignores what it does not understand).
+        """
+        from paperwrench.filters import FilterNotCompilable
+        from paperwrench.filters import compile_filterset
+
+        fields = await live_client.list_custom_fields()
+        montant = next(field.id for field in fields if field.name == "Montant")
+        catalog = await _catalog(live_client)
+
+        with pytest.raises(FilterNotCompilable) as excinfo:
+            compile_filterset(
+                _set(
+                    _core("title", "contains", "scan"),
+                    _cf(montant, "is_missing"),
+                    operator="or",
+                ),
+                catalog,
+            )
+        assert excinfo.value.issues[0].code.value == "MIXED_OR_UNSUPPORTED"
+
+
+class TestFilterEngineCompositionLive:
+    """Filters composing with search, ordering and pagination.
+
+    M1 proved these worked individually and M3 proved search/ordering/paging
+    compose. What is new in M4 is `custom_field_query` in the mix, which
+    Paperless evaluates through a separate annotated subquery - a genuinely
+    different code path, and the one most likely to interact badly.
+    """
+
+    async def test_a_filter_composes_with_a_title_search(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        fields = await _golden_field_ids(raw_live)
+        montant = fields["Montant"]
+        catalog = await _catalog(live_client)
+        params = _compile(_set(_cf(montant, "is_present")), catalog)
+
+        filtered = await _matching_ids(raw_live, params)
+        searched = await _matching_ids(raw_live, {"title_search": "vacations"})
+        both = await _matching_ids(raw_live, {**params, "title_search": "vacations"})
+
+        assert both == filtered & searched
+        assert both, "search and custom_field_query must intersect, not annihilate"
+
+    async def test_a_filter_composes_with_ordering(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        fields = await _golden_field_ids(raw_live)
+        montant = fields["Montant"]
+        catalog = await _catalog(live_client)
+        params = _compile(_set(_cf(montant, "has_value")), catalog)
+
+        ascending = await raw_live.get(
+            "/api/documents/", params={**params, "ordering": "title", "page_size": 100}
+        )
+        descending = await raw_live.get(
+            "/api/documents/", params={**params, "ordering": "-title", "page_size": 100}
+        )
+        ascending.raise_for_status()
+        descending.raise_for_status()
+
+        up = [item["id"] for item in ascending.json()["results"]]
+        down = [item["id"] for item in descending.json()["results"]]
+
+        assert set(up) == set(down), "ordering must not change the matching set"
+        assert up == list(reversed(down))
+
+    async def test_a_filter_composes_with_pagination_without_losing_documents(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        fields = await _golden_field_ids(raw_live)
+        montant = fields["Montant"]
+        catalog = await _catalog(live_client)
+        params = {**_compile(_set(_cf(montant, "has_value")), catalog), "ordering": "id"}
+
+        total = await _count(raw_live, params)
+        assert total >= 4, "need several documents to page through"
+
+        seen: list[int] = []
+        for page in range(1, total + 1):
+            response = await raw_live.get(
+                "/api/documents/", params={**params, "page": page, "page_size": 2}
+            )
+            response.raise_for_status()
+            payload = response.json()
+            ids = [int(item["id"]) for item in payload["results"]]
+            assert len(ids) <= 2
+            seen.extend(ids)
+            if not payload.get("next"):
+                break
+
+        assert len(seen) == total
+        assert len(set(seen)) == total, "pages must not overlap"
+
+    async def test_the_count_matches_the_number_of_documents_actually_listed(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient
+    ) -> None:
+        """The M4 acceptance scenario's step 6.
+
+        The count PaperWrench shows before a destructive operation must be
+        the same number as the documents that would be operated on.
+        """
+        fields = await _golden_field_ids(raw_live)
+        montant, periode = fields["Montant"], fields["Période concernée"]
+        catalog = await _catalog(live_client)
+
+        for filterset in (
+            _set(_cf(montant, "is_missing")),
+            _set(_cf(montant, "greater_than", "EUR0.00")),
+            _set(_cf(montant, "is_present"), _cf(periode, "is_present")),
+            _set(_group(_cf(montant, "is_missing"), _cf(periode, "is_missing"))),
+        ):
+            params = _compile(filterset, catalog)
+            assert await _count(raw_live, params) == len(
+                await _matching_ids(raw_live, params)
+            )
+
+    async def test_the_client_count_helper_never_parses_documents(
+        self, live_client: PaperlessClient, raw_live: httpx.AsyncClient
+    ) -> None:
+        fields = await _golden_field_ids(raw_live)
+        catalog = await _catalog(live_client)
+        params = _compile(_set(_cf(fields["Montant"], "is_present")), catalog)
+
+        assert await live_client.count_documents(params=params) == await _count(
+            raw_live, params
+        )
+
+
+class TestFilterEngineSelectLive:
+    """Select filtering on the option id, never the label.
+
+    Paperless's own `SelectField` resolves a label to its id if you send one,
+    which is convenient and dangerous: a filter that stored a label would
+    silently retarget the day someone renames the option. PaperWrench only
+    ever sends ids, and this proves both halves of that on a real server.
+    """
+
+    async def test_a_select_filter_matches_on_the_stored_option_id(
+        self, raw_live: httpx.AsyncClient, live_client: PaperlessClient, scratch_document: int
+    ) -> None:
+        import uuid
+
+        marker = uuid.uuid4().hex[:8]
+        created = await raw_live.post(
+            "/api/custom_fields/",
+            json={
+                "name": f"pw-m4-select-{marker}",
+                "data_type": "select",
+                "extra_data": {
+                    "select_options": [{"label": "Urgent"}, {"label": "Normal"}]
+                },
+            },
+        )
+        created.raise_for_status()
+        definition = created.json()
+        field_id = int(definition["id"])
+        options = definition["extra_data"]["select_options"]
+        urgent = next(option["id"] for option in options if option["label"] == "Urgent")
+
+        try:
+            patched = await raw_live.patch(
+                f"/api/documents/{scratch_document}/",
+                json={"custom_fields": [{"field": field_id, "value": urgent}]},
+            )
+            patched.raise_for_status()
+
+            catalog = await _catalog(live_client)
+            params = _compile(_set(_cf(field_id, "equals", urgent)), catalog)
+            assert scratch_document in await _matching_ids(raw_live, params)
+
+            # And a label sent where an id belongs never gets that far: the
+            # validator refuses it against the field's known option ids.
+            from paperwrench.filters import validate_filterset
+
+            issues = validate_filterset(_set(_cf(field_id, "equals", "Urgent")), catalog)
+            assert [issue.code.value for issue in issues] == ["UNKNOWN_SELECT_OPTION"]
+        finally:
+            await raw_live.delete(f"/api/custom_fields/{field_id}/")
+
+
+class TestFilterEngineServerLimitsLive:
+    """Paperless's own guards, confirmed so our local limits are not guesses."""
+
+    async def test_an_unknown_custom_field_id_is_rejected_by_the_server_too(
+        self, raw_live: httpx.AsyncClient
+    ) -> None:
+        """A useful belt-and-braces, but NOT what PaperWrench relies on.
+
+        The engine refuses an unknown field id before building a request
+        (see `test_filter_no_fallback.py`). This only records that the server
+        would also have complained - unlike an unknown *filter parameter*,
+        which it silently ignores.
+        """
+        response = await raw_live.get(
+            "/api/documents/",
+            params={"custom_field_query": json.dumps([999_999, "exists", True])},
+        )
+        assert response.status_code == 400
+
+    async def test_too_many_atoms_is_rejected_by_the_server(
+        self, raw_live: httpx.AsyncClient
+    ) -> None:
+        fields = await _golden_field_ids(raw_live)
+        periode = fields["Période concernée"]
+        expression = ["AND", [[periode, "icontains", str(i)] for i in range(21)]]
+
+        response = await raw_live.get(
+            "/api/documents/", params={"custom_field_query": json.dumps(expression)}
+        )
+        assert response.status_code == 400
+
+    async def test_an_operator_the_data_type_forbids_is_rejected_by_the_server(
+        self, raw_live: httpx.AsyncClient
+    ) -> None:
+        """`contains` on a Boolean - the M4 brief's example.
+
+        PaperWrench refuses this at validation time; the server agrees.
+        """
+        fields = await _golden_field_ids(raw_live)
+        valide = fields["Validé"]
+
+        response = await raw_live.get(
+            "/api/documents/",
+            params={"custom_field_query": json.dumps([valide, "icontains", "true"])},
+        )
+        assert response.status_code == 400
+
+    async def test_an_empty_filter_value_is_silently_ignored_by_django_filter(
+        self, raw_live: httpx.AsyncClient
+    ) -> None:
+        """The finding that made empty text values a validation error.
+
+        `title__icontains=` does not filter on an empty title - django-filter
+        skips the filter entirely and returns the whole library. Nothing in
+        the response says so, which is why PaperWrench refuses to emit one.
+        """
+        everything = await _count(raw_live, {})
+        empty_value = await _count(raw_live, {"title__icontains": ""})
+
+        assert empty_value == everything, (
+            "an empty filter value is dropped, not applied - PaperWrench must "
+            "never emit one"
+        )
+
+
+class TestFilterEngineApiLive:
+    """The PaperWrench endpoints, end to end against the real server."""
+
+    async def test_validate_count_and_query_agree_on_the_same_dataset(
+        self, raw_live: httpx.AsyncClient, live_settings: Settings
+    ) -> None:
+        from fastapi.testclient import TestClient
+
+        from paperwrench.main import create_app
+
+        fields = await _golden_field_ids(raw_live)
+        montant = fields["Montant"]
+        body = {
+            "root": {
+                "kind": "group",
+                "operator": "and",
+                "children": [
+                    {
+                        "kind": "condition",
+                        "field": {"source": "custom_field", "field_id": montant},
+                        "operator": "is_missing",
+                        "value": None,
+                    }
+                ],
+            }
+        }
+
+        app = create_app(
+            live_settings.model_copy(
+                update={"database_url": "sqlite+pysqlite:///:memory:"}
+            )
+        )
+        with TestClient(app) as client:
+            validation = client.post("/api/v1/filters/validate", json={"filters": body})
+            count = client.post("/api/v1/filters/count", json={"filters": body})
+            page = client.post(
+                "/api/v1/documents/query", json={"filters": body, "page_size": 25}
+            )
+
+        assert validation.json()["valid"] is True
+        assert validation.json()["compilable"] is True
+        assert count.json()["count"] == page.json()["total"]
+        assert page.json()["total"] >= 1
+
+    async def test_capabilities_reflect_the_real_custom_fields(
+        self, live_settings: Settings
+    ) -> None:
+        from fastapi.testclient import TestClient
+
+        from paperwrench.main import create_app
+
+        app = create_app(
+            live_settings.model_copy(
+                update={"database_url": "sqlite+pysqlite:///:memory:"}
+            )
+        )
+        with TestClient(app) as client:
+            payload = client.get("/api/v1/filters/capabilities").json()
+
+        labels = {field["label"] for field in payload["fields"]}
+        assert "Montant" in labels
+        assert "Période concernée" in labels
+        montant = next(field for field in payload["fields"] if field["label"] == "Montant")
+        assert montant["field_type"] == "monetary"
+        assert "contains" not in {op["operator"] for op in montant["operators"]}
