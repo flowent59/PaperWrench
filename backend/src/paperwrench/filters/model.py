@@ -297,18 +297,6 @@ FilterNot.model_rebuild()
 FilterSet.model_rebuild()
 
 
-def iter_conditions(node: FilterCondition | FilterGroup | FilterNot) -> list[FilterCondition]:
-    """Every leaf condition under ``node``, depth-first, in document order."""
-    if isinstance(node, FilterCondition):
-        return [node]
-    if isinstance(node, FilterNot):
-        return iter_conditions(node.child)
-    found: list[FilterCondition] = []
-    for child in node.children:
-        found.extend(iter_conditions(child))
-    return found
-
-
 # ------------------------------------------------------------------ search
 
 

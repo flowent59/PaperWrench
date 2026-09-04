@@ -367,6 +367,15 @@ def _custom_atom(condition: FilterCondition, resolved: ResolvedField) -> Any:
     return [field_id, lookup, _custom_value(resolved, condition.value)]
 
 
+#
+# Both counters below assume a compiled expression contains only atoms and
+# n-ary AND/OR nodes. That holds because the compiler refuses ``NOT``
+# outright (see ``refuse_negation``), so no ``["NOT", expr]`` can reach here.
+# If NOT is ever compiled, both must learn to descend into it - a unary node
+# counted as a leaf would under-report depth and atoms, which is the one
+# direction that matters, since these guard an upstream limit.
+
+
 def _expression_depth(expr: Any) -> int:
     """Depth as Paperless's parser counts it.
 
@@ -375,18 +384,13 @@ def _expression_depth(expr: Any) -> int:
     logical node is one more than its deepest child.
     """
     if isinstance(expr, list) and len(expr) == 2 and isinstance(expr[0], str):
-        operands = expr[1] if isinstance(expr[1], list) else [expr[1]]
-        if expr[0].lower() == "not":
-            return 1 + _expression_depth(expr[1])
-        return 1 + max(_expression_depth(item) for item in operands)
+        return 1 + max(_expression_depth(item) for item in expr[1])
     return 1
 
 
 def _expression_atoms(expr: Any) -> int:
     """Number of rule-1/2/3 atoms, which is what Paperless caps at 20."""
     if isinstance(expr, list) and len(expr) == 2 and isinstance(expr[0], str):
-        if expr[0].lower() == "not":
-            return _expression_atoms(expr[1])
         return sum(_expression_atoms(item) for item in expr[1])
     return 1
 

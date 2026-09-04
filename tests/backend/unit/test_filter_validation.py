@@ -220,6 +220,17 @@ def test_a_float_field_accepts_an_integer() -> None:
     assert codes(custom(TAUX, Op.GREATER_THAN, 3)) == []
 
 
+def test_a_text_field_refuses_a_non_string() -> None:
+    assert codes(custom(PERIODE, Op.CONTAINS, 42)) == [FilterIssueCode.VALUE_WRONG_TYPE]
+    assert codes(core(CoreField.TITLE, Op.CONTAINS, True)) == [
+        FilterIssueCode.VALUE_WRONG_TYPE
+    ]
+
+
+def test_a_select_field_refuses_a_non_string() -> None:
+    assert codes(custom(CATEGORIE, Op.EQUALS, 1)) == [FilterIssueCode.VALUE_WRONG_TYPE]
+
+
 def test_a_boolean_field_refuses_a_string() -> None:
     assert codes(custom(VALIDE, Op.EQUALS, "true")) == [FilterIssueCode.VALUE_WRONG_TYPE]
 
