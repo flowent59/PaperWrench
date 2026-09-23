@@ -21,7 +21,9 @@ Behaviours encoded here that were VERIFIED_LIVE against Paperless-ngx 3.1.2:
 
 from __future__ import annotations
 
+import json as json_module
 import types
+from copy import deepcopy
 from typing import Any
 from typing import Self
 from urllib.parse import urlsplit
@@ -50,6 +52,10 @@ from paperwrench.paperless.models import Page
 from paperwrench.paperless.models import StoragePath
 from paperwrench.paperless.models import Tag
 from paperwrench.paperless.models import merge_custom_fields
+from paperwrench.paperless.mutations import DocumentMutationCoordinator
+from paperwrench.paperless.mutations import MutationResult
+from paperwrench.paperless.mutations import core_payload
+from paperwrench.paperless.mutations import revision
 
 logger = structlog.get_logger(__name__)
 
@@ -78,7 +84,14 @@ class PaperlessClient:
     (which is how the tests inject ``respx``).
     """
 
-    def __init__(self, settings: Settings, *, http_client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+        coordinator: DocumentMutationCoordinator | None = None,
+    ) -> None:
+        self.coordinator = coordinator or DocumentMutationCoordinator()
         self._settings = settings
         self._external_client = http_client is not None
         self._client = http_client
@@ -227,16 +240,14 @@ class PaperlessClient:
             # this action."}. The credential is fine; this actor may not do
             # this. Kept distinct from 401 - see PaperlessForbiddenError.
             raise PaperlessForbiddenError(
-                "Paperless authenticated the request but refused it "
-                f"({method} {path}).",
+                f"Paperless authenticated the request but refused it ({method} {path}).",
                 details={"upstream_status": status},
             )
         if status == 406:
             # VERIFIED_LIVE: this is exactly how 3.1.2 signals an API version
             # it cannot serve.
             raise PaperlessIncompatibleError(
-                f"Paperless cannot serve API version "
-                f"{self._settings.paperless_api_version}.",
+                f"Paperless cannot serve API version {self._settings.paperless_api_version}.",
                 details={"upstream_status": status, "upstream_body": body[:200]},
             )
         if status == 404:
@@ -459,15 +470,19 @@ class PaperlessClient:
         return [StoragePath.model_validate(item) for item in raw]
 
     async def update_document(self, document_id: int, payload: dict[str, Any]) -> Document:
-        """PATCH a document with an explicit payload.
+        """Core-only low-level write. Reject every non-allowlisted key before I/O.
 
-        **Do not put ``custom_fields`` in here** unless the list is already the
-        complete desired state. Use :meth:`update_custom_fields`, which does
-        the read-modify-write for you. This method exists for scalar fields
-        (``title``, ``document_type``, ...) where PATCH is genuinely partial.
+        Inspector/Jobs use ``mutate_document`` for optimistic preconditions,
+        permission checks and combined writes. This primitive shares their lock.
         """
-        response = await self._request("PATCH", f"/api/documents/{document_id}/", json=payload)
-        return Document.model_validate(response.json())
+        validated = core_payload(deepcopy(payload))
+        if not validated:
+            raise PaperlessValidationError("An empty mutation is not allowed.")
+        async with self.coordinator.hold(document_id):
+            response = await self._request(
+                "PATCH", f"/api/documents/{document_id}/", json=validated
+            )
+            return Document.model_validate(response.json())
 
     async def update_custom_fields(
         self,
@@ -475,35 +490,111 @@ class PaperlessClient:
         updates: list[CustomFieldValue] | list[dict[str, Any]],
         *,
         expected_before: list[CustomFieldValue] | None = None,
+        acknowledge_external_race: bool = False,
     ) -> Document:
-        """Safely change some custom fields, preserving the others.
+        """Complete merge under the shared lock; never externally atomic.
 
-        This is the read-modify-write primitive mandated by ADR-0004, and the
-        reason a partial ``custom_fields`` PATCH must never be issued anywhere
-        else. Sending only the changed field is a silent data-loss bug -
-        VERIFIED_LIVE on 3.1.2, where doing so deleted four of five fields and
-        still returned ``200 OK``.
-
-        If ``expected_before`` is supplied, the document's current custom
-        fields must still match it or the write is refused. That is the
-        forward conflict check: something changed the document between the
-        preview and the write, so the merge would be computed from a stale
-        base.
+        Low-level compatibility helper for verified callers. Explicit race
+        acknowledgement is mandatory. Inspector/Jobs use ``mutate_document``.
         """
-        current = await self.get_document(document_id)
-
-        if expected_before is not None:
-            before = {item.field: item.value for item in current.custom_fields}
-            expected = {item.field: item.value for item in expected_before}
-            if before != expected:
-                raise PaperlessConflictError(
-                    f"Document {document_id} changed since it was read; "
-                    "refusing to write from a stale base.",
-                    details={"document_id": document_id},
+        copied = self._validate_custom_updates(updates)
+        self._require_race_ack(acknowledge_external_race)
+        async with self.coordinator.hold(document_id):
+            current = await self.get_document(document_id)
+            if expected_before is not None:
+                actual = sorted(
+                    [item.model_dump() for item in current.custom_fields], key=lambda x: x["field"]
                 )
+                expected = sorted(
+                    [item.model_dump() for item in expected_before], key=lambda x: x["field"]
+                )
+                if json_module.dumps(actual, sort_keys=True) != json_module.dumps(
+                    expected, sort_keys=True
+                ):
+                    raise PaperlessConflictError("Custom fields changed; reload before saving.")
+            merged = merge_custom_fields(current.custom_fields, copied)
+            response = await self._request(
+                "PATCH", f"/api/documents/{document_id}/", json={"custom_fields": merged}
+            )
+            return Document.model_validate(response.json())
 
-        merged = merge_custom_fields(current.custom_fields, updates)
-        response = await self._request(
-            "PATCH", f"/api/documents/{document_id}/", json={"custom_fields": merged}
+    @staticmethod
+    def _require_race_ack(acknowledged: bool) -> None:
+        if acknowledged is not True:
+            raise PaperlessValidationError(
+                "Custom-field writes require acknowledgement of the external-writer race. "
+                "Pause other writers; Paperless does not provide an atomic precondition."
+            )
+
+    @staticmethod
+    def _validate_custom_updates(
+        updates: list[CustomFieldValue] | list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        copied = deepcopy(
+            [
+                item.model_dump() if isinstance(item, CustomFieldValue) else dict(item)
+                for item in updates
+            ]
         )
-        return Document.model_validate(response.json())
+        seen: set[int] = set()
+        for item in copied:
+            if set(item) != {"field", "value"}:
+                raise PaperlessValidationError("Custom updates require exactly field and value.")
+            field = item["field"]
+            if isinstance(field, str) and field.isdecimal():
+                field = int(field)
+            if type(field) is not int or field <= 0 or field in seen:
+                raise PaperlessValidationError("Custom field IDs must be unique positive integers.")
+            item["field"] = field
+            seen.add(field)
+        return copied
+
+    async def mutate_document(
+        self,
+        document_id: int,
+        *,
+        expected_revision: str,
+        core: dict[str, Any],
+        custom_updates: list[dict[str, Any]],
+        remove_custom_fields: list[int],
+        acknowledge_external_race: bool = False,
+    ) -> MutationResult:
+        """The coordinated per-document write boundary for Inspector and Jobs.
+
+        One fresh read, permission/precondition check, complete custom merge,
+        one PATCH. All cooperating actors hold the same lock for that cycle.
+        No retry and no rollback; the PATCH response supplies actual values.
+        """
+        payload = core_payload(deepcopy(core))
+        updates = self._validate_custom_updates(custom_updates)
+        removals = list(remove_custom_fields)
+        if any(type(i) is not int or i <= 0 for i in removals) or len(set(removals)) != len(
+            removals
+        ):
+            raise PaperlessValidationError("Removal IDs must be unique positive integers.")
+        if set(removals) & {item["field"] for item in updates}:
+            raise PaperlessValidationError("A field cannot be both set and removed.")
+        if not payload and not updates and not removals:
+            raise PaperlessValidationError("An empty mutation is not allowed.")
+        if updates or removals:
+            self._require_race_ack(acknowledge_external_race)
+        async with self.coordinator.hold(document_id):
+            current = await self.get_document(document_id)
+            if current.user_can_change is not True or current.deleted_at is not None:
+                raise PaperlessForbiddenError(
+                    "This document is not confirmed editable.", status_code=403
+                )
+            if revision(current) != expected_revision:
+                raise PaperlessConflictError(
+                    "Document changed since it was opened; reload and review before saving.",
+                    details={"document_id": document_id, "phase": "before_write"},
+                )
+            if updates or removals:
+                payload["custom_fields"] = [
+                    item
+                    for item in merge_custom_fields(current.custom_fields, updates)
+                    if item["field"] not in removals
+                ]
+            response = await self._request("PATCH", f"/api/documents/{document_id}/", json=payload)
+            written = Document.model_validate(response.json())
+            return MutationResult(before=current, intended=payload, written=written)

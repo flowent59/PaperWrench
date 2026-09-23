@@ -289,7 +289,7 @@ class TestCustomFieldHazard:
 
         updated = await live_client.update_custom_fields(
             scratch_document, [{"field": targets[0], "value": "valeur modifiee"}]
-        )
+        , acknowledge_external_race=True)
 
         assert len(updated.custom_fields) == 3, "the other two fields must survive"
         values = updated.custom_field_map
@@ -325,7 +325,7 @@ class TestCustomFieldHazard:
         field_id = field_ids[field_name]
         await live_client.update_custom_fields(
             scratch_document, [{"field": field_id, "value": value}]
-        )
+        , acknowledge_external_race=True)
         document = await live_client.get_document(scratch_document)
         assert document.custom_field_map[field_id] == value
 
@@ -341,11 +341,11 @@ class TestCustomFieldHazard:
 
         await live_client.update_custom_fields(
             scratch_document, [{"field": field_ids["Montant"], "value": "EUR100.00"}]
-        )
+        , acknowledge_external_race=True)
         with pytest.raises(PaperlessValidationError):
             await live_client.update_custom_fields(
                 scratch_document, [{"field": field_ids["Montant"], "value": "EUR100,00"}]
-            )
+            , acknowledge_external_race=True)
         document = await live_client.get_document(scratch_document)
         assert document.custom_field_map[field_ids["Montant"]] == "EUR100.00"
 
@@ -360,11 +360,11 @@ class TestCustomFieldHazard:
         target = string_field_ids[0]
         await live_client.update_custom_fields(
             scratch_document, [{"field": target, "value": "a preserver"}]
-        )
+        , acknowledge_external_race=True)
         with pytest.raises(PaperlessValidationError):
             await live_client.update_custom_fields(
                 scratch_document, [{"field": 999999, "value": "x"}]
-            )
+            , acknowledge_external_race=True)
         document = await live_client.get_document(scratch_document)
         assert document.custom_field_map[target] == "a preserver"
 
@@ -508,10 +508,10 @@ class TestConcurrentCustomFieldWrites:
         results = await asyncio.gather(
             live_client.update_custom_fields(
                 scratch_document, [{"field": field_a, "value": "via-client-a"}]
-            ),
+            , acknowledge_external_race=True),
             live_client.update_custom_fields(
                 scratch_document, [{"field": field_b, "value": "via-client-b"}]
-            ),
+            , acknowledge_external_race=True),
         )
         assert len(results) == 2
 
