@@ -135,16 +135,231 @@ export interface DocumentPage {
 export const DOCUMENT_PAGE_SIZES = [25, 50, 100, 250] as const
 export type DocumentPageSize = (typeof DOCUMENT_PAGE_SIZES)[number]
 
-/** Query parameters accepted by `GET /api/v1/documents`. */
-export interface ListDocumentsParams {
+/*
+ * ---------------------------------------------------------------------------
+ * The Filter Engine (M4)
+ *
+ * These types mirror `backend/src/paperwrench/filters/` exactly. They are
+ * hand-written for now (like everything else in this file) but they are NOT
+ * where the rules live: which operators a field allows, and which tree shapes
+ * compile, come from `GET /api/v1/filters/capabilities` at runtime. The
+ * frontend renders the backend's rules; it never reimplements them, because
+ * two copies of a capability matrix drift apart at the first change.
+ * ---------------------------------------------------------------------------
+ */
+
+/** A reference to a fixed field of the Paperless document schema. */
+export interface CoreFieldRef {
+  source: 'core'
+  name: string
+}
+
+/**
+ * A reference to a user-defined custom field, **by its stable Paperless id**.
+ *
+ * `display_name` is for rendering a stored filter without a metadata
+ * round-trip. It is never the identity: renaming a custom field in Paperless
+ * must not change what a saved filter means, so only `field_id` is ever
+ * compared or sent.
+ */
+export interface CustomFieldRef {
+  source: 'custom_field'
+  field_id: number
+  display_name?: string | null
+}
+
+export type FieldRef = CoreFieldRef | CustomFieldRef
+
+export type FilterOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'in'
+  | 'contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'greater_than'
+  | 'greater_or_equal'
+  | 'less_than'
+  | 'less_or_equal'
+  | 'has_all_of'
+  | 'has_any_of'
+  | 'has_none_of'
+  | 'is_missing'
+  | 'is_present'
+  | 'is_null'
+  | 'has_value'
+  | 'is_empty'
+
+export interface FilterCondition {
+  kind: 'condition'
+  field: FieldRef
+  operator: FilterOperator
+  value?: unknown
+}
+
+export interface FilterGroup {
+  kind: 'group'
+  operator: 'and' | 'or'
+  children: FilterNode[]
+}
+
+/** Representable, but not compiled in this version - see the capabilities. */
+export interface FilterNot {
+  kind: 'not'
+  child: FilterNode
+}
+
+export type FilterNode = FilterCondition | FilterGroup | FilterNot
+
+export interface FilterSet {
+  root: FilterGroup
+}
+
+/**
+ * Full-text search, deliberately NOT a filter condition (ADR-0010).
+ *
+ * `title` searches titles only, `content` searches the extracted text, and
+ * `advanced` is raw Paperless query syntax passed through untouched. M3's
+ * single `search` parameter always meant `title` and said so nowhere.
+ */
+export type SearchMode = 'title' | 'content' | 'advanced'
+
+export interface SearchSpec {
+  mode: SearchMode
+  text: string
+}
+
+/**
+ * The body of `POST /api/v1/documents/query`.
+ *
+ * `search + filters + ordering` is the dataset's identity; `page`/`page_size`
+ * only describe which window of it to render.
+ */
+export interface DatasetPageRequest {
+  search?: SearchSpec | null
+  filters?: FilterSet | null
+  ordering?: string | null
   page?: number
   page_size?: DocumentPageSize
-  search?: string
-  query?: string
-  ordering?: string
-  document_type?: number
-  correspondent?: number
-  tag?: number
+}
+
+/** How a value must be collected for a given field/operator pair. */
+export type ValueShape =
+  | 'none'
+  | 'text'
+  | 'integer'
+  | 'float'
+  | 'decimal'
+  | 'date'
+  | 'boolean'
+  | 'select_option'
+  | 'reference_id'
+
+export type FieldType =
+  | 'text'
+  | 'long_text'
+  | 'url'
+  | 'monetary'
+  | 'date'
+  | 'datetime'
+  | 'integer'
+  | 'float'
+  | 'boolean'
+  | 'select'
+  | 'document_link'
+  | 'reference'
+  | 'tag_set'
+
+export interface OperatorCapability {
+  operator: FilterOperator
+  label: string
+  value_shape: ValueShape
+  multi: boolean
+  /** A caveat about what this really does - e.g. that text equality is
+   *  case-insensitive, or that monetary comparison ignores the currency. */
+  note: string | null
+}
+
+export interface SelectOptionCapability {
+  /** What the filter stores and compares. */
+  id: string
+  /** Display only. A rename must not change the filter's meaning. */
+  label: string
+}
+
+export interface FieldCapability {
+  key: string
+  label: string
+  field_type: FieldType
+  source: 'core' | 'custom_field'
+  custom_field_id: number | null
+  reference_kind: string | null
+  select_options: SelectOptionCapability[]
+  operators: OperatorCapability[]
+}
+
+/** Which tree shapes the backend compiler can translate. */
+export interface GroupingCapabilities {
+  and_supported: boolean
+  or_custom_fields_supported: boolean
+  or_core_fields_supported: boolean
+  or_mixed_supported: boolean
+  not_supported: boolean
+  max_conditions: number
+  max_depth: number
+  custom_field_max_depth: number
+  custom_field_max_conditions: number
+}
+
+export interface SearchModeCapability {
+  mode: SearchMode
+  label: string
+  description: string
+}
+
+export interface FilterCapabilities {
+  fields: FieldCapability[]
+  grouping: GroupingCapabilities
+  search_modes: SearchModeCapability[]
+  operator_semantics: Record<string, string>
+}
+
+export type FilterIssueStage = 'validation' | 'compilation'
+
+export interface FilterIssue {
+  stage: FilterIssueStage
+  code: string
+  /** Dotted path to the offending node, e.g. `root.children[1]`. */
+  path: string
+  message: string
+  field: string | null
+  operator: string | null
+  details: Record<string, unknown> | null
+}
+
+export interface CompiledQuery {
+  params: Record<string, string>
+  custom_field_expression: unknown
+}
+
+/**
+ * The two verdicts, deliberately separate.
+ *
+ * `valid: true, compilable: false` is a real and common answer: the filter is
+ * well-formed, but Paperless has no way to express it (an OR across a core
+ * field and a custom field, say). That is not the user having made a mistake,
+ * and the UI says so differently.
+ */
+export interface FilterValidationResponse {
+  valid: boolean
+  compilable: boolean
+  issues: FilterIssue[]
+  compiled: CompiledQuery | null
+}
+
+export interface FilterCountResponse {
+  count: number
+  compiled: CompiledQuery
 }
 
 /**
@@ -178,4 +393,11 @@ export interface DocumentTypeDefinition {
   id: number
   name: string
   slug: string
+}
+
+export interface StoragePathDefinition {
+  id: number
+  name: string
+  slug: string
+  path: string | null
 }

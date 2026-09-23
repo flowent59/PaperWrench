@@ -75,6 +75,51 @@ export const messages = {
     comingSoon: 'Coming soon',
     milestone: 'This screen is delivered in a later milestone.',
   },
+  /**
+   * Filter Builder strings.
+   *
+   * Note what is NOT here: operator labels, field labels and the caveats
+   * shown beside an operator all come from `GET /filters/capabilities`.
+   * They describe the backend compiler's behaviour, so the backend words
+   * them - duplicating them here would create a second copy to drift.
+   */
+  filters: {
+    title: 'Filters',
+    show: 'Filters',
+    hide: 'Hide filters',
+    where: 'Where',
+    and: 'And',
+    or: 'Or',
+    field: 'Field',
+    operator: 'Condition',
+    addCondition: 'Add condition',
+    addOrGroup: 'Add "any of" group',
+    addAlternative: 'Add alternative',
+    removeCondition: 'Remove condition',
+    clearAll: 'Clear filters',
+    anyOfTheFollowing: 'Any of the following:',
+    orGroupCustomFieldsOnly:
+      'An "any of" group can only combine custom fields - Paperless has no way to express OR across core document fields.',
+    unsupportedNode: 'This filter contains a condition this version cannot display or run.',
+    chooseValue: 'Choose...',
+    valueListPlaceholder: 'Comma-separated values',
+    amountPlaceholder: 'e.g. 0.00',
+    booleanTrue: 'Yes',
+    booleanFalse: 'No',
+    matching: '{count} documents match',
+    matchingUnknown: 'Match count unavailable',
+    counting: 'Counting...',
+    valid: 'Filter is valid',
+    notCompilable: 'Paperless cannot run this filter',
+    notCompilableBody:
+      'The filter itself is fine - Paperless has no way to express this exact question, so PaperWrench will not run an approximation of it.',
+    invalid: 'Filter is not valid',
+    noFilters: 'No filters. Every document matches.',
+    searchMode: 'Search in',
+    compiledQuery: 'Query sent to Paperless',
+    showCompiled: 'Show query',
+    hideCompiled: 'Hide query',
+  },
   explorer: {
     title: 'Explorer',
     subtitle: 'Browse your Paperless-ngx library. Read-only: nothing here writes to Paperless.',

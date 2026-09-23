@@ -19,6 +19,8 @@ edited: a new record supersedes it, and the old one is marked accordingly.
 | [0007](0007-filterset-compilable-subset.md) | FilterSet compilable subset | Accepted |
 | [0008](0008-api-compatibility-is-decided-by-status-code.md) | API compatibility is decided by the status code, not by `X-Api-Version` | Accepted |
 | [0009](0009-metadata-registry-cache-not-source-of-truth.md) | Metadata Registry — a TTL cache, never a second source of truth | Accepted |
+| [0010](0010-search-is-not-a-filter.md) | Search is a separate primitive, not a FilterSet condition | Accepted |
+| [0011](0011-empty-and-missing-are-not-the-same-question.md) | `is missing`, `is null` and `is empty` are three different questions | Accepted |
 
 ## Format
 

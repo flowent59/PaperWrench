@@ -1,15 +1,26 @@
 /**
- * The Explorer - M3's headline deliverable.
+ * The Explorer - M3's headline deliverable, rebuilt on the Filter Engine in M4.
  *
  * Read-only browsing of the Paperless-ngx library: server-side pagination,
- * server-side sorting (allowlisted on the backend), simple search, basic
- * direct metadata filters, column visibility, multi-selection persisted
- * across page navigation by document id, and dynamic custom-field columns
- * pulled live from the Metadata Registry.
+ * server-side sorting (allowlisted on the backend), full-text search with an
+ * explicit mode, column visibility, multi-selection persisted across page
+ * navigation by document id, and dynamic custom-field columns pulled live
+ * from the Metadata Registry.
  *
- * This component issues exactly one kind of request: GET. Nothing here
- * ever calls a mutating endpoint - the no-write guarantee is enforced by
- * `documentsApi`/`metadataApi` only exposing `GET`s in the first place.
+ * M4 replaced M3's three ad-hoc dropdowns (document type / correspondent /
+ * tag) with the Filter Builder. There is now exactly one filtering path -
+ * FilterSet -> backend validation -> compiler -> Paperless - rather than a
+ * simple one and a real one, which would have drifted apart the first time
+ * they disagreed about what "no value" means.
+ *
+ * A dataset here is `search + filters + ordering`; the page and page size
+ * only choose which window of it to render. Nothing on this screen ever
+ * fetches more than one page, whatever the filter matches.
+ *
+ * This component only reads. The single POST it issues is
+ * `/documents/query`, which is a read expressed as a POST because a filter
+ * tree does not belong in a query string; `documentsApi` and `metadataApi`
+ * expose no mutating endpoint at all.
  */
 
 import {
@@ -19,7 +30,15 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
-import { AlertTriangle, ChevronLeft, ChevronRight, Columns3, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Columns3,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react'
 import * as React from 'react'
 
 import {
@@ -27,9 +46,19 @@ import {
   useCustomFields,
   useDocumentTypes,
   useDocuments,
+  useFilterCapabilities,
+  useFilterCount,
+  useFilterValidation,
+  useStoragePaths,
   useTags,
 } from '@/api/queries'
-import type { DocumentListItem, DocumentPageSize, ListDocumentsParams } from '@/api/types'
+import type {
+  DatasetPageRequest,
+  DocumentListItem,
+  DocumentPageSize,
+  FilterSet,
+  SearchMode,
+} from '@/api/types'
 import { DOCUMENT_PAGE_SIZES } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -38,6 +67,8 @@ import { cn } from '@/lib/utils'
 
 import { buildBaseColumns, buildCustomFieldColumns } from './columns'
 import { usePersistedColumnVisibility } from './column-visibility'
+import { FilterBuilder } from './filter-builder'
+import { emptyFilterSet, isEmpty } from './filter-builder/model'
 import { useDocumentSelection } from './selection'
 
 /** Maps a TanStack Table sort state to the single `ordering` key PaperWrench accepts. */
@@ -52,10 +83,11 @@ export function ExplorerPage() {
   const [pageSize, setPageSize] = React.useState<DocumentPageSize>(100)
   const [searchInput, setSearchInput] = React.useState('')
   const [search, setSearch] = React.useState('')
+  const [searchMode, setSearchMode] = React.useState<SearchMode>('title')
   const [sorting, setSorting] = React.useState<SortingState>([])
-  const [documentType, setDocumentType] = React.useState<number | undefined>(undefined)
-  const [correspondent, setCorrespondent] = React.useState<number | undefined>(undefined)
-  const [tag, setTag] = React.useState<number | undefined>(undefined)
+  const [filters, setFilters] = React.useState<FilterSet>(emptyFilterSet)
+  const [filtersOpen, setFiltersOpen] = React.useState(false)
+  const [showCompiled, setShowCompiled] = React.useState(false)
   const [columnVisibility, setColumnVisibility] = usePersistedColumnVisibility()
   const [columnsMenuOpen, setColumnsMenuOpen] = React.useState(false)
   const selection = useDocumentSelection()
@@ -69,22 +101,71 @@ export function ExplorerPage() {
     return () => window.clearTimeout(handle)
   }, [searchInput])
 
+  const capabilitiesQuery = useFilterCapabilities()
+
+  // The backend decides whether the current filter is valid and whether
+  // Paperless can express it. Cheap enough to ask on every edit: it touches
+  // the metadata cache and pure logic, never Paperless.
+  const filtersEmpty = isEmpty(filters)
+  const validation = useFilterValidation(filters, !filtersEmpty)
+  const filterIssues = validation.data?.issues ?? []
+
+  // Three states, not two, and the difference matters for what is on screen:
+  //   - runnable: no filter, or one the backend confirmed compilable
+  //   - known bad: the backend has answered, and Paperless cannot express it
+  //   - in between: still being validated
+  // While in between, the request is withheld (no 422 to collect) but no
+  // refusal is shown either - the previous page stays put rather than
+  // flashing an error at someone who is still building the filter.
+  const filtersRunnable = filtersEmpty || validation.data?.compilable === true
+  const filtersKnownBad =
+    !filtersEmpty && validation.data !== undefined && !validation.data.compilable
+
+  const searchSpec = search.trim() === '' ? null : { mode: searchMode, text: search }
+
+  // Only ask for documents once the filter is known to be runnable. Sending
+  // an uncompilable filter would just collect a 422; more importantly, the
+  // grid must never show rows produced by a *different* filter than the one
+  // on screen.
   const ordering = sortingToOrdering(sorting)
-  const params: ListDocumentsParams = {
+  const request: DatasetPageRequest = {
     page,
     page_size: pageSize,
-    ...(search ? { search } : {}),
+    ...(searchSpec !== null ? { search: searchSpec } : {}),
+    ...(filtersEmpty ? {} : { filters }),
     ...(ordering !== undefined ? { ordering } : {}),
-    ...(documentType !== undefined ? { document_type: documentType } : {}),
-    ...(correspondent !== undefined ? { correspondent } : {}),
-    ...(tag !== undefined ? { tag } : {}),
   }
 
-  const documentsQuery = useDocuments(params)
+  const documentsQuery = useDocuments(request, filtersRunnable)
+
+  // The count comes from the Filter Engine, which asks Paperless for its own
+  // `count` without fetching anything. It is shown next to the page total so
+  // a disagreement between "what the grid is paging through" and "what a
+  // later operation would act on" would be visible rather than silent.
+  const countQuery = useFilterCount(filters, searchSpec, !filtersEmpty && filtersRunnable)
+
   const tagsQuery = useTags()
   const correspondentsQuery = useCorrespondents()
   const documentTypesQuery = useDocumentTypes()
+  const storagePathsQuery = useStoragePaths()
   const customFieldsQuery = useCustomFields()
+
+  // Reference pickers for the builder, keyed by the `reference_kind` the
+  // backend attaches to each field. Nothing is hardcoded per field name.
+  const referenceOptions = React.useMemo(
+    () => ({
+      tag: tagsQuery.data ?? [],
+      correspondent: correspondentsQuery.data ?? [],
+      document_type: documentTypesQuery.data ?? [],
+      storage_path: storagePathsQuery.data ?? [],
+    }),
+    [
+      tagsQuery.data,
+      correspondentsQuery.data,
+      documentTypesQuery.data,
+      storagePathsQuery.data,
+    ],
+  )
 
   const columns = React.useMemo<ColumnDef<DocumentListItem>[]>(
     () => [...buildBaseColumns(), ...buildCustomFieldColumns(customFieldsQuery.data ?? [])],
@@ -121,11 +202,17 @@ export function ExplorerPage() {
   }
 
   function resetFilters() {
-    setDocumentType(undefined)
-    setCorrespondent(undefined)
-    setTag(undefined)
+    setFilters(emptyFilterSet())
     setSearchInput('')
     setSearch('')
+    setPage(1)
+  }
+
+  function onFiltersChange(next: FilterSet) {
+    setFilters(next)
+    // Any filter change redefines the dataset, so the current page number is
+    // meaningless against it - page 7 of the old result set is not page 7 of
+    // the new one.
     setPage(1)
   }
 
@@ -148,55 +235,38 @@ export function ExplorerPage() {
         />
 
         <select
-          value={documentType ?? ''}
+          value={searchMode}
           onChange={(event) => {
-            setDocumentType(event.target.value === '' ? undefined : Number(event.target.value))
+            setSearchMode(event.target.value as SearchMode)
             setPage(1)
           }}
           className="h-9 rounded-md border border-input bg-background px-2 text-sm focus-ring"
-          aria-label={messages.explorer.filterDocumentType}
+          aria-label={messages.filters.searchMode}
         >
-          <option value="">{`${messages.explorer.filterDocumentType}: ${messages.explorer.filterAll}`}</option>
-          {(documentTypesQuery.data ?? []).map((dt) => (
-            <option key={dt.id} value={dt.id}>
-              {dt.name}
+          {/* The three modes are three different Paperless indexes, not one
+              "search" with options. M3's single search box always meant
+              title and said so nowhere. */}
+          {(capabilitiesQuery.data?.search_modes ?? []).map((mode) => (
+            <option key={mode.mode} value={mode.mode} title={mode.description}>
+              {mode.label}
             </option>
           ))}
         </select>
 
-        <select
-          value={correspondent ?? ''}
-          onChange={(event) => {
-            setCorrespondent(event.target.value === '' ? undefined : Number(event.target.value))
-            setPage(1)
-          }}
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm focus-ring"
-          aria-label={messages.explorer.filterCorrespondent}
+        <Button
+          variant={filtersOpen ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setFiltersOpen((open) => !open)}
+          aria-expanded={filtersOpen}
         >
-          <option value="">{`${messages.explorer.filterCorrespondent}: ${messages.explorer.filterAll}`}</option>
-          {(correspondentsQuery.data ?? []).map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={tag ?? ''}
-          onChange={(event) => {
-            setTag(event.target.value === '' ? undefined : Number(event.target.value))
-            setPage(1)
-          }}
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm focus-ring"
-          aria-label={messages.explorer.filterTag}
-        >
-          <option value="">{`${messages.explorer.filterTag}: ${messages.explorer.filterAll}`}</option>
-          {(tagsQuery.data ?? []).map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+          {filtersOpen ? messages.filters.hide : messages.filters.show}
+          {!filtersEmpty && (
+            <span className="ml-1 rounded-full bg-primary/20 px-1.5 text-xs tabular">
+              {filters.root.children.length}
+            </span>
+          )}
+        </Button>
 
         <Button variant="outline" size="sm" onClick={resetFilters}>
           <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -237,6 +307,101 @@ export function ExplorerPage() {
         </div>
       </div>
 
+      {/* The Filter Builder. Its field list, operator lists and grouping
+          rules all come from the backend's capabilities endpoint, so it can
+          only build shapes the compiler can translate - and the verdict
+          underneath is the backend's, not a local guess. */}
+      {filtersOpen && (
+        <Card>
+          <CardContent className="flex flex-col gap-4 p-4">
+            {capabilitiesQuery.isPending ? (
+              <p className="text-sm text-muted-foreground">{messages.explorer.loading}</p>
+            ) : capabilitiesQuery.isError ? (
+              <p className="text-sm text-destructive">{messages.errors.generic}</p>
+            ) : (
+              <>
+                <FilterBuilder
+                  filters={filters}
+                  onChange={onFiltersChange}
+                  fields={capabilitiesQuery.data?.fields ?? []}
+                  grouping={capabilitiesQuery.data?.grouping}
+                  issues={filterIssues}
+                  referenceOptions={referenceOptions}
+                />
+
+                <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 text-sm">
+                  {filtersEmpty ? (
+                    <span className="text-muted-foreground">
+                      {messages.filters.noFilters}
+                    </span>
+                  ) : validation.data === undefined ? (
+                    <span className="text-muted-foreground">{messages.filters.counting}</span>
+                  ) : validation.data.valid && validation.data.compilable ? (
+                    <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-500">
+                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                      {messages.filters.valid}
+                    </span>
+                  ) : validation.data.valid ? (
+                    // Valid but not compilable: not a user error. Paperless
+                    // simply cannot express this question, and PaperWrench
+                    // will not run an approximation of it.
+                    <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
+                      <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                      {messages.filters.notCompilable}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-destructive">
+                      <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                      {messages.filters.invalid}
+                    </span>
+                  )}
+
+                  {!filtersEmpty && filtersRunnable && (
+                    <span className="text-muted-foreground">
+                      {countQuery.data === undefined
+                        ? messages.filters.counting
+                        : messages.filters.matching.replace(
+                            '{count}',
+                            String(countQuery.data.count),
+                          )}
+                    </span>
+                  )}
+
+                  <Button variant="ghost" size="sm" onClick={resetFilters}>
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    {messages.filters.clearAll}
+                  </Button>
+
+                  {validation.data?.compiled != null && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto"
+                      onClick={() => setShowCompiled((open) => !open)}
+                    >
+                      {showCompiled
+                        ? messages.filters.hideCompiled
+                        : messages.filters.showCompiled}
+                    </Button>
+                  )}
+                </div>
+
+                {/* What will actually be asked of Paperless. Shown on demand
+                    rather than hidden: a filter engine that cannot show its
+                    working is one you have to take on trust. */}
+                {showCompiled && validation.data?.compiled != null && (
+                  <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
+                    {Object.entries(validation.data.compiled.params)
+                      .map(([key, value]) => `${key}=${value}`)
+                      .join('\n') || messages.filters.noFilters}
+                  </pre>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {selection.count > 0 && (
         <div className="flex items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
           <span className="font-medium">
@@ -250,7 +415,15 @@ export function ExplorerPage() {
 
       <Card>
         <CardContent className="p-0">
-          {documentsQuery.isError ? (
+          {filtersKnownBad ? (
+            <div className="flex flex-col items-center gap-2 p-10 text-center">
+              <AlertTriangle className="h-8 w-8 text-amber-500" aria-hidden="true" />
+              <p className="font-medium">{messages.filters.notCompilable}</p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                {messages.filters.notCompilableBody}
+              </p>
+            </div>
+          ) : documentsQuery.isError ? (
             <div className="flex flex-col items-center gap-3 p-10 text-center">
               <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
               <p className="font-medium">{messages.explorer.errorTitle}</p>

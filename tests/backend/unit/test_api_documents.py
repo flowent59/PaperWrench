@@ -1,9 +1,16 @@
-"""Contract tests for the Explorer's documents API (M3).
+"""Contract tests for the Explorer's documents API (M3, rebuilt in M4).
 
 These are unit tests against the FastAPI app with ``respx`` mocking the
 Paperless side. They prove PaperWrench's own endpoint shape, its ordering
 allowlist, its page-size validation and its normalization - never that
 Paperless's own shapes are real (see tests/backend/live for that).
+
+M4 replaced M3's ``GET /api/v1/documents`` (which carried three ad-hoc
+filter parameters) with ``POST /api/v1/documents/query``, whose body is a
+dataset page request. Every M3 guarantee asserted here still holds; only the
+way the request is expressed changed. The filtering assertions in particular
+now go through the Filter Engine, which is the point: there is one filtering
+path, not two.
 """
 
 from __future__ import annotations
@@ -56,6 +63,30 @@ def _mock_reference_endpoints(
     )
 
 
+def _core(operator: str, name: str, value: object = None) -> dict[str, object]:
+    """One core-field condition, in wire form."""
+    return {
+        "kind": "condition",
+        "field": {"source": "core", "name": name},
+        "operator": operator,
+        "value": value,
+    }
+
+
+def _custom(operator: str, field_id: int, value: object = None) -> dict[str, object]:
+    """One custom-field condition, in wire form."""
+    return {
+        "kind": "condition",
+        "field": {"source": "custom_field", "field_id": field_id},
+        "operator": operator,
+        "value": value,
+    }
+
+
+def _filters(*children: dict[str, object], operator: str = "and") -> dict[str, object]:
+    return {"root": {"kind": "group", "operator": operator, "children": list(children)}}
+
+
 def _document(**overrides: object) -> dict[str, object]:
     base: dict[str, object] = {
         "id": 100,
@@ -90,7 +121,7 @@ def test_list_documents_returns_normalized_page_envelope(client: TestClient) -> 
         return_value=Response(200, json=_page([_document()], count=1), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"page": 1, "page_size": 25})
+    response = client.post("/api/v1/documents/query", json={"page": 1, "page_size": 25})
 
     assert response.status_code == 200
     payload = response.json()
@@ -116,7 +147,7 @@ def test_list_documents_never_leaks_the_paperless_token(client: TestClient) -> N
         return_value=Response(500, json={"detail": "boom"}, headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert "test-token-abcdef123456" not in response.text
 
@@ -124,7 +155,7 @@ def test_list_documents_never_leaks_the_paperless_token(client: TestClient) -> N
 def test_documents_router_is_registered_in_the_openapi_schema(client: TestClient) -> None:
     response = client.get("/api/openapi.json")
     assert response.status_code == 200
-    assert "/api/v1/documents" in response.json()["paths"]
+    assert "/api/v1/documents/query" in response.json()["paths"]
 
 
 # ------------------------------------------------------------- pagination
@@ -135,7 +166,7 @@ def test_page_count_is_computed_from_total_and_page_size(client: TestClient) -> 
         return_value=Response(200, json=_page([], count=101), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"page_size": 25})
+    response = client.post("/api/v1/documents/query", json={"page_size": 25})
 
     assert response.status_code == 200
     assert response.json()["page_count"] == 5  # ceil(101 / 25)
@@ -148,7 +179,7 @@ def test_page_size_default_is_one_hundred(client: TestClient) -> None:
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert response.status_code == 200
     assert response.json()["page_size"] == 100
@@ -163,7 +194,7 @@ def test_invalid_page_size_is_rejected_with_422_and_never_forwarded(client: Test
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"page_size": 13})
+    response = client.post("/api/v1/documents/query", json={"page_size": 13})
 
     assert response.status_code == 422
     body = response.json()
@@ -181,7 +212,7 @@ def test_there_is_no_all_page_size(client: TestClient) -> None:
     )
 
     for size in (0, -1, 1000, 251):
-        response = client.get("/api/v1/documents", params={"page_size": size})
+        response = client.post("/api/v1/documents/query", json={"page_size": size})
         assert response.status_code == 422, f"page_size={size} should be rejected"
 
 
@@ -193,7 +224,10 @@ def test_search_maps_to_title_search(client: TestClient) -> None:
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"search": "vacations"})
+    response = client.post(
+        "/api/v1/documents/query",
+        json={"search": {"mode": "title", "text": "vacations"}},
+    )
 
     assert response.status_code == 200
     request: Request = route.calls.last.request
@@ -208,7 +242,10 @@ def test_query_maps_to_paperless_query_as_is(client: TestClient) -> None:
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"query": 'title:"foo bar"'})
+    response = client.post(
+        "/api/v1/documents/query",
+        json={"search": {"mode": "advanced", "text": 'title:"foo bar"'}},
+    )
 
     assert response.status_code == 200
     request: Request = route.calls.last.request
@@ -216,19 +253,74 @@ def test_query_maps_to_paperless_query_as_is(client: TestClient) -> None:
 
 
 @respx.mock
-def test_search_and_query_together_are_rejected(client: TestClient) -> None:
+def test_only_one_search_mode_can_be_expressed_at_a_time(client: TestClient) -> None:
+    """M3 could send `search` and `query` together and be rejected downstream.
+
+    M4 makes that unrepresentable rather than merely invalid: a SearchSpec
+    carries exactly one mode. Paperless returns 400 when more than one of
+    text/title_search/query/more_like_id is present (VERIFIED_SOURCE), and
+    the shape of the request body now makes that impossible to build.
+    """
     _mock_reference_endpoints()
     route = respx.get(f"{BASE}/api/documents/").mock(
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get(
-        "/api/v1/documents", params={"search": "a", "query": "b"}
+    response = client.post(
+        "/api/v1/documents/query",
+        json={"search": {"mode": "nonsense", "text": "a"}},
     )
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     assert not route.called
+
+
+@respx.mock
+def test_an_empty_search_is_refused_rather_than_silently_dropped(client: TestClient) -> None:
+    """An all-whitespace search must not become "no search" behind the user.
+
+    Sending `title_search=` puts Paperless into search mode with an empty
+    Tantivy query - a different code path from not searching at all - and
+    dropping the parameter silently would make an empty search box mean
+    "every document" without saying so.
+    """
+    _mock_reference_endpoints()
+    route = respx.get(f"{BASE}/api/documents/").mock(
+        return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
+    )
+
+    response = client.post(
+        "/api/v1/documents/query", json={"search": {"mode": "title", "text": "   "}}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert not route.called
+
+
+@respx.mock
+def test_content_search_mode_maps_to_the_text_parameter(client: TestClient) -> None:
+    """The three search modes are three different Paperless parameters.
+
+    M3's single `search` parameter always meant `title_search` and said so
+    nowhere; naming the mode is the whole point of SearchSpec (ADR-0010).
+    """
+    _mock_reference_endpoints()
+    route = respx.get(f"{BASE}/api/documents/").mock(
+        return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
+    )
+
+    response = client.post(
+        "/api/v1/documents/query",
+        json={"search": {"mode": "content", "text": "vacations"}},
+    )
+
+    assert response.status_code == 200
+    request: Request = route.calls.last.request
+    assert request.url.params["text"] == "vacations"
+    assert "title_search" not in request.url.params
+    assert "query" not in request.url.params
 
 
 # ---------------------------------------------------------------- ordering
@@ -239,7 +331,7 @@ def test_ordering_core_field_is_translated_and_forwarded(client: TestClient) -> 
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"ordering": "-created"})
+    response = client.post("/api/v1/documents/query", json={"ordering": "-created"})
 
     assert response.status_code == 200
     request: Request = route.calls.last.request
@@ -253,7 +345,7 @@ def test_ordering_correspondent_translates_to_correspondent_name(client: TestCli
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"ordering": "correspondent"})
+    response = client.post("/api/v1/documents/query", json={"ordering": "correspondent"})
 
     assert response.status_code == 200
     request: Request = route.calls.last.request
@@ -269,7 +361,7 @@ def test_invalid_ordering_is_rejected_and_never_forwarded_to_paperless(
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"ordering": "not_a_real_field"})
+    response = client.post("/api/v1/documents/query", json={"ordering": "not_a_real_field"})
 
     assert response.status_code == 422
     body = response.json()
@@ -288,7 +380,7 @@ def test_ordering_by_a_bare_id_style_paperless_field_is_still_rejected(
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"ordering": "owner"})
+    response = client.post("/api/v1/documents/query", json={"ordering": "owner"})
 
     assert response.status_code == 422
     assert not route.called
@@ -303,7 +395,7 @@ def test_ordering_by_known_monetary_custom_field_is_accepted(client: TestClient)
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"ordering": "custom_field_42"})
+    response = client.post("/api/v1/documents/query", json={"ordering": "custom_field_42"})
 
     assert response.status_code == 200
     request: Request = route.calls.last.request
@@ -321,7 +413,7 @@ def test_ordering_by_known_date_custom_field_is_accepted_descending(client: Test
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"ordering": "-custom_field_11"})
+    response = client.post("/api/v1/documents/query", json={"ordering": "-custom_field_11"})
 
     assert response.status_code == 200
     request: Request = route.calls.last.request
@@ -337,7 +429,7 @@ def test_ordering_by_unknown_custom_field_id_is_rejected(client: TestClient) -> 
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"ordering": "custom_field_9999"})
+    response = client.post("/api/v1/documents/query", json={"ordering": "custom_field_9999"})
 
     assert response.status_code == 422
     assert not route.called
@@ -365,7 +457,7 @@ def test_ordering_by_a_select_type_custom_field_is_rejected_in_m3(client: TestCl
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"ordering": "custom_field_55"})
+    response = client.post("/api/v1/documents/query", json={"ordering": "custom_field_55"})
 
     assert response.status_code == 422
     assert not route.called
@@ -380,7 +472,7 @@ def test_ordering_by_a_boolean_type_custom_field_is_rejected_in_m3(client: TestC
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"ordering": "custom_field_66"})
+    response = client.post("/api/v1/documents/query", json={"ordering": "custom_field_66"})
 
     assert response.status_code == 422
     assert not route.called
@@ -423,7 +515,10 @@ def test_document_type_filter_maps_to_paperless_param(client: TestClient) -> Non
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"document_type": 3})
+    response = client.post(
+        "/api/v1/documents/query",
+        json={"filters": _filters(_core("equals", "document_type", 3))},
+    )
 
     assert response.status_code == 200
     request: Request = route.calls.last.request
@@ -437,7 +532,10 @@ def test_correspondent_filter_maps_to_paperless_param(client: TestClient) -> Non
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"correspondent": 7})
+    response = client.post(
+        "/api/v1/documents/query",
+        json={"filters": _filters(_core("equals", "correspondent", 7))},
+    )
 
     assert response.status_code == 200
     request: Request = route.calls.last.request
@@ -451,7 +549,10 @@ def test_tag_filter_maps_to_paperless_param(client: TestClient) -> None:
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents", params={"tag": 1})
+    response = client.post(
+        "/api/v1/documents/query",
+        json={"filters": _filters(_core("has_all_of", "tags", [1]))},
+    )
 
     assert response.status_code == 200
     request: Request = route.calls.last.request
@@ -465,14 +566,14 @@ def test_search_pagination_and_ordering_compose_in_a_single_request(client: Test
         return_value=Response(200, json=_page([], count=0), headers=V10_HEADERS)
     )
 
-    response = client.get(
-        "/api/v1/documents",
-        params={
-            "search": "vacations",
+    response = client.post(
+        "/api/v1/documents/query",
+        json={
+            "search": {"mode": "title", "text": "vacations"},
             "ordering": "-created",
             "page": 2,
             "page_size": 50,
-            "document_type": 3,
+            "filters": _filters(_core("equals", "document_type", 3)),
         },
     )
 
@@ -500,7 +601,7 @@ def test_unresolvable_correspondent_renders_as_unresolved_reference_not_null(
         )
     )
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert response.status_code == 200
     item = response.json()["items"][0]
@@ -520,7 +621,7 @@ def test_unresolvable_tag_renders_as_unresolved_reference(client: TestClient) ->
         )
     )
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert response.status_code == 200
     item = response.json()["items"][0]
@@ -542,7 +643,7 @@ def test_null_correspondent_and_document_type_render_as_null_not_unresolved(
         )
     )
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert response.status_code == 200
     item = response.json()["items"][0]
@@ -577,7 +678,7 @@ def test_custom_fields_include_absent_fields_for_every_known_field(client: TestC
         )
     )
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert response.status_code == 200
     fields = {cf["field_id"]: cf for cf in response.json()["items"][0]["custom_fields"]}
@@ -610,7 +711,7 @@ def test_custom_field_explicit_null_is_distinct_from_absent(client: TestClient) 
         )
     )
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert response.status_code == 200
     field = response.json()["items"][0]["custom_fields"][0]
@@ -641,7 +742,7 @@ def test_monetary_amount_is_serialized_as_decimal_safe_string(client: TestClient
         )
     )
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert response.status_code == 200
     field = response.json()["items"][0]["custom_fields"][0]
@@ -672,7 +773,7 @@ def test_user_can_change_is_preserved_through_to_the_dto(client: TestClient) -> 
         )
     )
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert response.status_code == 200
     assert response.json()["items"][0]["user_can_change"] is False
@@ -686,7 +787,7 @@ def test_paperless_unreachable_maps_to_the_existing_error_envelope(client: TestC
 
     respx.get(f"{BASE}/api/documents/").mock(side_effect=httpx.ConnectError("boom"))
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert response.status_code in (502, 503, 504)
     body = response.json()
@@ -708,7 +809,7 @@ def test_paperless_auth_expired_is_mapped_not_leaked_raw(client: TestClient) -> 
         return_value=Response(401, json={"detail": "Invalid token."}, headers=V10_HEADERS)
     )
 
-    response = client.get("/api/v1/documents")
+    response = client.post("/api/v1/documents/query", json={})
 
     assert response.status_code == 502
     body = response.json()
@@ -733,9 +834,14 @@ def test_list_documents_never_issues_a_write_request_to_paperless(client: TestCl
         method__in=["PATCH", "POST", "PUT", "DELETE"], host="paperless.test"
     ).mock(return_value=Response(500, json={"detail": "should never be called"}))
 
-    response = client.get(
-        "/api/v1/documents",
-        params={"search": "vacations", "ordering": "-created", "page": 1, "page_size": 25},
+    response = client.post(
+        "/api/v1/documents/query",
+        json={
+            "search": {"mode": "title", "text": "vacations"},
+            "ordering": "-created",
+            "page": 1,
+            "page_size": 25,
+        },
     )
 
     assert response.status_code == 200

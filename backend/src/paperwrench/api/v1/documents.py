@@ -1,4 +1,4 @@
-"""The Explorer's documents API - M3.
+"""The Explorer's documents API - M3, rebuilt on the Filter Engine in M4.
 
 This is PaperWrench's own, normalized view of "a page of documents", never a
 passthrough of Paperless's ``DocumentSerializer``. The frontend (TanStack
@@ -6,19 +6,37 @@ Table) reads this shape and this shape only; it must not need to know
 anything about Paperless's field names, its ``{count, next, previous,
 results}`` envelope, or its ordering quirks.
 
-Scope (M3, read-only):
+**M4 changed the entry point.** M3's ``GET /api/v1/documents`` carried three
+ad-hoc filter parameters (``document_type``, ``correspondent``, ``tag``).
+Keeping them alongside the Filter Engine would have left two filtering paths
+with different capabilities and different failure modes - exactly what the M4
+brief forbids. They are gone, and the single entry point is now::
+
+    POST /api/v1/documents/query
+
+whose body is a dataset page request::
+
+    {search, filters, ordering, page, page_size}
+
+which is ``SearchSpec + FilterSet + Ordering`` (the dataset's identity, see
+:class:`~paperwrench.filters.model.DatasetQuery`) plus the window onto it.
+A POST for a read is deliberate: the filter tree is a nested structure, and
+encoding it into a query string would make it neither readable nor reliably
+round-trippable. Nothing here writes.
+
+Scope (read-only):
 
 * server-side pagination (``page``, ``page_size``), never a fetch-all
-* simple search (``search`` -> Paperless ``title_search``, ``query`` opaque
-  full-text passthrough) - no Tantivy syntax parsing here, ever
+* search as an explicit :class:`~paperwrench.filters.model.SearchSpec` with a
+  named mode - M3's single ``search`` parameter always meant *title* search
+  and said so nowhere. The three Paperless modes (title / content / advanced)
+  are now distinct and cannot be confused (ADR-0010).
 * ordering restricted to a **server-defined allowlist**, because M1 already
   proved (``docs/paperless-api.md`` §6) that Paperless silently *ignores* an
-  ordering value it does not recognise instead of rejecting it. A typo here
-  must fail loudly in PaperWrench, not silently stop sorting while looking
-  like it worked.
-* basic direct metadata filters (document type, correspondent, tag) that map
-  onto Paperless params already proven to compose with pagination and
-  ordering (M1). No FilterSet, no filter DSL, no nested AND/OR - that is M4.
+  ordering value it does not recognise instead of rejecting it.
+* filtering exclusively through the Filter Engine: every condition is
+  validated and compiled before a request is built, and an expression that
+  cannot be compiled is refused outright (ADR-0007) rather than approximated.
 * dynamic custom-field columns, resolved through the shared
   :class:`~paperwrench.paperless.registry.MetadataRegistry`, preserving the
   ABSENT/NULL/PRESENT distinction and Decimal-safe monetary amounts.
@@ -28,19 +46,24 @@ Nothing in this module ever issues a PATCH, POST or DELETE to Paperless.
 
 from __future__ import annotations
 
-from typing import Annotated
 from typing import Any
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import Query
 from pydantic import BaseModel
 from pydantic import Field
 
 from paperwrench.api.deps import get_metadata_registry
 from paperwrench.api.deps import get_paperless_client
+from paperwrench.errors import ErrorCode
 from paperwrench.errors import InvalidOrderingError
 from paperwrench.errors import InvalidPageSizeError
+from paperwrench.errors import PaperWrenchError
+from paperwrench.filters import DatasetPageRequest
+from paperwrench.filters import FieldCatalog
+from paperwrench.filters import SearchMode
+from paperwrench.filters import SearchSpec
+from paperwrench.filters import validate_and_compile
 from paperwrench.paperless import Correspondent
 from paperwrench.paperless import CustomField
 from paperwrench.paperless import Document
@@ -328,101 +351,125 @@ async def _resolve_tags(
     return [await _resolve_ref(registry, "tag", tag_id) for tag_id in tag_ids]
 
 
-# ------------------------------------------------------------------- route
-@router.get(
-    "",
-    response_model=DocumentPage,
-    summary="List documents (server-side paginated, sorted and searched)",
-)
-async def list_documents(
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query()] = DEFAULT_PAGE_SIZE,
-    search: Annotated[
-        str | None,
-        Query(
-            description=(
-                "Simple title search. Mapped to Paperless `title_search` - an "
-                "opaque string, never parsed as Tantivy syntax here."
-            )
-        ),
-    ] = None,
-    query: Annotated[
-        str | None,
-        Query(
-            description=(
-                "Optional advanced full-text search, mapped to Paperless's "
-                "`query` parameter as-is. Distinct from `search`: Paperless "
-                "itself rejects specifying more than one search mode at once."
-            )
-        ),
-    ] = None,
-    ordering: Annotated[
-        str | None,
-        Query(
-            description=(
-                "One of the allowlisted ordering keys (optionally `-`-prefixed "
-                "for descending). An unknown value is rejected with 422 - it is "
-                "never forwarded to Paperless, which would otherwise silently "
-                "ignore it."
-            )
-        ),
-    ] = None,
-    document_type: Annotated[int | None, Query(description="Filter by document type id")] = None,
-    correspondent: Annotated[int | None, Query(description="Filter by correspondent id")] = None,
-    tag: Annotated[int | None, Query(description="Filter by a single tag id")] = None,
-    client: PaperlessClient = Depends(get_paperless_client),
-    registry: MetadataRegistry = Depends(get_metadata_registry),
-) -> DocumentPage:
-    validate_page_size(page_size)
+# ------------------------------------------------------------------- search
+#: PaperWrench search mode -> the Paperless query parameter that implements it.
+#:
+#: VERIFIED_SOURCE (3.1.2, ``documents/views.py``): the server accepts exactly
+#: ``text``, ``title_search``, ``query`` and ``more_like_id``, and returns 400
+#: if more than one is present. Modelling the mode explicitly (rather than
+#: M3's single ``search`` parameter, which silently always meant *title*)
+#: means a caller can never be wrong about which index is being searched.
+SEARCH_MODE_PARAMS: dict[SearchMode, str] = {
+    SearchMode.TITLE: "title_search",
+    SearchMode.CONTENT: "text",
+    SearchMode.ADVANCED: "query",
+}
+
+
+def compile_search(search: SearchSpec | None) -> dict[str, str]:
+    """Turn a :class:`SearchSpec` into its single Paperless parameter.
+
+    An all-whitespace search text is refused rather than dropped. Sending
+    ``title_search=`` would put Paperless into search mode with an empty
+    Tantivy query - a completely different code path from "no search" - and
+    dropping it silently would make an empty search box mean "everything"
+    without saying so. A caller with nothing to search for sends no
+    ``search`` at all.
+    """
+    if search is None:
+        return {}
+    text = search.text.strip()
+    if not text:
+        raise PaperWrenchError(
+            "A search needs a non-empty query. Omit `search` entirely to not search.",
+            status_code=422,
+            code=ErrorCode.VALIDATION_ERROR,
+        )
+    return {SEARCH_MODE_PARAMS[search.mode]: text}
+
+
+# ------------------------------------------------------------------ execute
+async def build_query_params(
+    request: DatasetPageRequest,
+    *,
+    registry: MetadataRegistry,
+) -> dict[str, Any]:
+    """The complete Paperless parameter set for a dataset page request.
+
+    Every part of this is validated *before* anything is sent:
+
+    * the page size against a closed set,
+    * the ordering against the allowlist (M1: an unknown ordering is silently
+      ignored upstream),
+    * the FilterSet through the Filter Engine, which validates then compiles
+      and refuses rather than approximating (ADR-0007).
+
+    A failure at any of these raises, and the caller never reaches the
+    Paperless client - which is what makes "an invalid filter costs zero
+    requests" true by construction rather than by convention.
+    """
+    validate_page_size(request.page_size)
 
     all_fields = await registry.all_custom_fields()
     sortable_custom_field_ids = _sortable_custom_field_ids(all_fields)
     paperless_ordering = resolve_ordering(
-        ordering, sortable_custom_field_ids=sortable_custom_field_ids
+        request.ordering, sortable_custom_field_ids=sortable_custom_field_ids
     )
 
-    if search is not None and query is not None:
-        # Mirrors Paperless's own rule (VERIFIED_SOURCE,
-        # `_TANTIVY_SEARCH_PARAM_NAMES` validation in `DocumentViewSet.list`):
-        # specifying more than one search mode is a client error, not
-        # something to silently pick one of. Caught here so the message is
-        # PaperWrench's own, not an upstream 400 body.
-        from paperwrench.errors import ErrorCode
-        from paperwrench.errors import PaperWrenchError
+    params: dict[str, Any] = dict(compile_search(request.search))
 
-        raise PaperWrenchError(
-            "Specify only one of `search` or `query`, not both.",
-            status_code=422,
-            code=ErrorCode.VALIDATION_ERROR,
-        )
+    if request.filters is not None and not request.filters.is_empty:
+        catalog = FieldCatalog(all_fields)
+        compiled = validate_and_compile(request.filters, catalog)
+        # A compiled parameter must never overwrite the search parameter, and
+        # cannot: the Filter Engine's own parameter tables contain no search
+        # key. Asserted here so a future addition to those tables cannot make
+        # a filter quietly replace the user's search.
+        overlap = set(compiled.params) & set(params)
+        assert not overlap, f"filter parameters collided with search: {overlap}"
+        params.update(compiled.params)
 
-    params: dict[str, Any] = {}
-    if search is not None:
-        params["title_search"] = search
-    if query is not None:
-        params["query"] = query
     if paperless_ordering is not None:
         params["ordering"] = paperless_ordering
-    if document_type is not None:
-        params["document_type__id"] = document_type
-    if correspondent is not None:
-        params["correspondent__id"] = correspondent
-    if tag is not None:
-        params["tags__id__all"] = tag
 
-    paperless_page = await client.list_documents(params=params, page=page, page_size=page_size)
+    return params
+
+
+# -------------------------------------------------------------------- route
+@router.post(
+    "/query",
+    response_model=DocumentPage,
+    summary="One page of a dataset (search + filters + ordering, server-side)",
+)
+async def query_documents(
+    request: DatasetPageRequest,
+    client: PaperlessClient = Depends(get_paperless_client),
+    registry: MetadataRegistry = Depends(get_metadata_registry),
+) -> DocumentPage:
+    """Return one page of the documents matching a dataset query.
+
+    Read-only. Server-side pagination, sorting, searching and filtering: this
+    endpoint never fetches more than ``page_size`` documents, whatever the
+    filter matches, and there is deliberately no way to ask it for all of
+    them.
+    """
+    params = await build_query_params(request, registry=registry)
+
+    paperless_page = await client.list_documents(
+        params=params, page=request.page, page_size=request.page_size
+    )
 
     items = [
         await _document_to_list_item(document, registry) for document in paperless_page.results
     ]
 
     total = paperless_page.count
-    page_count = (total + page_size - 1) // page_size if page_size else 0
+    page_count = (total + request.page_size - 1) // request.page_size if request.page_size else 0
 
     return DocumentPage(
         items=items,
-        page=page,
-        page_size=page_size,
+        page=request.page,
+        page_size=request.page_size,
         total=total,
         page_count=page_count,
     )

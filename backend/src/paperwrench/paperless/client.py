@@ -392,6 +392,27 @@ class PaperlessClient:
         )
         return Page[Document].model_validate(payload)
 
+    async def count_documents(self, *, params: dict[str, Any] | None = None) -> int:
+        """How many documents match ``params``, without fetching them.
+
+        Counting is not fetching. This asks for the smallest page Paperless
+        will serve and reads only the envelope's ``count``, so the cost is one
+        request and one document's worth of payload regardless of whether the
+        filter matches twelve documents or fifty thousand.
+
+        The ``results`` array is deliberately never parsed here: the caller
+        wants a number, and turning this into "fetch a page and count it"
+        is the first step down the road ADR-0007 exists to block.
+
+        (``page_size=0`` is not used: DRF's paginator does not define it, and
+        a value the server may interpret differently across versions is not
+        worth one document of payload.)
+        """
+        payload = await self._get_page(
+            "/api/documents/", {**(params or {}), "page": 1, "page_size": 1}
+        )
+        return int(payload.get("count", 0))
+
     async def iter_documents(
         self, *, params: dict[str, Any] | None = None, page_size: int | None = None
     ) -> list[Document]:
