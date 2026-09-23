@@ -49,36 +49,35 @@ your library is untouched.
 
 ## Safety model
 
-PaperWrench performs bulk writes on a live document library. The whole design
-follows from taking that seriously.
+M5 exposes immediate, explicit single-document edits in the Inspector.
 
-- **Dry Run is the default.** Every transformation is previewed - old value
-  next to new value, per document - and nothing is written until you
-  explicitly confirm.
-- **Nothing is written blind.** Before each write PaperWrench re-reads the
-  document and checks that its current value still matches what you were shown.
-  If somebody else changed it in the meantime, that document is skipped and
-  reported, not overwritten.
-- **Custom fields are never collateral damage.** Paperless replaces a
-  document's *entire* custom field collection on update. PaperWrench always
-  reads the existing fields and sends them back intact alongside the one it is
-  changing.
-- **Every write is recorded and reversible.** For each document PaperWrench
-  stores what the value was, what it intended to write, and what it actually
-  wrote. A rollback restores the previous value - and refuses, per document, if
-  the value has changed since.
-- **Bounded concurrency.** Writes are throttled (4 at a time by default) so a
-  bulk job cannot overwhelm your Paperless instance.
-- **The API token stays in the backend.** It is read from the environment,
-  never persisted in the database, never logged, and never sent to the browser.
+- **Read before write.** The document is re-read under a per-document in-process
+  lock. A stale revision produces a non-retryable conflict without a PATCH.
+- **Complete custom-field merge.** The client rejects arbitrary payload keys and
+  partial replacement arrays. It preserves unrelated values from the fresh read.
+- **External concurrency is not atomic.** Paperless 3.1.2 ignores the tested
+  conditional headers. Another REST client, the Paperless UI or a consumer can
+  change the document between our read and write, and that change can be lost.
+  Pause other writers. Custom-field saves require explicit acknowledgement of
+  this residual risk; it is not a guarantee that other writers are paused.
+- **Actual values are shown.** Each save returns before, intended and actual
+  stored values, including Paperless normalization. There is **no durable edit
+  history or rollback in M5**. Jobs/history and rollback remain M8/M9.
+- **No automatic write retries.** After an uncertain outcome, reload and inspect
+  before deciding whether to make another edit.
+- **The token stays in the backend.** It is not persisted, logged or sent to the
+  browser. Paperless permissions remain authoritative.
+
+See [ADR-0012](docs/decisions/0012-inspector-coordinated-writes-and-external-race.md)
+for the concurrency contract and its limitations. Bulk dry-run, bounded job
+execution and durable rollback are future capabilities, not M5 guarantees.
 
 ## Status
 
-**Early development.** M0 (foundations) is complete: project skeleton, backend
-and frontend build, database schema, single-instance job runtime lock, CI, and
-a disposable Paperless-ngx 3.1.2 development sandbox.
-
-Nothing writes to Paperless yet. See [docs/roadmap.md](docs/roadmap.md).
+**Early development, M0–M5 implemented.** Explorer uses the M4 Dataset/FilterSet
+engine. Click a document title to open its Inspector and edit supported core and
+custom fields inline, with explicit save/cancel and conflict handling.
+M6 has not started. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Quick start
 
@@ -124,7 +123,7 @@ Read this before deciding where to run PaperWrench.
 **PaperWrench has no authentication of its own.** It is designed to run on a
 trusted network - a home LAN, a private VLAN, behind a VPN, or behind a reverse
 proxy that performs authentication. Anyone who can reach the PaperWrench port
-can perform bulk modifications on your Paperless library using your token.
+can modify documents in your Paperless library using your token.
 
 What this means concretely:
 
@@ -137,9 +136,8 @@ What this means concretely:
 - **Use `PAPERLESS_TOKEN_FILE`** with a Docker secret in preference to an
   inline environment variable, which is visible to anything that can inspect
   the container.
-- **Back up `/data`.** It holds the job history, and the job history is what
-  makes a rollback possible. Losing it after a large write means losing the
-  ability to undo that write.
+- **Back up your Paperless library.** M5 edits have no durable rollback.
+  `/data` holds PaperWrench state; it will hold job history from M8.
 - **Keep TLS verification on.** `PAPERLESS_VERIFY_SSL=false` exists for
   self-signed certificates on a LAN, and it removes protection against an
   active network attacker.

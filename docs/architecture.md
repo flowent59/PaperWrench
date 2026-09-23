@@ -8,8 +8,8 @@ why the boundaries are where they are. Individual decisions are recorded in
 
 PaperWrench is a single container running a FastAPI backend that serves a
 React SPA from the same origin, talks to an existing Paperless-ngx instance
-over its REST API, and records everything it does in a local SQLite database so
-that it can be previewed, resumed and undone.
+over its REST API, and uses local SQLite for its own working state. M5 manual edits return a
+receipt without durable history; job persistence and rollback are planned for M8/M9.
 
 ## Component map
 
@@ -348,42 +348,47 @@ so the UI can react to specific conditions (`PREVIEW_STALE`, `JOB_CONFLICT`,
 Unhandled exceptions return a generic `INTERNAL_ERROR`: internal detail could
 include a Paperless URL or a header, and none of it belongs in a browser.
 
-## Known architectural constraint: concurrent custom-field writes can lose an update
+## M5 Inspector and document mutations
 
-**Status: KNOWN ARCHITECTURAL CONSTRAINT — not fixed, non-blocking for M3 and
-M4, but MUST be addressed before concurrent custom-field writes become
-possible** (in particular before the Inspector and/or the Job Engine can
-write to the same document's custom fields concurrently).
+`api/v1/inspector.py` exposes normalized GET/PATCH `/api/v1/documents/{id}`.
+It reuses the Explorer mapper, Document/TypedCustomFieldValue/MonetaryAmount and
+MetadataRegistry. `inspector.py` validates the closed edit DTO and refreshes
+relevant metadata before validating references/options. A catalogue revision
+rejects stale custom-field definitions. Unknown definitions remain visible,
+read-only, and preserved in complete writes.
 
-Paperless-ngx serialises documents through `drf_writable_nested`'s
-`NestedUpdateMixin`: a PATCH carrying `custom_fields` **replaces the whole
-collection**. PaperWrench's read-modify-write mitigation (ADR-0004,
-`merge_custom_fields()`) removes the *omitted-field-deletion* hazard by
-merging into a freshly read list before writing it back in full — but it does
-not, and cannot by itself, provide atomicity against a second concurrent
-writer. VERIFIED_LIVE (M2, `TestConcurrentCustomFieldWrites`, forced
-deterministic interleaving):
+Core allowlist: title, correspondent, document type, storage path, tags, created
+(date), archive serial number. Custom allowlist: string, longtext, monetary,
+select, date, boolean and integer. URL, float and document-link values remain
+read-only; no taxonomy definitions or ownership/permissions can be edited.
 
-```text
-Actor A: READ custom_fields
-Actor B: READ custom_fields
-Actor B: WRITE full custom_fields (with B's change to field B)
-Actor A: WRITE full custom_fields (built from A's earlier read, before B's
-         write landed — this re-asserts the pre-B value for field B)
-         → field B's update is silently lost, even though actor A never
-           intended to touch field B.
-```
+The lifecycle client owns `DocumentMutationCoordinator`. Its per-document lock
+covers GET → permission/revision check → complete merge → one PATCH → result
+capture. Both low-level write helpers share this lock; later Jobs must use the
+same lifecycle client/coordinator. `update_document` is strictly core-only;
+`mutate_document` is the combined, preconditioned path. There is no public
+complete-array passthrough. The API accepts custom operations with explicit
+`absent`, `null` or `present` state, never raw upstream `custom_fields` arrays.
 
-This is the combination `Paperless full-replacement semantics` +
-`PaperWrench read-modify-write` — a classic lost-update race, not a bug in
-either side individually. No distributed lock, ETag, or global write mutex
-exists yet, and none should be built speculatively: the right mitigation
-(per-document serialization, optimistic conflict detection, a fresh
-immediately-before-write read, an in-process document-level lock, or a
-combination) will be decided at the milestone where concurrent writers
-actually appear, not before. M3 is read-only and is not affected. See
-`docs/paperless-api.md` §5.4 for the full write-up and the live test that
-reproduces this on demand.
+The full normalized-document revision deliberately rejects even unrelated
+changes. No automatic retry follows 409 or an uncertain network outcome. Only
+`user_can_change is True` permits a mutation; 401/403 error codes remain distinct,
+and a document 404 can mean invisible. Existing upstream 401/403 errors retain
+their common-envelope HTTP 502 mapping; local edit preflight returns HTTP 403.
+
+**VERIFIED_LIVE on 3.1.2:** local serialization prevents cooperating lost updates;
+external interleaving still loses an update. Impossible `If-Match` and old
+`If-Unmodified-Since` headers do not prevent PATCH. The client therefore requires
+explicit external-race acknowledgement for custom writes, and the UI starts each
+save with that acknowledgement unchecked. Pausing other writers remains ASSUMED.
+A distributed lock would not make the Paperless UI cooperate and is not adopted.
+See [ADR-0012](decisions/0012-inspector-coordinated-writes-and-external-race.md).
+
+Before/intended/actual values are returned immediately, not persisted. The UI
+shows actual normalization, invalidates document/grid/count caches, and requires
+a fresh read before the next edit. M5 has no durable history, crash recovery,
+exactly-once delivery or rollback. Timeout/disconnect can leave an unknown result;
+never infer that no write happened. M8/M9 remain future milestones.
 
 ## Security posture
 

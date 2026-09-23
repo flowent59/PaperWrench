@@ -173,7 +173,9 @@ class TestErrorNormalisation:
         )
         async with PaperlessClient(paperless_settings) as client:
             with pytest.raises(PaperlessValidationError):
-                await client.update_custom_fields(1, [{"field": 2, "value": "EUR1,00"}])
+                await client.update_custom_fields(1, [{"field": 2, "value": "EUR1,00"}],
+                    acknowledge_external_race=True,
+                )
 
     @respx.mock
     async def test_409_maps_to_conflict(self, paperless_settings: Settings) -> None:
@@ -424,7 +426,9 @@ class TestCustomFieldSafety:
         )
 
         async with PaperlessClient(paperless_settings) as client:
-            await client.update_custom_fields(1, [{"field": 2, "value": "EUR999.99"}])
+            await client.update_custom_fields(1, [{"field": 2, "value": "EUR999.99"}],
+                acknowledge_external_race=True,
+            )
 
         sent = patch.calls.last.request.read()
         import json as _json
@@ -444,7 +448,9 @@ class TestCustomFieldSafety:
             return_value=httpx.Response(200, json=_doc(1), headers=V10_HEADERS)
         )
         async with PaperlessClient(paperless_settings) as client:
-            await client.update_custom_fields(1, [{"field": 1, "value": "x"}])
+            await client.update_custom_fields(1, [{"field": 1, "value": "x"}],
+                acknowledge_external_race=True,
+            )
         assert get.call_count == 1, "the merge base must be read immediately before the write"
 
     @respx.mock
@@ -470,6 +476,7 @@ class TestCustomFieldSafety:
                     1,
                     [{"field": 1, "value": "new"}],
                     expected_before=[CustomFieldValue(field=1, value="what we saw earlier")],
+                    acknowledge_external_race=True,
                 )
 
         assert patch.call_count == 0, "a conflicting document must not be written at all"
@@ -495,6 +502,7 @@ class TestCustomFieldSafety:
                 1,
                 [{"field": 1, "value": "new"}],
                 expected_before=[CustomFieldValue(field=1, value="unchanged")],
+                acknowledge_external_race=True,
             )
         assert patch.call_count == 1
 

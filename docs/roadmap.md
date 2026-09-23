@@ -1,9 +1,8 @@
 # Roadmap
 
 Milestones are ordered so that the dangerous capabilities arrive last, on top
-of foundations that make them safe. Nothing writes to Paperless before M8, and
-M8 depends on the normalized data layer, filters, transformations and dry-run
-preview built before it.
+of foundations that make them safe. M5 introduces explicit single-document edits. Bulk job writes remain M8 and
+depend on normalized data, filters, transformations and dry-run preview.
 
 This numbering is **canonical and fixed**: milestone numbers are never
 reassigned to different content once a milestone starts. If scope needs to
@@ -193,15 +192,20 @@ Deferred to a later milestone, deliberately: FilterSet **persistence** (saved
 filters — nothing here writes to SQLite), `NOT` compilation, and materialising
 a job's target document ids (that belongs with the Job Engine, M8).
 
-## M5 — Inspector + inline editing · Planned
+## M5 — Inspector + inline editing · Done
 
-- Per-document Inspector view built on the M2 normalized `Document` model
-- Inline editing of core fields and custom fields, going exclusively through
-  the safe read-modify-write path — no direct partial PATCH from the UI
-- Clear separation of `before_value` / `intended_value` in the editing UI,
-  ready to receive `written_value` once M8 lands
-- Surfaces `user_can_change` so the UI never offers an edit Paperless would
-  refuse
+- #7: runtime-enforced client write boundary, closed core allowlist, no arbitrary
+  custom-field replacement arrays, shared mutation coordinator
+- Normalized single-document API and Inspector opened from Explorer titles
+- Inline save/cancel for supported core and custom fields; explicit absent/null/
+  present, Decimal-safe money and select option IDs
+- Before/intended/actual values from the synchronous PATCH response
+- Permission gating, stale document/catalogue conflicts and query invalidation
+- ADR-0012: single-process per-document serialization; external writers remain
+  non-atomic and require explicit risk acknowledgement on custom-field saves
+- Guarded 3.1.2 tests for preservation, normalization, permissions, stale state,
+  deterministic local and external interleaving, and ignored conditional headers
+- No durable edit history or rollback; these remain M8/M9. No M6 work included.
 
 ## M6 — Transformation Engine · Planned
 
@@ -223,7 +227,7 @@ a job's target document ids (that belongs with the Job Engine, M8).
 
 ## M8 — Job Engine + History · Planned
 
-**The first milestone that modifies your library.**
+**Bulk execution and durable job history; manual edits already exist in M5.**
 
 - Job and JobOperation persistence, status transitions
 - asyncio execution with bounded concurrency and a hard ceiling

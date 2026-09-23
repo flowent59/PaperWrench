@@ -8,6 +8,7 @@
  */
 
 import type { ColumnDef } from '@tanstack/react-table'
+import { Link } from 'react-router-dom'
 
 import { Badge } from '@/components/ui/badge'
 import { messages } from '@/i18n/messages'
@@ -32,7 +33,11 @@ export function buildBaseColumns(): ColumnDef<DocumentListItem>[] {
     {
       accessorKey: 'title',
       header: messages.explorer.columnTitle,
-      cell: ({ row }) => <span className="font-medium">{row.original.title}</span>,
+      cell: ({ row }) => (
+        <Link className="font-medium underline focus-ring" to={`/documents/${row.original.id}`}>
+          {row.original.title}
+        </Link>
+      ),
       enableSorting: true,
     },
     {

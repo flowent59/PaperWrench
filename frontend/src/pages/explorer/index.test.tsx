@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -57,7 +58,7 @@ function renderWithProviders(children: React.ReactNode) {
     defaultOptions: { queries: { retry: false } },
   })
   return render(
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
+    <QueryClientProvider client={queryClient}><MemoryRouter>{children}</MemoryRouter></QueryClientProvider>,
   )
 }
 
@@ -201,6 +202,7 @@ describe('ExplorerPage', () => {
 
     expect(await screen.findByText('Invoice #1')).toBeInTheDocument()
     expect(screen.getByText('Invoice #2')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Invoice #1' })).toHaveAttribute('href', '/documents/1')
     expect(screen.getByText('Acme Corp')).toBeInTheDocument()
     expect(screen.getByText('Important')).toBeInTheDocument()
   })

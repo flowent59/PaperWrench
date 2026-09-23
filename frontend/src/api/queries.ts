@@ -20,6 +20,7 @@ import type {
 } from './types'
 
 export const queryKeys = {
+  document: (id: number) => ['document', id] as const,
   health: ['system', 'health'] as const,
   info: ['system', 'info'] as const,
   paperless: ['system', 'paperless'] as const,

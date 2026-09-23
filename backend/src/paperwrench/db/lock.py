@@ -11,6 +11,7 @@ second live instance fails fast with an explicit error. See ADR-0006.
 from __future__ import annotations
 
 import os
+import platform
 import uuid
 from datetime import timedelta
 
@@ -34,7 +35,7 @@ HEARTBEAT_INTERVAL_SECONDS = 15
 
 def build_instance_id() -> str:
     """Identify this process (hostname/PID plus randomness for containers)."""
-    return f"{os.uname().nodename}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+    return f"{platform.node()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
 
 
 def acquire_lock(session: Session, instance_id: str, *, force: bool = False) -> RuntimeLock:
