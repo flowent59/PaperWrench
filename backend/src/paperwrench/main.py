@@ -139,7 +139,11 @@ def _register_exception_handlers(app: FastAPI) -> None:
                 error=ErrorDetail(
                     code=ErrorCode.VALIDATION_ERROR,
                     message="Request validation failed.",
-                    details={"errors": exc.errors()},
+                    # Do not echo input (potential secrets) or non-JSON validator contexts.
+                    details={"errors": [
+                        {"loc": error["loc"], "type": error["type"], "msg": error["msg"]}
+                        for error in exc.errors()
+                    ]},
                 )
             ).model_dump(mode="json"),
         )

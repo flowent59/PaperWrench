@@ -11,7 +11,7 @@ history remain M8; rollback remains M9.
 The existing lifecycle PaperlessClient owns a DocumentMutationCoordinator.
 Every public document write uses its per-document asyncio lock. Inspector and
 future Jobs must use this client, or explicitly share its coordinator.
-The lock covers the fresh GET, permission/precondition checks, complete merge,
+In `mutate_document`, the lock covers the fresh GET, permission/precondition checks, complete merge,
 single PATCH and response capture. Waiting/cancelled callers cannot strand a
 lock; unused entries are removed. Different documents can proceed independently.
 This is a single-process contract, consistent with the existing deployment.
@@ -55,11 +55,19 @@ Reload and inspect before making a new decision.
   with two cooperating writers. No infrastructure beyond the current process.
 - Distributed locks: rejected for the MVP and unable to coordinate external actors.
 - ETag/If-Match: no supported atomic precondition established by the current API;
-  a guarded live probe will pin the actual 3.1.2 behavior before M5 completion.
+  VERIFIED_LIVE on 3.1.2: impossible If-Match plus an old If-Unmodified-Since
+  still applies PATCH (test_inspector_live.py).
 - Bulk edit: asynchronous with no synchronous per-document result (ADR-0003).
 - Direct database transactions or a Paperless fork: forbidden by ADR-0002.
 
 Mocked tests prove our boundary and serialization (VERIFIED_SOURCE for our code).
-Guarded live tests must prove preservation, normalization, permissions, stale
-rejection and external interleaving on 3.1.2. Unexecuted probes are NOT_RUN,
-never VERIFIED_LIVE. Operator quiescence remains ASSUMED, never machine-verified.
+Guarded live tests now prove preservation, normalization, permissions, stale
+rejection and deterministic local/external interleaving on 3.1.2 (VERIFIED_LIVE).
+Unexecuted probes are NOT_RUN, never VERIFIED_LIVE. Operator quiescence remains
+ASSUMED, never machine-verified.
+
+The core-only `update_document` and compatibility `update_custom_fields` are
+low-level helpers: they serialize, validate the boundary and defer permissions
+to Paperless; only the custom helper has the optional legacy collection snapshot.
+They are not Inspector/Jobs orchestration APIs. New application writers must use
+`mutate_document` with its required revision and fail-closed permission preflight.

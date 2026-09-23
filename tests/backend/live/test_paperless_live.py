@@ -288,8 +288,9 @@ class TestCustomFieldHazard:
         assert seeded.status_code == 200, seeded.text
 
         updated = await live_client.update_custom_fields(
-            scratch_document, [{"field": targets[0], "value": "valeur modifiee"}]
-        , acknowledge_external_race=True)
+            scratch_document, [{"field": targets[0], "value": "valeur modifiee"}],
+            acknowledge_external_race=True,
+        )
 
         assert len(updated.custom_fields) == 3, "the other two fields must survive"
         values = updated.custom_field_map
@@ -324,8 +325,9 @@ class TestCustomFieldHazard:
 
         field_id = field_ids[field_name]
         await live_client.update_custom_fields(
-            scratch_document, [{"field": field_id, "value": value}]
-        , acknowledge_external_race=True)
+            scratch_document, [{"field": field_id, "value": value}],
+            acknowledge_external_race=True,
+        )
         document = await live_client.get_document(scratch_document)
         assert document.custom_field_map[field_id] == value
 
@@ -340,12 +342,14 @@ class TestCustomFieldHazard:
             pytest.skip("custom field 'Montant' missing; run the seeder")
 
         await live_client.update_custom_fields(
-            scratch_document, [{"field": field_ids["Montant"], "value": "EUR100.00"}]
-        , acknowledge_external_race=True)
+            scratch_document, [{"field": field_ids["Montant"], "value": "EUR100.00"}],
+            acknowledge_external_race=True,
+        )
         with pytest.raises(PaperlessValidationError):
             await live_client.update_custom_fields(
-                scratch_document, [{"field": field_ids["Montant"], "value": "EUR100,00"}]
-            , acknowledge_external_race=True)
+                scratch_document, [{"field": field_ids["Montant"], "value": "EUR100,00"}],
+                acknowledge_external_race=True,
+            )
         document = await live_client.get_document(scratch_document)
         assert document.custom_field_map[field_ids["Montant"]] == "EUR100.00"
 
@@ -359,12 +363,14 @@ class TestCustomFieldHazard:
             pytest.skip("no string custom fields; run the seeder")
         target = string_field_ids[0]
         await live_client.update_custom_fields(
-            scratch_document, [{"field": target, "value": "a preserver"}]
-        , acknowledge_external_race=True)
+            scratch_document, [{"field": target, "value": "a preserver"}],
+            acknowledge_external_race=True,
+        )
         with pytest.raises(PaperlessValidationError):
             await live_client.update_custom_fields(
-                scratch_document, [{"field": 999999, "value": "x"}]
-            , acknowledge_external_race=True)
+                scratch_document, [{"field": 999999, "value": "x"}],
+                acknowledge_external_race=True,
+            )
         document = await live_client.get_document(scratch_document)
         assert document.custom_field_map[target] == "a preserver"
 
@@ -464,22 +470,16 @@ class TestConcurrentCustomFieldWrites:
             "no lock/ETag exists yet (M2 point 11)."
         )
 
-    async def test_client_update_custom_fields_narrows_but_does_not_close_the_window(
+    async def test_client_update_custom_fields_serializes_cooperating_writers(
         self,
         live_client: PaperlessClient,
         raw_live: httpx.AsyncClient,
         scratch_document: int,
     ) -> None:
-        """The client's own read-modify-write still has an internal race window.
+        """M5: both updates survive on the shared coordinator.
 
-        ``update_custom_fields`` reads immediately before it writes, which
-        makes the window much smaller than the naive pattern above - but it
-        is not zero. This test forces two overlapping calls into the window
-        deterministically (delaying the first actor's *external* seed just
-        long enough that the second call's read/write completes first) to
-        show that the mitigation is real (it prevents field OMISSION-based
-        loss) but the classic race is only narrowed, not eliminated, without
-        ``expected_before`` or a lock.
+        The separate M5 test forces external interleaving and still loses an
+        external update. This test covers cooperating actors only.
         """
         response = await raw_live.get(
             "/api/custom_fields/", params={"page_size": 100}
@@ -507,26 +507,20 @@ class TestConcurrentCustomFieldWrites:
 
         results = await asyncio.gather(
             live_client.update_custom_fields(
-                scratch_document, [{"field": field_a, "value": "via-client-a"}]
-            , acknowledge_external_race=True),
+                scratch_document, [{"field": field_a, "value": "via-client-a"}],
+                acknowledge_external_race=True,
+            ),
             live_client.update_custom_fields(
-                scratch_document, [{"field": field_b, "value": "via-client-b"}]
-            , acknowledge_external_race=True),
+                scratch_document, [{"field": field_b, "value": "via-client-b"}],
+                acknowledge_external_race=True,
+            ),
         )
         assert len(results) == 2
 
         final = await live_client.get_document(scratch_document)
         values = final.custom_field_map
-        # MEASURED: report what actually happened rather than asserting one
-        # specific outcome, since the client's window is narrow and timing-
-        # dependent even with the deliberate concurrent dispatch above. Both
-        # fields surviving is the common case (the window is short); either
-        # field reverting to its seed value would indicate the window was
-        # hit. What must NOT happen, ever, is a field neither actor touched
-        # (there is none here besides field_a/field_b) disappearing, and no
-        # exception should escape simply from running two calls in parallel.
-        assert values[field_a] in {"base-a", "via-client-a"}
-        assert values[field_b] in {"base-b", "via-client-b"}
+        assert values[field_a] == "via-client-a"
+        assert values[field_b] == "via-client-b"
 
 
 class TestSelectField:

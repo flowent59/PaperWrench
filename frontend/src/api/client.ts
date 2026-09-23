@@ -15,6 +15,9 @@ import type {
   CustomFieldDefinition,
   DatasetPageRequest,
   DocumentPage,
+  DocumentDetail,
+  EditRequest,
+  EditResponse,
   DocumentTypeDefinition,
   FilterCapabilities,
   FilterCountResponse,
@@ -114,7 +117,13 @@ export const systemApi = {
 }
 
 export const documentsApi = {
-  // Server-side pagination only - this is the one and only entry point the
+  detail: (id: number) => apiFetch<DocumentDetail>(`/documents/${id}`),
+  edit: (id: number, request: EditRequest) =>
+    apiFetch<EditResponse>(`/documents/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(request),
+    }),
+  // Server-side pagination only - this is the one and only list entry point the
   // Explorer uses to fetch documents. There is deliberately no "fetch all
   // pages" helper here: loading the whole library into the browser is
   // exactly what M3 exists to avoid, and M4 kept that guarantee while

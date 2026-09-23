@@ -201,9 +201,12 @@ PATCHing the **complete** array back preserves all 5 values. This is
 `merge_custom_fields()` in `paperless/models.py`, and it is the only supported
 way for PaperWrench to write a custom field.
 
-Because of this, `PaperlessClient.update_custom_fields()` does not accept a
-"partial" mode at all. The unsafe call is not merely discouraged — it is not
-expressible through the client.
+M5 makes this boundary enforceable (#7): `update_document()` accepts only a
+closed core-field allowlist and rejects `custom_fields` and every unknown key
+before I/O. `mutate_document()` merges operations into the complete fresh state
+under the shared per-document lock, supporting one combined core/custom PATCH.
+The compatibility custom helper uses that lock too. Both custom write paths
+require explicit external-race acknowledgement (ADR-0012).
 
 ### 5.2 Data types and round-trips
 
@@ -271,32 +274,24 @@ actor's change even though the two actors never touched the same field:
 whichever actor's PATCH lands second re-asserts the value it read *before*
 the other actor's write, silently reverting it.
 
-This was measured directly (`TestConcurrentCustomFieldWrites`,
-`tests/backend/live/test_paperless_live.py`), with the interleaving forced
-deterministically (a deliberate `asyncio.sleep` between one actor's read and
-its write) rather than left to timing luck, so the hazard is reproducible on
-demand instead of being a flaky race. `PaperlessClient.update_custom_fields()`
-narrows the window considerably (it reads immediately before it writes,
-rather than reading long before), and its optional `expected_before`
-parameter lets a caller refuse to write from a base it knows is stale — but
-neither eliminates the window entirely, and nothing currently prevents two
-concurrent callers who both skip `expected_before`. No distributed lock or
-ETag exists yet; this is documented as a known limitation, not fixed, per the
-M2 scope decision.
+This was measured directly by `TestConcurrentCustomFieldWrites` in M2. M5 adds
+`test_inspector_live.py` with event-controlled interleaving, not timing luck.
 
-**Reclassification (post-M2):** this is a **KNOWN ARCHITECTURAL CONSTRAINT**,
-not a "fix later if it ever matters" item — concurrent custom-field writers
-are a near-certain future case (Inspector and Job Engine both write
-custom-field values). It is **non-blocking for M3 and M4** (M3 is read-only;
-M4's filter/bulk-selection surfaces do not yet write), but it **must be
-addressed before concurrent custom-field writes become possible**, i.e. no
-later than the milestone that lets the Inspector and/or the Job Engine write
-concurrently to the same document. See `docs/architecture.md` §"Known
-architectural constraint" for the canonical statement of this rule. Candidate
-mitigations (none selected yet — a real decision is deferred to that
-milestone): per-document serialization, optimistic conflict detection, a
-fresh read taken immediately before the write, an in-process document-level
-lock inside PaperWrench, or a combination of these.
+**VERIFIED_LIVE (M5, 3.1.2):** cooperating PaperWrench mutations sharing a
+coordinator serialize their entire read/check/merge/PATCH cycle. A queued mutation
+with an old revision gets a non-retryable 409 and no PATCH. Low-level fresh merges
+without a revision still preserve both cooperating actors' unrelated changes.
+
+**VERIFIED_LIVE (M5, 3.1.2):** an external actor forced to write after the local
+GET and before the local PATCH still loses its unrelated custom-field change.
+There is no external atomicity. `If-Match: "impossible-etag-m5"` together with
+`If-Unmodified-Since: Thu, 01 Jan 1970 00:00:00 GMT` still yields 200 and applies
+the title PATCH. These headers are not a usable compare-and-swap contract.
+
+ADR-0012 selects local locks, conservative stale-document/catalogue rejection,
+and explicit per-save risk acknowledgement. It does not claim to fix the external
+race. No distributed lock service is introduced; pausing external writers is an
+operator action and remains ASSUMED. There is no durable rollback in M5.
 
 ---
 
@@ -695,15 +690,10 @@ a `detail` key.
 the client normalises to `PaperlessUnreachableError`; it never leaks an
 `httpx` exception to the caller.
 
-**`ASSUMED`** — Paperless has no ETag / `If-Match` support on documents, so
-there is no server-side optimistic locking to lean on. PaperWrench therefore
-implements its own forward conflict detection (ADR-0005): the caller passes the
-state it based its decision on, and the client refuses to write from a stale
-base. This is the reason `update_custom_fields()` takes `expected_before`.
-
-**`ASSUMED`** — concurrent writers (another PaperWrench, the Paperless web UI, a
-consumer) can modify a document between our read and our write. The read →
-merge → write window is small but non-zero. We narrow it, we do not close it.
+**VERIFIED_LIVE (M5):** the tested conditional headers do not prevent writes
+on 3.1.2, and forced external interleaving loses an update (see §5.4). Local
+preconditions detect stale state before PATCH, not a change inside the external
+GET/PATCH race window.
 
 ---
 
@@ -754,3 +744,18 @@ make test-live    # the only suite that can promote a claim to VERIFIED_LIVE
 
 A mocked test asserts what we believe Paperless does. Only a live test can
 tell us whether that belief is true.
+
+## 9. M5 Inspector write verification
+
+`tests/backend/live/test_inspector_live.py` runs the normalized Inspector API
+against real REST responses. VERIFIED_LIVE on 3.1.2: `Relevé de vacations` type
+resolution; `Période concernée` edits preserving `Montant` and every unrelated
+value; title edge-whitespace normalization; monetary and select-ID round trips;
+text empty/null/absent transitions; stale-state rejection; view-only
+`user_can_change=false` preflight with zero PATCHes; distinct 401/403 and
+permission-hidden 404; local serialization and external loss as described above.
+
+The response contains normalized `before` and `document` (actual PATCH result),
+plus the exact intended payload. UI cache invalidation and DTO/client rejection
+are VERIFIED_SOURCE by automated local tests, not claims about Paperless.
+M5's unsupported custom types (float, URL, document link) stay read-only.

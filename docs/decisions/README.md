@@ -21,6 +21,7 @@ edited: a new record supersedes it, and the old one is marked accordingly.
 | [0009](0009-metadata-registry-cache-not-source-of-truth.md) | Metadata Registry — a TTL cache, never a second source of truth | Accepted |
 | [0010](0010-search-is-not-a-filter.md) | Search is a separate primitive, not a FilterSet condition | Accepted |
 | [0011](0011-empty-and-missing-are-not-the-same-question.md) | `is missing`, `is null` and `is empty` are three different questions | Accepted |
+| [0012](0012-inspector-coordinated-writes-and-external-race.md) | Inspector coordinated writes and the external-writer race | Accepted |
 
 ## Format
 

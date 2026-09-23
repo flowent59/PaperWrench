@@ -15,6 +15,11 @@ suspected behaviour but a mitigation of a measured one. See
 `docs/paperless-api.md` §5.1 and `tests/backend/live/test_paperless_live.py`
 (`TestCustomFieldHazard`).
 
+**M5 qualification:** [ADR-0012](0012-inspector-coordinated-writes-and-external-race.md)
+now defines the shared mutation coordinator and explicit external-race contract.
+Immediate Inspector edits return before/intended/actual values without durable
+history or rollback; the job-specific promises below remain M8/M9 design.
+
 ## Context
 
 Paperless-ngx serialises documents with `DocumentSerializer`, which inherits

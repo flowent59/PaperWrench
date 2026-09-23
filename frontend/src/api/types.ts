@@ -131,6 +131,39 @@ export interface DocumentPage {
   page_count: number
 }
 
+export interface DocumentDetail extends DocumentListItem {
+  revision: string
+  catalog_revision: string
+  storage_path: MetadataRef | null
+  original_file_name: string | null
+  owner: number | null
+  definitions: CustomFieldDefinition[]
+  editable_core_fields: string[]
+  editable_custom_types: string[]
+}
+
+export interface CustomChange {
+  field_id: number
+  kind: CustomFieldValueKind
+  value?: unknown
+}
+
+export interface EditRequest {
+  expected_revision: string
+  catalog_revision: string
+  core: Record<string, unknown>
+  custom_changes: CustomChange[]
+  acknowledge_external_race: boolean
+}
+
+export interface EditResponse {
+  before: DocumentDetail
+  intended: Record<string, unknown>
+  document: DocumentDetail
+  external_atomicity: false
+  durable_history: false
+}
+
 /** The page sizes the Explorer may request. Deliberately finite - no "ALL". */
 export const DOCUMENT_PAGE_SIZES = [25, 50, 100, 250] as const
 export type DocumentPageSize = (typeof DOCUMENT_PAGE_SIZES)[number]

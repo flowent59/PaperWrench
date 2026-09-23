@@ -7,6 +7,7 @@ import { AppShell } from '@/components/layout/app-shell'
 import { ThemeProvider } from '@/components/theme-provider'
 import { DashboardPage } from '@/pages/dashboard'
 import { ExplorerPage } from '@/pages/explorer'
+import { InspectorPage } from '@/pages/inspector'
 import { NotFoundPage } from '@/pages/not-found'
 
 import './index.css'
@@ -35,6 +36,7 @@ createRoot(container).render(
             <Route element={<AppShell />}>
               <Route index element={<DashboardPage />} />
               <Route path="documents" element={<ExplorerPage />} />
+              <Route path="documents/:documentId" element={<InspectorPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

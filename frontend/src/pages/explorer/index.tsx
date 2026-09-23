@@ -19,8 +19,8 @@
  *
  * This component only reads. The single POST it issues is
  * `/documents/query`, which is a read expressed as a POST because a filter
- * tree does not belong in a query string; `documentsApi` and `metadataApi`
- * expose no mutating endpoint at all.
+ * tree does not belong in a query string. Titles open the M5 Inspector,
+ * whose explicit saves use the separate single-document mutation API.
  */
 
 import {

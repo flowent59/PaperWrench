@@ -276,3 +276,39 @@ Read [ADR-0003](decisions/0003-per-document-patch-as-mvp-write-path.md),
 [ADR-0004](decisions/0004-safe-custom-field-read-modify-write.md) and
 [ADR-0005](decisions/0005-written-value-and-optimistic-conflict-detection.md).
 They are not background reading; they are the rules that code has to satisfy.
+
+## Working on M5 writes
+
+Read ADR-0012 as well as ADR-0002–0005/0009. Use the lifecycle PaperlessClient:
+`update_document` accepts only core allowlisted keys; `mutate_document` combines
+core/custom operations with a required document revision. Never pass a custom
+replacement array. All writers for this instance must share its coordinator.
+The compatibility custom helper now requires `acknowledge_external_race=True`;
+this is deliberate API tightening, including for sandbox callers.
+
+Inspector's `PATCH /api/v1/documents/{id}` accepts `expected_revision`,
+`catalog_revision`, `core`, `custom_changes` and `acknowledge_external_race` only.
+A custom change is `{field_id, kind, value}`; omit value for absent/null. Empty
+string is a present text value; monetary values are currency-prefixed exact
+strings; selects take opaque option IDs. Unknown keys, duplicate operations and
+unsupported types fail before PATCH. Core references are IDs, not names.
+
+Run focused tests, then all existing CI gates:
+
+```sh
+pytest tests/backend/unit/test_inspector.py tests/backend/integration_mocked
+PAPERWRENCH_ALLOW_LIVE_TESTS=true PAPERWRENCH_LIVE_PAPERLESS_URL=http://127.0.0.1:8010 pytest tests/backend/live -v
+cd frontend && npm test
+```
+
+The existing guarded sandbox fixture supplies a disposable credential; never use
+personal credentials. M5 live tests use disposable scratch documents and remove
+created select definitions/users. `test_inspector_live.py` checks the acceptance
+scenario, deterministic internal/external interleaving and ineffective conditional
+headers. The external-race test deliberately demonstrates loss on scratch data;
+it must never be repurposed for a real library. Operator quiescence is ASSUMED.
+
+`make check` does not replace the guarded live, migration and Docker CI jobs.
+CI's complete gate list in `.github/workflows/ci.yml` remains mandatory.
+On Windows, the runtime instance ID uses portable `platform.node()`; Linux
+Python 3.11 CI remains authoritative for the production environment.
