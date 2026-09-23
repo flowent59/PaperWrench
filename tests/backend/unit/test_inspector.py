@@ -254,13 +254,13 @@ def test_unknown_metadata_is_validation_not_missing_document(
     assert not patches
 
 
+@pytest.mark.parametrize("as_key", [False, True])
 @respx.mock
-def test_invalid_input_never_echoes_token(client: TestClient) -> None:
+def test_invalid_input_never_echoes_token(client: TestClient, as_key: bool) -> None:
     setup_document()
     detail = client.get(PATH).json()
-    response = client.patch(
-        PATH, json=request_for(detail, core={"tags": ["test-token-abcdef123456"]})
-    )
+    core = {"test-token-abcdef123456": []} if as_key else {"tags": ["test-token-abcdef123456"]}
+    response = client.patch(PATH, json=request_for(detail, core=core))
     assert response.status_code == 422
     assert "test-token-abcdef123456" not in response.text
 

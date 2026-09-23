@@ -135,17 +135,15 @@ def _register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=422,
-            content=ErrorResponse(
-                error=ErrorDetail(
-                    code=ErrorCode.VALIDATION_ERROR,
-                    message="Request validation failed.",
-                    # Do not echo input (potential secrets) or non-JSON validator contexts.
-                    details={"errors": [
-                        {"loc": error["loc"], "type": error["type"], "msg": error["msg"]}
-                        for error in exc.errors()
-                    ]},
-                )
-            ).model_dump(mode="json"),
+            content=PaperWrenchError(
+                "Request validation failed.",
+                code=ErrorCode.VALIDATION_ERROR,
+                # Omit input/context and scrub paths too: an unknown key is user input.
+                details={"errors": [
+                    {"loc": list(error["loc"]), "type": error["type"], "msg": error["msg"]}
+                    for error in exc.errors()
+                ]},
+            ).to_response().model_dump(mode="json"),
         )
 
     @app.exception_handler(StarletteHTTPException)
