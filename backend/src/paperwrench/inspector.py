@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from contextlib import suppress
-from datetime import date
 from typing import Any
 from typing import Literal
 
@@ -18,16 +16,13 @@ from paperwrench.paperless.errors import PaperlessConflictError
 from paperwrench.paperless.errors import PaperlessValidationError
 from paperwrench.paperless.models import CustomField
 from paperwrench.paperless.models import MetadataKind
-from paperwrench.paperless.models import MonetaryAmount
 from paperwrench.paperless.mutations import CorePatch
 from paperwrench.paperless.mutations import MutationResult
 from paperwrench.paperless.mutations import core_payload
 from paperwrench.paperless.registry import MetadataNotFoundError
 from paperwrench.paperless.registry import MetadataRegistry
-
-EDITABLE_CUSTOM_TYPES = frozenset(
-    {"string", "longtext", "monetary", "select", "date", "boolean", "integer"}
-)
+from paperwrench.paperless.value_validation import EDITABLE_CUSTOM_TYPES
+from paperwrench.paperless.value_validation import validate_custom_present
 
 
 class CustomChange(BaseModel):
@@ -68,33 +63,7 @@ def validate_custom_change(change: CustomChange, definition: CustomField) -> Non
         return
     if "value" not in change.model_fields_set or value is None:
         raise PaperlessValidationError("A present operation requires an explicit non-null value.")
-    data_type = definition.data_type
-    valid = False
-    if data_type in {"string", "longtext"}:
-        valid = isinstance(value, str)
-    elif data_type == "boolean":
-        valid = type(value) is bool
-    elif data_type == "integer":
-        # Exact throughout JSON/JS and Paperless's signed integer column.
-        valid = type(value) is int and -(2**31) <= value < 2**31
-    elif data_type == "select":
-        valid = isinstance(value, str) and any(
-            option.get("id") == value for option in definition.select_options
-        )
-    elif data_type == "monetary" and isinstance(value, str):
-        try:
-            MonetaryAmount.parse(value)
-            valid = True
-        except ValueError:
-            pass
-    elif data_type == "date" and isinstance(value, str):
-        with suppress(ValueError):
-            valid = date.fromisoformat(value).isoformat() == value
-    if not valid:
-        raise PaperlessValidationError(
-            "Value does not match the custom-field type or allowed option IDs.",
-            details={"field_id": definition.id, "data_type": data_type},
-        )
+    validate_custom_present(value, definition)
 
 
 async def edit_document(

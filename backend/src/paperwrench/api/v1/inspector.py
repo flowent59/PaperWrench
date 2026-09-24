@@ -13,7 +13,6 @@ from paperwrench.api.v1.documents import CustomFieldColumnValue
 from paperwrench.api.v1.documents import DocumentListItem
 from paperwrench.api.v1.documents import MetadataRef
 from paperwrench.api.v1.documents import _document_to_list_item
-from paperwrench.inspector import EDITABLE_CUSTOM_TYPES
 from paperwrench.inspector import EditRequest
 from paperwrench.inspector import catalog_revision
 from paperwrench.inspector import edit_document
@@ -25,6 +24,7 @@ from paperwrench.paperless.models import CustomFieldValueKind
 from paperwrench.paperless.mutations import CorePatch
 from paperwrench.paperless.mutations import revision
 from paperwrench.paperless.registry import MetadataNotFoundError
+from paperwrench.paperless.value_validation import EDITABLE_CUSTOM_TYPES
 
 router = APIRouter(prefix="/documents", tags=["inspector"])
 

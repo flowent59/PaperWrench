@@ -29,6 +29,9 @@ import type {
   SearchSpec,
   StoragePathDefinition,
   TagDefinition,
+  Transformation,
+  EvaluationResult,
+  TransformationValidationResult,
 } from './types'
 
 export const API_PREFIX = '/api/v1'
@@ -175,4 +178,17 @@ export const metadataApi = {
   documentTypes: () => apiFetch<DocumentTypeDefinition[]>('/metadata/document-types'),
   storagePaths: () => apiFetch<StoragePathDefinition[]>('/metadata/storage-paths'),
   customFields: () => apiFetch<CustomFieldDefinition[]>('/metadata/custom-fields'),
+}
+
+export const transformationsApi = {
+  validate: (transformation: Transformation) =>
+    apiFetch<TransformationValidationResult>('/transformations/validate', {
+      method: 'POST',
+      body: JSON.stringify(transformation),
+    }),
+  evaluate: (documentId: number, transformation: Transformation) =>
+    apiFetch<EvaluationResult>(`/transformations/documents/${documentId}/evaluate`, {
+      method: 'POST',
+      body: JSON.stringify(transformation),
+    }),
 }

@@ -434,3 +434,43 @@ export interface StoragePathDefinition {
   slug: string
   path: string | null
 }
+
+/** M6 specifications are read-only descriptions of intended per-document changes. */
+export type TransformationTarget =
+  | { source: 'ids'; document_ids: number[] }
+  | { source: 'dataset'; query: { search?: SearchSpec | null; filters?: FilterSet | null; ordering?: string | null } }
+
+export type TransformationOperation =
+  | { operation: 'set'; field: FieldRef; value: unknown }
+  | { operation: 'clear'; field: FieldRef; state?: 'absent' | 'null' | null }
+  | { operation: 'replace'; field: FieldRef; find: string; replacement: string }
+  | { operation: 'template'; field: FieldRef; template: string; bindings: Record<string, FieldRef> }
+
+export interface Transformation {
+  targets: TransformationTarget
+  operations: TransformationOperation[]
+}
+
+export interface TransformationValue {
+  kind: CustomFieldValueKind
+  raw: unknown
+}
+
+export interface ProposedChange {
+  field: FieldRef
+  operation: string
+  status: 'change' | 'unchanged' | 'error'
+  before: TransformationValue
+  intended: TransformationValue | null
+  issue: { code: string; message: string; field_key: string | null } | null
+}
+
+export interface EvaluationResult {
+  document_id: number
+  changes: ProposedChange[]
+}
+
+export interface TransformationValidationResult {
+  valid: boolean
+  issues: { code: string; message: string; field_key: string | null }[]
+}
