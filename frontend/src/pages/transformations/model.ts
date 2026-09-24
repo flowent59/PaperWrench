@@ -95,10 +95,11 @@ export function serializeOperation(
 export function serializeTransformation(
   source: 'ids' | 'dataset', ids: string, search: SearchSpec | null,
   filters: FilterSet, drafts: OperationDraft[], fields: CustomFieldDefinition[],
+  ordering?: string | null,
 ): Transformation {
   const targets = source === 'ids'
     ? { source: 'ids' as const, document_ids: ids.split(',').map((part) => Number(part.trim())) }
-    : { source: 'dataset' as const, query: { search, filters } }
+    : { source: 'dataset' as const, query: { search, filters, ...(ordering ? { ordering } : {}) } }
   if (source === 'ids' && (targets.source !== 'ids' || targets.document_ids.some(
     (id) => !Number.isSafeInteger(id) || id <= 0,
   ))) throw new Error('Enter positive document IDs separated by commas')

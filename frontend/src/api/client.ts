@@ -32,6 +32,9 @@ import type {
   Transformation,
   EvaluationResult,
   TransformationValidationResult,
+  CreatedPreview,
+  PreviewSummary,
+  PreviewPage,
 } from './types'
 
 export const API_PREFIX = '/api/v1'
@@ -191,4 +194,20 @@ export const transformationsApi = {
       method: 'POST',
       body: JSON.stringify(transformation),
     }),
+}
+
+export const previewsApi = {
+  create: (transformation: Transformation) => apiFetch<CreatedPreview>('/previews', {
+    method: 'POST', body: JSON.stringify(transformation),
+  }),
+  page: (id: string, page: number, status: string) => apiFetch<PreviewPage>(
+    `/previews/${id}/documents?page=${page}&page_size=25${status ? `&status=${status}` : ''}`,
+  ),
+  confirm: (preview: CreatedPreview, transformation: Transformation) =>
+    apiFetch<PreviewSummary>(`/previews/${preview.id}/confirm`, {
+      method: 'POST', body: JSON.stringify({ preview_token: preview.preview_token,
+        transformation, target_fingerprint: preview.target_fingerprint,
+        result_fingerprint: preview.result_fingerprint, version: preview.version, acknowledge: true }),
+    }),
+  discard: (id: string) => apiFetch<void>(`/previews/${id}`, { method: 'DELETE' }),
 }

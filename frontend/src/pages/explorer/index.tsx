@@ -40,6 +40,7 @@ import {
   X,
 } from 'lucide-react'
 import * as React from 'react'
+import { Link } from 'react-router-dom'
 
 import {
   useCorrespondents,
@@ -410,8 +411,19 @@ export function ExplorerPage() {
           <Button variant="ghost" size="sm" onClick={selection.clear}>
             {messages.explorer.clearSelection}
           </Button>
+          <Link className="underline" to="/transformations"
+            state={{ targets: { source: 'ids', document_ids: [...selection.selected].sort((a, b) => a - b) } }}>
+            {messages.preview.selected}
+          </Link>
         </div>
       )}
+
+      {filtersRunnable && !documentsQuery.isPending && !documentsQuery.isError && total > 0 &&
+        <Link className="text-sm underline" to="/transformations"
+          state={{ targets: { source: 'dataset', query: { search: searchSpec,
+            filters: filtersEmpty ? null : filters, ordering: ordering ?? null } } }}>
+          {messages.preview.dataset}
+        </Link>}
 
       <Card>
         <CardContent className="p-0">

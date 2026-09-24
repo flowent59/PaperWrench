@@ -72,7 +72,13 @@ validated, compiled or refused without a single request leaving the process.
 **`transformations/`** — the M6 specification and pure evaluator. It accepts a
 normalized `Document`, a transformation and a snapshot of custom-field
 definitions. It has no client, registry, database, clock or write path.
-Dataset-wide preview and jobs belong to later milestones.
+Dataset-wide preview is orchestrated by M7 `previews/`; Jobs remain M8.
+
+**`previews/`** — the M7 read-only orchestration layer. Compiles DatasetQuery
+through the existing query adapter or reads explicit IDs, calls M6 for each
+document, and stages bounded batches of typed results in expiring SQLite rows.
+It exposes stable paginated results and a one-time review confirmation, without
+creating or executing Jobs. See [preview-api.md](preview-api.md) and ADR-0013.
 
 **`paperless/`** — the client. One place that knows how to talk to Paperless:
 version negotiation, pagination, error mapping, and the read-modify-write
@@ -289,9 +295,10 @@ shifts underneath it cannot be previewed, resumed or rolled back honestly
 - record what Paperless actually stored as `written_value` (ADR-0005);
 - commit the `JobOperation` row before starting the next document.
 
-The `preview_token` and the per-document revalidation are complementary, not
-alternatives. The token guarantees the user confirmed the preview they saw; the
-revalidation guarantees the document has not moved since. Both are enforced.
+The `preview_token` and future per-document revalidation are complementary.
+M7 binds confirmation to the staged observation. M8 must detect changes since
+preview by re-reading before writing; that check still cannot close the external
+GET/PATCH race described in ADR-0012. Stages 3–5 remain future M8/M9 work.
 
 **5. Report and undo.** The job ends `COMPLETED`, `PARTIAL` or `FAILED`, with a
 per-document breakdown. A rollback is a new job linked by `rollback_of_job_id`
@@ -425,6 +432,49 @@ option that no longer exists is unresolved; writes still use option IDs. The
 definition snapshot can become stale, so M8 must check current state before
 writing. `DatasetQuery` retains the M4 filter compiler's exactness rules; M6
 does not fetch all documents or reinterpret filters.
+
+## M7 Dry Run
+
+`POST /api/v1/previews` consumes the existing `Transformation`. Explicit IDs
+are sorted deterministically and read individually; dataset queries reuse
+`build_query_params()` and the M4 compiler without local filtering. A cold
+registry can load metadata before compilation, but a refused query never
+fetches documents. Dataset enumeration uses page-number requests of 100 and
+checks count consistency, unique IDs and complete termination.
+
+`PaperlessClient.iter_documents()` is now an async generator: callers use
+`async for`, and full list collection must be explicit. Metadata `iter_pages()`
+still collects the small reference catalogues. M7 itself needs page envelopes
+for consistency checks, so it uses `list_documents()` directly.
+
+`Preview`/`PreviewDocument` are expiring working state separate from Jobs.
+Only affected values, document title/ID and structured M6 issues are staged.
+No complete documents, OCR or execution values are retained. Batches commit
+before the next network read. SQL pagination and status filtering never
+re-fetch Paperless, and sorted target hashing uses a streaming cursor.
+Result RAM is bounded by a page; disk is bounded by explicit limits.
+
+The document outcome is ERROR if any operation fails or edit permission is not
+confirmed, otherwise CHANGE if any operation changes, otherwise UNCHANGED.
+Errors do not hide valid proposals on other fields/documents. Explicit-ID
+403/404/invalid payloads become rows; fatal query/authentication/transport/page
+failures discard staging and issue no token. Totals partition attempted targets.
+
+An opaque, single-use token references the spec/selection/target/result hashes,
+preview version and expiry. Only its hash is stored. Confirmation records review
+locally and requires zero error documents and at least one change. Apply is
+disabled. TTL cleanup runs on heartbeat/startup/creation; interrupted builds are
+discarded at startup. UI edits invalidate previous review, and Explorer passes
+either selected IDs or the exact dataset identity into the existing authoring UI.
+
+The preview describes observations during T0, not an atomic Paperless snapshot.
+Documents can change at T1. M8 must atomically adopt exact staged targets into
+its own durable snapshot and re-read/check at T2. No lock spans preview to Apply.
+Already-consumed M7 confirmations cannot be reused to execute anything.
+
+Limits, fingerprint representation details (including M4 display names),
+cleanup and the future transactional handoff are specified in
+[ADR-0013](decisions/0013-expiring-preview-staging-and-confirmation.md).
 
 ## Security posture
 

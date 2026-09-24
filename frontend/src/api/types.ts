@@ -454,6 +454,10 @@ export interface Transformation {
 export interface TransformationValue {
   kind: CustomFieldValueKind
   raw: unknown
+  field_id?: number
+  monetary?: { currency: string; amount: string } | null
+  select_option_id?: string | null
+  select_label?: string | null
 }
 
 export interface ProposedChange {
@@ -473,4 +477,35 @@ export interface EvaluationResult {
 export interface TransformationValidationResult {
   valid: boolean
   issues: { code: string; message: string; field_key: string | null }[]
+}
+
+export interface PreviewSummary {
+  id: string
+  version: 1
+  created_at: string
+  expires_at: string
+  matched: number
+  evaluated: number
+  changed: number
+  unchanged: number
+  errors: number
+  selection_fingerprint: string
+  spec_fingerprint: string
+  target_fingerprint: string
+  result_fingerprint: string
+  confirmed: boolean
+}
+
+export interface CreatedPreview extends PreviewSummary { preview_token: string }
+export interface PreviewRow extends EvaluationResult {
+  title: string | null
+  status: 'change' | 'unchanged' | 'error'
+  issue: { code: string; message: string } | null
+}
+export interface PreviewPage {
+  items: PreviewRow[]
+  page: number
+  page_size: number
+  total: number
+  page_count: number
 }

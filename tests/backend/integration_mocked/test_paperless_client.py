@@ -263,7 +263,7 @@ class TestPagination:
             return_value=httpx.Response(200, json=_page([_doc(3)], count=3), headers=V10_HEADERS)
         )
         async with PaperlessClient(paperless_settings) as client:
-            documents = await client.iter_documents(page_size=2)
+            documents = [doc async for doc in client.iter_documents(page_size=2)]
 
         assert [d.id for d in documents] == [1, 2, 3]
 
@@ -273,7 +273,7 @@ class TestPagination:
             return_value=httpx.Response(200, json=_page([_doc(1)]), headers=V10_HEADERS)
         )
         async with PaperlessClient(paperless_settings) as client:
-            documents = await client.iter_documents()
+            documents = [doc async for doc in client.iter_documents()]
         assert len(documents) == 1
         assert route.call_count == 1
 
@@ -286,7 +286,7 @@ class TestPagination:
             return_value=httpx.Response(200, json=payload, headers=V10_HEADERS)
         )
         async with PaperlessClient(paperless_settings) as client:
-            assert len(await client.iter_documents()) == 1
+            assert len([doc async for doc in client.iter_documents()]) == 1
 
     @respx.mock
     async def test_page_size_is_capped(self, paperless_settings: Settings) -> None:
@@ -294,7 +294,7 @@ class TestPagination:
             return_value=httpx.Response(200, json=_page([]), headers=V10_HEADERS)
         )
         async with PaperlessClient(paperless_settings) as client:
-            await client.iter_documents(page_size=99999)
+            [doc async for doc in client.iter_documents(page_size=99999)]
         assert route.calls.last.request.url.params["page_size"] == "250"
 
     @respx.mock
@@ -305,7 +305,7 @@ class TestPagination:
             return_value=httpx.Response(200, json=_page([]), headers=V10_HEADERS)
         )
         async with PaperlessClient(paperless_settings) as client:
-            await client.iter_documents(params={"document_type__id": 3})
+            [doc async for doc in client.iter_documents(params={"document_type__id": 3})]
         assert route.calls.last.request.url.params["document_type__id"] == "3"
 
     @respx.mock
@@ -350,7 +350,7 @@ class TestPagination:
             return_value=httpx.Response(404, json={"detail": "Invalid page."})
         )
         async with PaperlessClient(paperless_settings) as client:
-            documents = await client.iter_documents()
+            documents = [doc async for doc in client.iter_documents()]
         assert [d.id for d in documents] == [1, 2]
         assert page_3.call_count == 0, "iterator must stop as soon as next is null"
 

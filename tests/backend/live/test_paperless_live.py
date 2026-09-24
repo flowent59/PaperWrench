@@ -139,7 +139,7 @@ class TestPagination:
         page = await live_client.list_documents(page_size=1)
         if page.count < 2:
             pytest.skip("needs at least 2 documents; run the seeder")
-        documents = await live_client.iter_documents(page_size=1)
+        documents = [doc async for doc in live_client.iter_documents(page_size=1)]
         assert len(documents) == page.count
         assert len({d.id for d in documents}) == page.count, "no duplicates across pages"
 

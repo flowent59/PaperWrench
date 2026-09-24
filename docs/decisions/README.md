@@ -22,6 +22,7 @@ edited: a new record supersedes it, and the old one is marked accordingly.
 | [0010](0010-search-is-not-a-filter.md) | Search is a separate primitive, not a FilterSet condition | Accepted |
 | [0011](0011-empty-and-missing-are-not-the-same-question.md) | `is missing`, `is null` and `is empty` are three different questions | Accepted |
 | [0012](0012-inspector-coordinated-writes-and-external-race.md) | Inspector coordinated writes and the external-writer race | Accepted |
+| [0013](0013-expiring-preview-staging-and-confirmation.md) | Expiring preview staging and workflow confirmation | Accepted (M7) |
 
 ## Format
 

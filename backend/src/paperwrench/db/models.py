@@ -377,3 +377,30 @@ __all__ = [
 
 # Silence "imported but unused" for the re-exported Base.
 _ = Any
+
+
+class Preview(Base):
+    """Expiring M7 staging, never a durable Job or a live document cache."""
+
+    __tablename__ = "previews"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, index=True)
+    ready: Mapped[bool] = mapped_column(default=False, nullable=False)
+    confirmed: Mapped[bool] = mapped_column(default=False, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    summary_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class PreviewDocument(Base):
+    __tablename__ = "preview_documents"
+    __table_args__ = (
+        UniqueConstraint("preview_id", "document_id", name="preview_document_identity"),
+        Index("ix_preview_status_position", "preview_id", "status", "position"),
+    )
+    preview_id: Mapped[str] = mapped_column(
+        ForeignKey("previews.id", ondelete="CASCADE"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    result_json: Mapped[str] = mapped_column(Text, nullable=False)

@@ -47,6 +47,8 @@ from paperwrench.logging import get_logger
 from paperwrench.logging import register_secret
 from paperwrench.paperless import MetadataRegistry
 from paperwrench.paperless import PaperlessClient
+from paperwrench.previews.service import PreviewService
+from paperwrench.previews.service import cleanup as cleanup_previews
 
 logger = get_logger(__name__)
 
@@ -66,6 +68,7 @@ async def _heartbeat_loop(instance_id: str) -> None:
     while True:  # pragma: no cover - background task
         await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
         try:
+            cleanup_previews()
             with session_scope() as session:
                 if not refresh_lock(session, instance_id):
                     logger.error("runtime_lock_lost", instance_id=instance_id)
@@ -240,6 +243,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # it outlives a single request.
         app.state.paperless_client = PaperlessClient(settings)
         app.state.metadata_registry = MetadataRegistry(app.state.paperless_client)
+        cleanup_previews(startup=True)
+        app.state.previews = PreviewService()
 
         heartbeat = asyncio.create_task(_heartbeat_loop(instance_id))
         logger.info(

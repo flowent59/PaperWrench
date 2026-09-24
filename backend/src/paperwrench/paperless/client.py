@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json as json_module
 import types
+from collections.abc import AsyncGenerator
 from copy import deepcopy
 from typing import Any
 from typing import Self
@@ -426,9 +427,20 @@ class PaperlessClient:
 
     async def iter_documents(
         self, *, params: dict[str, Any] | None = None, page_size: int | None = None
-    ) -> list[Document]:
-        raw = await self.iter_pages("/api/documents/", params=params, page_size=page_size)
-        return [Document.model_validate(item) for item in raw]
+    ) -> AsyncGenerator[Document, None]:
+        """Yield documents lazily, retaining at most one server page.
+
+        Consumers wanting a list must collect explicitly. Never follow an
+        upstream absolute next URL (it may name a different origin).
+        """
+        page = 1
+        while True:
+            batch = await self.list_documents(params=params, page=page, page_size=page_size)
+            for document in batch.results:
+                yield document
+            if batch.next is None:
+                return
+            page += 1
 
     async def get_document_metadata(self, document_id: int) -> dict[str, Any]:
         """``/metadata/`` sub-resource.
