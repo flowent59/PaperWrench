@@ -69,9 +69,10 @@ catalogue, validation and the compiler. Pure once the catalogue is built:
 only `filters/service.py` touches the Metadata Registry, so a filter can be
 validated, compiled or refused without a single request leaving the process.
 
-**`services/`** — the rest of the domain. Transformation preview and the job
-engine (M6+). This layer is where the rules from the ADRs are implemented and
-where the tests that matter point.
+**`transformations/`** — the M6 specification and pure evaluator. It accepts a
+normalized `Document`, a transformation and a snapshot of custom-field
+definitions. It has no client, registry, database, clock or write path.
+Dataset-wide preview and jobs belong to later milestones.
 
 **`paperless/`** — the client. One place that knows how to talk to Paperless:
 version negotiation, pagination, error mapping, and the read-modify-write
@@ -389,6 +390,41 @@ shows actual normalization, invalidates document/grid/count caches, and requires
 a fresh read before the next edit. M5 has no durable history, crash recovery,
 exactly-once delivery or rollback. Timeout/disconnect can leave an unknown result;
 never infer that no write happened. M8/M9 remain future milestones.
+
+## M6 Transformation Engine
+
+`Transformation` combines target identity (`document_ids` or the existing
+`DatasetQuery`) with one or more distinct target-field operations. It does not
+materialize a dataset. Every operation uses the existing `FieldRef`; custom
+field identity is its Paperless ID, while `display_name` is only a UI hint.
+Duplicate target fields are rejected so operation order cannot silently change
+the meaning of a proposal.
+
+`evaluate(document, transformation, definitions)` is synchronous and pure. It
+evaluates each operation against the same document snapshot and returns ordered
+`ProposedChange` records with `before`, `intended` and `change`/`unchanged`/`error`.
+An error carries a stable code and source field key. No `written_value` exists.
+`POST /api/v1/transformations/validate` checks metadata-dependent rules from a
+registry snapshot without fetching any document. The HTTP adapter
+`POST /api/v1/transformations/documents/{id}/evaluate` performs only document
+and metadata GETs before calling the evaluator; it computes one document,
+never a dataset preview or an Apply operation.
+
+Operation semantics:
+
+| Operation | Meaning |
+| --- | --- |
+| SET | Set a non-null, type-validated core or supported custom value. Monetary is an exact currency-prefixed string validated with `Decimal`; Select accepts only an option ID. |
+| CLEAR | Custom fields explicitly become ABSENT (detach) or NULL (attached null). Optional core references and archive serial number become NULL; tags become `[]`. Title and dates cannot be cleared. |
+| REPLACE | Literal, case-sensitive, all-occurrences string replacement on present title or supported custom text. No match yields `unchanged`; non-text and non-present values error. |
+| TEMPLATE | Restricted `{placeholder}` substitution into title or supported custom text. Each placeholder must have one explicit `FieldRef` binding. Unknown, absent, null and empty sources error; no expression evaluation or implicit empty substitution. |
+
+Template rendering uses Unicode text unchanged, ISO dates, `true`/`false`,
+decimal integers, canonical Monetary text and the current Select label. A Select
+option that no longer exists is unresolved; writes still use option IDs. The
+definition snapshot can become stale, so M8 must check current state before
+writing. `DatasetQuery` retains the M4 filter compiler's exactness rules; M6
+does not fetch all documents or reinterpret filters.
 
 ## Security posture
 

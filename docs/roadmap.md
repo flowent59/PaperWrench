@@ -207,14 +207,15 @@ a job's target document ids (that belongs with the Job Engine, M8).
   deterministic local and external interleaving, and ignored conditional headers
 - No durable edit history or rollback; these remain M8/M9. No M6 work included.
 
-## M6 — Transformation Engine · Planned
+## M6 — Transformation Engine · Done
 
-- Transformation model: template rename, set/clear field, find and replace,
-  case transforms
-- Template engine over document fields and custom fields, with
-  `TEMPLATE_UNRESOLVED` on missing data rather than silent empties
-- Transformations are defined and validated here; nothing is written to
-  Paperless by this milestone
+- Pure per-document SET, CLEAR, literal REPLACE and strict TEMPLATE proposals
+  using `FieldRef`, typed Paperless values and explicit target IDs or `DatasetQuery`
+- `before`/`intended` plus change/unchanged/error records; ABSENT, NULL,
+  empty string, zero and false remain distinct
+- Read-only one-document evaluation API and authoring UI; dataset-wide preview,
+  confirmation, execution, durable history and rollback remain M7–M9
+- Case transforms remain outside the MVP scope defined by issue #9
 
 ## M7 — Dry Run · Planned
 

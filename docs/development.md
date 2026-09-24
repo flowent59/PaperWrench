@@ -236,6 +236,7 @@ backend/
     filters/       the Filter Engine: domain model, catalogue, validation,
                    compiler. Pure after the catalogue is built - only
                    service.py touches the Metadata Registry
+    transformations/  M6 specification and pure per-document evaluator
     paperless/     the sole HTTP boundary + normalized models + registry
     db/            models, engine, session, lock, migrations
     config.py      settings and secrets
@@ -276,6 +277,32 @@ Read [ADR-0003](decisions/0003-per-document-patch-as-mvp-write-path.md),
 [ADR-0004](decisions/0004-safe-custom-field-read-modify-write.md) and
 [ADR-0005](decisions/0005-written-value-and-optimistic-conflict-detection.md).
 They are not background reading; they are the rules that code has to satisfy.
+
+## Working on M6 transformations
+
+The M6 domain API is `validate(Transformation, definitions_by_id)` and
+`evaluate(Document, Transformation, definitions_by_id)`.
+Build the `definitions_by_id` snapshot from `MetadataRegistry.all_custom_fields()`
+outside both functions. They neither fetch nor write. The API's
+single-document route performs GETs only; it is an authoring check, not the M7
+dataset-wide Dry Run.
+
+Specifications have a target source (`ids` or the existing `DatasetQuery`) and
+one or more unique target fields. Custom fields use `CustomFieldRef.field_id`.
+For a title template such as `Relevé de vacations – {Période concernée}`,
+bind the placeholder explicitly to a custom `FieldRef` by ID. Placeholder
+names are local aliases, never lookup keys. Missing, null and empty values
+produce `TEMPLATE_UNRESOLVED`; unknown definitions and unsupported types have
+their own errors. Monetary SET values are exact strings such as `EUR0.00`,
+Select SET values are option IDs, and custom CLEAR must explicitly choose
+`absent` or `null`. The renderer uses a Select label for display, but that
+label is never an identity or write value.
+
+Run `pytest tests/backend/unit/test_transformations.py` for the pure matrix and
+the guarded zero-write API check. Frontend authoring serialization is covered
+by `frontend/src/pages/transformations/model.test.ts`. M7/M8 must recheck the
+document and metadata at their own boundary; an M6 proposal is based only on
+the supplied state.
 
 ## Working on M5 writes
 

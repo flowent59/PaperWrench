@@ -50,7 +50,7 @@ export const navSections: NavSection[] = [
   {
     title: messages.nav.sectionTools,
     items: [
-      { to: '/transformations', label: messages.nav.transformations, icon: Wand2, available: false },
+      { to: '/transformations', label: messages.nav.transformations, icon: Wand2, available: true },
       { to: '/quality', label: messages.nav.quality, icon: ShieldCheck, available: false },
       { to: '/duplicates', label: messages.nav.duplicates, icon: Copy, available: false },
       { to: '/extraction', label: messages.nav.extraction, icon: ScanText, available: false },
