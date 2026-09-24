@@ -69,15 +69,17 @@ M5 exposes immediate, explicit single-document edits in the Inspector.
   browser. Paperless permissions remain authoritative.
 
 See [ADR-0012](docs/decisions/0012-inspector-coordinated-writes-and-external-race.md)
-for the concurrency contract and its limitations. Bulk dry-run, bounded job
-execution and durable rollback are future capabilities, not M5 guarantees.
+for the concurrency contract and its limitations. M7 adds read-only bulk
+dry-run; bounded job execution and durable rollback remain future capabilities.
 
 ## Status
 
-**Early development, M0–M5 implemented.** Explorer uses the M4 Dataset/FilterSet
-engine. Click a document title to open its Inspector and edit supported core and
-custom fields inline, with explicit save/cancel and conflict handling.
-M6 has not started. See [docs/roadmap.md](docs/roadmap.md).
+**Early development, M0–M7 implemented.** Explorer uses the Dataset/FilterSet
+engine and can send selected IDs or all matching documents to Transformations.
+Dry Run shows paginated before/intended values and changed/unchanged/error
+counts without writing to Paperless. Review confirmation is available; Apply
+stays disabled until M8. Single-document Inspector edits remain available.
+See [docs/roadmap.md](docs/roadmap.md) and the [preview API](docs/preview-api.md).
 
 ## Quick start
 

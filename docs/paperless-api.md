@@ -759,3 +759,26 @@ The response contains normalized `before` and `document` (actual PATCH result),
 plus the exact intended payload. UI cache invalidation and DTO/client rejection
 are VERIFIED_SOURCE by automated local tests, not claims about Paperless.
 M5's unsupported custom types (float, URL, document link) stay read-only.
+
+## 10. M7 Dry Run verification
+
+**VERIFIED_LIVE (3.1.2)** — `tests/backend/live/test_previews_live.py` uses
+the guarded Golden Dataset and the existing compiled DatasetQuery to select
+`Relevé de vacations`. Server count, a two-document-per-page walk and the M7
+staged target set agree. The template `Relevé de vacations – {Période concernée}`
+proposes the expected titles; absent periods produce `TEMPLATE_UNRESOLVED`.
+Zero amounts render as `EUR0.00`. Every transport method during the probe is
+asserted to be GET, and all normalized selected documents compare equal before
+and after. This verifies the preview, not future Apply or concurrent stability.
+
+**VERIFIED_SOURCE** — mocked tests cover partial document/operation errors,
+compilation refusal with zero document calls, token tampering/binding/expiry/
+replay, stable result pages, staging cleanup and no Paperless mutation. A
+synthetic 10,000-document run checks batch staging and bounded live Document
+references. **NOT_RUN** — 50k/100k capacity and live 10k performance.
+**ASSUMED** — no undetectable concurrent change during offset enumeration;
+count/duplicate checks cannot establish an atomic upstream snapshot.
+
+The [M7 API contract](preview-api.md) and
+[ADR-0013](decisions/0013-expiring-preview-staging-and-confirmation.md) describe
+the distinction between preview at T0 and future execution checks at T2.

@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 
 import { transformationsApi } from '@/api/client'
 import {
   useCorrespondents, useCustomFields, useDocumentTypes, useFilterCapabilities,
   useFilterValidation, useStoragePaths, useTags,
 } from '@/api/queries'
-import type { EvaluationResult, FilterSet, SearchSpec } from '@/api/types'
+import type { EvaluationResult, FilterSet, SearchSpec, TransformationTarget } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
 import { FilterBuilder } from '@/pages/explorer/filter-builder'
@@ -15,6 +16,8 @@ import {
   emptyOperation, placeholders, serializeTransformation,
   type OperationDraft, type OperationKind,
 } from './model'
+import { DryRun } from './dry-run'
+import { valueText } from './value'
 
 const INPUT = 'h-9 rounded-md border border-input bg-background px-2 text-sm'
 const TARGET_CORE = [
@@ -30,14 +33,13 @@ const SOURCE_CORE = [
 ] as const
 const EDITABLE = new Set(['string', 'longtext', 'monetary', 'select', 'date', 'boolean', 'integer'])
 
-function valueText(value: { kind: string; raw: unknown } | null): string {
-  if (value === null) return messages.transformations.unavailable
-  if (value.kind !== 'present') return value.kind.toUpperCase()
-  if (value.raw === '') return messages.transformations.emptyString
-  return typeof value.raw === 'string' ? value.raw : JSON.stringify(value.raw)
+export function TransformationsRoute() {
+  const location = useLocation()
+  const state = location.state as { targets?: TransformationTarget } | null
+  return <TransformationsPage key={location.key} initialTargets={state?.targets} />
 }
 
-export function TransformationsPage() {
+export function TransformationsPage({ initialTargets }: { initialTargets?: TransformationTarget | undefined }) {
   const m = messages.transformations
   const fieldsQuery = useCustomFields()
   const fields = fieldsQuery.data ?? []
@@ -46,12 +48,14 @@ export function TransformationsPage() {
   const correspondents = useCorrespondents()
   const documentTypes = useDocumentTypes()
   const storagePaths = useStoragePaths()
-  const [source, setSource] = useState<'ids' | 'dataset'>('ids')
-  const [ids, setIds] = useState('')
+  const initialQuery = initialTargets?.source === 'dataset' ? initialTargets.query : null
+  const [source, setSource] = useState<'ids' | 'dataset'>(initialTargets?.source ?? 'ids')
+  const [ids, setIds] = useState(initialTargets?.source === 'ids' ? initialTargets.document_ids.join(', ') : '')
   const [documentId, setDocumentId] = useState('')
-  const [search, setSearch] = useState('')
-  const [searchMode, setSearchMode] = useState<'title' | 'content' | 'advanced'>('title')
-  const [filters, setFilters] = useState<FilterSet>(emptyFilterSet)
+  const [search, setSearch] = useState(initialQuery?.search?.text ?? '')
+  const [searchMode, setSearchMode] = useState<'title' | 'content' | 'advanced'>(initialQuery?.search?.mode ?? 'title')
+  const [filters, setFilters] = useState<FilterSet>(initialQuery?.filters ?? emptyFilterSet)
+  const [ordering, setOrdering] = useState(initialQuery?.ordering ?? '')
   const validation = useFilterValidation(filters, source === 'dataset' && !isEmpty(filters))
   const [drafts, setDrafts] = useState<OperationDraft[]>([emptyOperation()])
   const [result, setResult] = useState<EvaluationResult | null>(null)
@@ -69,16 +73,19 @@ export function TransformationsPage() {
     setResult(null)
   }
 
+  function buildTransformation() {
+    const searchSpec: SearchSpec | null = search.trim() ? { mode: searchMode, text: search } : null
+    if (source === 'dataset' && !isEmpty(filters) && validation.data?.compilable !== true) {
+      throw new Error(m.invalidFilters)
+    }
+    return serializeTransformation(source, ids, searchSpec, filters, drafts, fields, ordering)
+  }
+
   async function evaluate() {
     setError('')
     setResult(null)
     try {
-      const searchSpec: SearchSpec | null = search.trim()
-        ? { mode: searchMode, text: search } : null
-      if (source === 'dataset' && !isEmpty(filters) && validation.data?.compilable !== true) {
-        throw new Error(m.invalidFilters)
-      }
-      const transformation = serializeTransformation(source, ids, searchSpec, filters, drafts, fields)
+      const transformation = buildTransformation()
       setBusy(true)
       const validationResult = await transformationsApi.validate(transformation)
       if (!validationResult.valid) {
@@ -117,6 +124,16 @@ export function TransformationsPage() {
           </select>
           <input className={`${INPUT} ml-2`} value={search}
             onChange={(event) => setSearch(event.target.value)} />
+        </label>
+        <label className="block text-sm">{messages.preview.ordering}
+          <select className={`${INPUT} ml-2`} value={ordering}
+            onChange={(event) => setOrdering(event.target.value)}>
+            <option value="">{messages.preview.defaultOrdering}</option>
+            {['title', 'created', 'modified', 'added', 'archive_serial_number', 'correspondent', 'document_type',
+              ...fields.filter((field) => ['string', 'longtext', 'monetary', 'date'].includes(field.data_type))
+                .map((field) => `custom_field_${field.id}`)].flatMap((key) => [key, `-${key}`]).map((key) =>
+              <option key={key} value={key}>{key}</option>)}
+          </select>
         </label>
         <FilterBuilder filters={filters} onChange={setFilters}
           fields={capabilities.data?.fields ?? []} grouping={capabilities.data?.grouping}
@@ -194,6 +211,8 @@ export function TransformationsPage() {
       <Button type="button" variant="outline" onClick={() => setDrafts((current) =>
         [...current, emptyOperation()])}>{m.add}</Button>
     </section>
+    <DryRun key={JSON.stringify([source, ids, search, searchMode, filters, ordering, drafts, fields])}
+      build={buildTransformation} />
     <section className="space-y-3 rounded-lg border p-4">
       <h2 className="font-semibold">{m.evaluate}</h2>
       <p className="text-sm text-muted-foreground">{m.oneDocument}</p>

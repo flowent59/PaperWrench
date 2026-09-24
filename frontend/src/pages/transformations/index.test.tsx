@@ -3,20 +3,53 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { messages } from '@/i18n/messages'
+import type { TransformationTarget } from '@/api/types'
 
 import { TransformationsPage } from './index'
 
 const m = messages.transformations
 const fields = [{ id: 7, name: 'Période concernée', data_type: 'string', extra_data: {} }]
 
-function renderPage() {
+function renderPage(initialTargets?: TransformationTarget) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={queryClient}><TransformationsPage /></QueryClientProvider>)
+  return render(<QueryClientProvider client={queryClient}><TransformationsPage initialTargets={initialTargets} /></QueryClientProvider>)
 }
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('M6 authoring page', () => {
+  it('preserves the dataset identity passed from Explorer, including ordering', async () => {
+    const targets: TransformationTarget = { source: 'dataset', query: {
+      search: { mode: 'content', text: 'été' }, ordering: '-created',
+      filters: { root: { kind: 'group', operator: 'and', children: [] } },
+    } }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init
+      if (String(input).endsWith('/previews')) return new Response(JSON.stringify({
+        error: { code: 'VALIDATION_ERROR', message: 'Captured selection' },
+      }), { status: 422 })
+      return new Response(JSON.stringify(String(input).endsWith('/metadata/custom-fields') ? fields : []))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage(targets)
+    await screen.findAllByRole('option', { name: 'Période concernée' })
+    expect(screen.getByLabelText(messages.preview.ordering)).toHaveValue('-created')
+    fireEvent.change(screen.getByLabelText('{Période concernée}'), { target: { value: 'custom_field:7' } })
+    fireEvent.click(screen.getByRole('button', { name: messages.preview.create }))
+    await screen.findByText('Captured selection')
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/previews'))
+    expect(JSON.parse(String(call?.[1]?.body)).targets).toEqual(targets)
+  })
+
+  it('prefills explicit Explorer IDs without fetching the entire dataset', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify([])))
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage({ source: 'ids', document_ids: [7, 900] })
+    expect(screen.getByLabelText(m.ids)).toHaveValue('7, 900')
+    expect(screen.getByLabelText(m.explicitIds)).toBeChecked()
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(0)
+  })
+
   it('serializes stable template binding and explicit target IDs', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input)

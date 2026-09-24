@@ -217,7 +217,7 @@ a job's target document ids (that belongs with the Job Engine, M8).
   confirmation, execution, durable history and rollback remain M7–M9
 - Case transforms remain outside the MVP scope defined by issue #9
 
-## M7 — Dry Run · Planned
+## M7 — Dry Run · Done
 
 - Per-document before/after preview, with a test asserting zero HTTP writes
 - `preview_token` binding a confirmation to the exact preview it came from
@@ -225,6 +225,16 @@ a job's target document ids (that belongs with the Job Engine, M8).
   had), `intended_value` (what the transformation wants) — `written_value`
   does not exist yet at this stage and must never be guessed from
   `intended_value`
+- Explicit IDs and the existing compiled DatasetQuery, with no local fallback
+- Sequential server pages, expiring SQLite result staging, paginated UI/API
+  rows and distinct changed/unchanged/error counts; bounded memory and explicit
+  document/byte/time/capacity limits (ADR-0013)
+- Token binds spec, selection identity, actual target IDs, result fingerprint,
+  version and expiry; confirmation is one-time local review, never execution
+- Explorer selection/dataset handoff, error review, stale/expired gating and
+  disabled Apply; no Job creation, durable target snapshot or history
+- Guarded 3.1.2 Golden Dataset read-only probe and synthetic 10k/100-page
+  retention test; 50k/100k live capacity remains NOT_RUN
 
 ## M8 — Job Engine + History · Planned
 

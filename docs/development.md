@@ -237,6 +237,7 @@ backend/
                    compiler. Pure after the catalogue is built - only
                    service.py touches the Metadata Registry
     transformations/  M6 specification and pure per-document evaluator
+    previews/      M7 bounded read orchestration, expiring result staging, review
     paperless/     the sole HTTP boundary + normalized models + registry
     db/            models, engine, session, lock, migrations
     config.py      settings and secrets
@@ -303,6 +304,44 @@ the guarded zero-write API check. Frontend authoring serialization is covered
 by `frontend/src/pages/transformations/model.test.ts`. M7/M8 must recheck the
 document and metadata at their own boundary; an M6 proposal is based only on
 the supplied state.
+
+## Working on M7 previews
+
+Read [ADR-0013](decisions/0013-expiring-preview-staging-and-confirmation.md) and
+the [preview API contract](preview-api.md). Reuse M6 `evaluate()`; do not add
+another SET/CLEAR/REPLACE/TEMPLATE implementation. Preview GETs use the lifecycle
+PaperlessClient. There is no document mutation call in the preview service.
+
+`iter_documents()` is now an async generator. Use `async for document in
+client.iter_documents(...)`; collect explicitly only in small controlled tests.
+M7 uses `list_documents()` to retain each page's count/next envelope, commits
+one batch before the next GET and never keeps a library-sized Document array.
+
+The two staging tables are migrated by Alembic, separate from dormant Job
+tables. TTL is 30 minutes; interrupted builds are removed at startup. Explicit
+limits are 100,000 documents, 128 MiB result JSON, five-minute build deadline,
+one active builder and four retained previews. API/UI pages remain bounded.
+No partial preview is returned on a limit/fatal error. Local deletion is not
+secure erasure; the SQLite file can retain/reuse allocated pages.
+
+Focused checks:
+
+```sh
+pytest tests/backend/unit/test_previews.py tests/backend/integration_mocked/test_preview_bounds.py
+PAPERWRENCH_ALLOW_LIVE_TESTS=true PAPERWRENCH_LIVE_PAPERLESS_URL=http://127.0.0.1:8010 pytest tests/backend/live/test_previews_live.py -v
+cd frontend && npm test -- --run src/pages/transformations
+```
+
+The live probe uses only GETs after the guarded Golden Dataset setup. It checks
+compiled document-type selection, counts, small traversal pages, the vacation
+title template, missing periods, EUR0.00 and identical normalized documents
+after preview. Synthetic 10k tests verify bounded Document retention and staged
+batches, not live 10k performance. 50k/100k live capacity remains NOT_RUN.
+
+Preview confirmation is local review only. Future M8 must atomically claim a
+token and copy exact staged targets into durable per-target Job storage before
+expiry, then re-read/check documents and metadata before writing. Do not turn
+`confirm()` into an implicit Apply path. Never add `written_value` to M7.
 
 ## Working on M5 writes
 
