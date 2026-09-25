@@ -287,13 +287,13 @@ a job's target document ids (that belongs with the Job Engine, M8).
 - Distinct absent, null, empty, zero, false, Decimal and Select ID results
 - Contract and limits: [quality API](quality-api.md)
 
-## M12 — Collections · Planned
+## M12 — Collections · Done
 
-- Grouping of documents (duplicates, near-duplicates, related sets) into
-  named collections
-- Surface Paperless's own `duplicate_documents` plus near-duplicate detection
-  on metadata
-- Side-by-side comparison and guided resolution
+- Named static collections of explicit Paperless document IDs
+- Create and add from Explorer's cross-page selection; remove members and browse
+  paginated membership with links to visible documents
+- Keep unavailable members by ID only, without cached document metadata
+- Dynamic collections, duplicate detection and guided resolution are outside M12
 
 ## M13 — Polish / tests / release · Planned
 

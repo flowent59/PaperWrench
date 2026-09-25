@@ -40,6 +40,9 @@ import type {
   SchemaEvaluationPage,
   ExplicitIdsPage,
   QualityPage,
+  CollectionDefinition,
+  CollectionView,
+  CollectionMemberPage,
 } from './types'
 
 export const API_PREFIX = '/api/v1'
@@ -181,6 +184,25 @@ export const filtersApi = {
     apiFetch<FilterCountResponse>('/filters/count', {
       method: 'POST',
       body: JSON.stringify({ filters, search }),
+    }),
+}
+
+export const collectionsApi = {
+  list: () => apiFetch<CollectionView[]>('/collections'),
+  create: (data: CollectionDefinition & { document_ids: number[] }) =>
+    apiFetch<CollectionView>('/collections', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: number, data: CollectionDefinition) =>
+    apiFetch<CollectionView>(`/collections/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/collections/${id}`, { method: 'DELETE' }),
+  members: (id: number, page: number) =>
+    apiFetch<CollectionMemberPage>(`/collections/${id}/documents?page=${page}&page_size=25`),
+  add: (id: number, document_ids: number[]) =>
+    apiFetch<CollectionView>(`/collections/${id}/documents`, {
+      method: 'POST', body: JSON.stringify({ document_ids }),
+    }),
+  removeMembers: (id: number, document_ids: number[]) =>
+    apiFetch<CollectionView>(`/collections/${id}/documents`, {
+      method: 'DELETE', body: JSON.stringify({ document_ids }),
     }),
 }
 

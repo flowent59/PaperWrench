@@ -13,6 +13,7 @@ import { TransformationsRoute } from '@/pages/transformations'
 import { NotFoundPage } from '@/pages/not-found'
 import { SchemasPage } from '@/pages/schemas'
 import { QualityPageView } from '@/pages/quality'
+import { CollectionsPage, CollectionPage } from '@/pages/collections'
 
 import './index.css'
 
@@ -47,6 +48,8 @@ createRoot(container).render(
               <Route path="jobs/:jobId" element={<JobPage />} />
               <Route path="schemas" element={<SchemasPage />} />
               <Route path="quality" element={<QualityPageView />} />
+              <Route path="collections" element={<CollectionsPage />} />
+              <Route path="collections/:collectionId" element={<CollectionPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

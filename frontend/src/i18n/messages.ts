@@ -13,6 +13,16 @@
  */
 
 export const messages = {
+  collections: {
+    title: 'Collections', name: 'Name', description: 'Description', destination: 'Collection',
+    new: 'New collection', create: 'Create collection', saveSelection: 'Save selected IDs',
+    save: 'Save', delete: 'Delete collection', remove: 'Remove member', members: 'Members',
+    back: 'All collections', loading: 'Loading collections…', error: 'Collection request failed.',
+    empty: 'No collections yet.', emptyMembers: 'No members yet.', notFound: 'Collection not found.',
+    unavailable: 'Unavailable document', previous: 'Previous', next: 'Next',
+    count: (count: number) => `${count} member(s)`,
+    page: (page: number, total: number) => `Page ${page} of ${Math.max(1, total)}`,
+  },
   quality: {
     title: 'Data Quality',
     subtitle: 'Read-only schema violations. Counts describe this evaluated page.',
