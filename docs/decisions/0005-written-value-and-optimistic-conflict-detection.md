@@ -4,6 +4,10 @@
 
 Accepted (M0).
 
+M8 qualification: [ADR-0014](0014-durable-jobs-and-write-provenance.md) defines
+acknowledged response plus GET readback evidence, and excludes ambiguous or
+already-at-target observations from future rollback provenance.
+
 **M5 qualification:** [ADR-0012](0012-inspector-coordinated-writes-and-external-race.md)
 now defines the shared mutation coordinator and explicit external-race contract.
 Immediate Inspector edits return before/intended/actual values without durable

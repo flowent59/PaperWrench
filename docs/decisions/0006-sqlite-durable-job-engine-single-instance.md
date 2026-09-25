@@ -4,6 +4,10 @@
 
 Accepted (M0).
 
+M8 implementation: [ADR-0014](0014-durable-jobs-and-write-provenance.md) supersedes
+SSE with polling of durable paginated History and specifies recovery/lock-loss
+behavior. No unattended automatic resume is supported.
+
 ## Context
 
 Bulk jobs are long-running: several hundred documents at concurrency 4 takes

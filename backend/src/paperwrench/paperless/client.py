@@ -24,6 +24,7 @@ from __future__ import annotations
 import json as json_module
 import types
 from collections.abc import AsyncGenerator
+from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 from typing import Self
@@ -54,6 +55,7 @@ from paperwrench.paperless.models import StoragePath
 from paperwrench.paperless.models import Tag
 from paperwrench.paperless.models import merge_custom_fields
 from paperwrench.paperless.mutations import DocumentMutationCoordinator
+from paperwrench.paperless.mutations import MutationPlan
 from paperwrench.paperless.mutations import MutationResult
 from paperwrench.paperless.mutations import core_payload
 from paperwrench.paperless.mutations import revision
@@ -92,7 +94,7 @@ class PaperlessClient:
         http_client: httpx.AsyncClient | None = None,
         coordinator: DocumentMutationCoordinator | None = None,
     ) -> None:
-        self.coordinator = coordinator or DocumentMutationCoordinator()
+        self.coordinator = coordinator or DocumentMutationCoordinator(settings.max_concurrency)
         self._settings = settings
         self._external_client = http_client is not None
         self._client = http_client
@@ -577,9 +579,28 @@ class PaperlessClient:
         one PATCH. All cooperating actors hold the same lock for that cycle.
         No retry and no rollback; the PATCH response supplies actual values.
         """
-        payload = core_payload(deepcopy(core))
-        updates = self._validate_custom_updates(custom_updates)
-        removals = list(remove_custom_fields)
+        plan = MutationPlan(core, custom_updates, remove_custom_fields, acknowledge_external_race)
+        # Preserve M5's validation-before-I/O contract.
+        self._validate_plan(plan)
+
+        def prepare(current: Document) -> MutationPlan:
+            if revision(current) != expected_revision:
+                raise PaperlessConflictError(
+                    "Document changed since it was opened; reload and review before saving.",
+                    details={"document_id": document_id, "phase": "before_write"},
+                )
+            return plan
+
+        result = await self.mutate_document_with_plan(document_id, prepare)
+        assert result is not None
+        return result
+
+    def _validate_plan(
+        self, plan: MutationPlan
+    ) -> tuple[dict[str, Any], list[dict[str, Any]], list[int]]:
+        payload = core_payload(deepcopy(plan.core))
+        updates = self._validate_custom_updates(plan.custom_updates)
+        removals = list(plan.remove_custom_fields)
         if any(type(i) is not int or i <= 0 for i in removals) or len(set(removals)) != len(
             removals
         ):
@@ -589,24 +610,44 @@ class PaperlessClient:
         if not payload and not updates and not removals:
             raise PaperlessValidationError("An empty mutation is not allowed.")
         if updates or removals:
-            self._require_race_ack(acknowledge_external_race)
+            self._require_race_ack(plan.acknowledge_external_race)
+        return payload, updates, removals
+
+    async def mutate_document_with_plan(
+        self, document_id: int, prepare: Callable[[Document], MutationPlan | None]
+    ) -> MutationResult | None:
+        """Shared M5/M8 boundary; planning and durable intent run under its lock.
+
+        Returning no plan means no write. The pre-send callback is synchronous:
+        it commits intent and checks ownership without adding a network window.
+        """
         async with self.coordinator.hold(document_id):
             current = await self.get_document(document_id)
-            if current.user_can_change is not True or current.deleted_at is not None:
+            if current.id != document_id:
+                raise PaperlessConflictError("Paperless returned a different document ID.")
+            if current.deleted_at is not None:
+                raise PaperlessNotFoundError("Document has been deleted or moved to trash.")
+            if current.user_can_change is not True:
                 raise PaperlessForbiddenError(
                     "This document is not confirmed editable.", status_code=403
                 )
-            if revision(current) != expected_revision:
-                raise PaperlessConflictError(
-                    "Document changed since it was opened; reload and review before saving.",
-                    details={"document_id": document_id, "phase": "before_write"},
-                )
+            plan = prepare(current)
+            if plan is None:
+                return None
+            payload, updates, removals = self._validate_plan(plan)
             if updates or removals:
                 payload["custom_fields"] = [
                     item
                     for item in merge_custom_fields(current.custom_fields, updates)
                     if item["field"] not in removals
                 ]
+            if plan.before_send is not None:
+                plan.before_send()
             response = await self._request("PATCH", f"/api/documents/{document_id}/", json=payload)
-            written = Document.model_validate(response.json())
-            return MutationResult(before=current, intended=payload, written=written)
+            if plan.after_response is not None:
+                plan.after_response()
+            acknowledged = Document.model_validate(response.json())
+            written = await self.get_document(document_id) if plan.readback else acknowledged
+            return MutationResult(
+                before=current, intended=payload, written=written, response=acknowledged
+            )

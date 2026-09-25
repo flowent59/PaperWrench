@@ -236,13 +236,14 @@ a job's target document ids (that belongs with the Job Engine, M8).
 - Guarded 3.1.2 Golden Dataset read-only probe and synthetic 10k/100-page
   retention test; 50k/100k live capacity remains NOT_RUN
 
-## M8 — Job Engine + History · Planned
+## M8 — Job Engine + History · Done
 
 **Bulk execution and durable job history; manual edits already exist in M5.**
 
-- Job and JobOperation persistence, status transitions
-- asyncio execution with bounded concurrency and a hard ceiling
-- SSE progress stream
+- Job/Target/Operation persistence and migration away from monolithic target JSON
+- Transactional confirmation, Job creation and exact target adoption
+- Fixed asyncio worker pool and shared mutation semaphore, default 4, ceiling 16
+- Durable progress with browser polling and server pagination (ADR-0014 supersedes SSE)
 - Per-document PATCH with verify-before-write and verify-after-write
   ([ADR-0003](decisions/0003-per-document-patch-as-mvp-write-path.md))
 - Safe custom-field read-modify-write, non-bypassable by normal
@@ -252,10 +253,10 @@ a job's target document ids (that belongs with the Job Engine, M8).
   `preview_token`
   ([ADR-0005](decisions/0005-written-value-and-optimistic-conflict-detection.md))
 - `INTERRUPTED` detection at startup; explicit, never automatic, resume
-- Idempotent resumption via the uniqueness constraint
+- Safe resume of unsent targets; send uncertainty remains ambiguous/manual review
 - Job history with the full per-document operation record
-- Filterable operation view (written, skipped, conflicted, failed) and export
-  of a job report
+- Filterable target view and paginated field audit (before/intended/actual written)
+- No automatic write retry, rollback execution or user cancellation
 - The full critical test set green on the sandbox before any real write
 
 ## M9 — Rollback · Planned

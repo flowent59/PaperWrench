@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import time
 import weakref
 
 import httpx
 import pytest
+from sqlalchemy import event
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,6 +19,10 @@ from paperwrench.db.models import Preview
 from paperwrench.db.models import PreviewDocument
 from paperwrench.db.session import session_scope
 from paperwrench.errors import PaperWrenchError
+from paperwrench.jobs.model import CreateJob
+from paperwrench.jobs.store import create_job
+from paperwrench.jobs.store import operation_page
+from paperwrench.jobs.store import target_page
 from paperwrench.paperless import MetadataRegistry
 from paperwrench.paperless import PaperlessClient
 from paperwrench.paperless.models import CustomField
@@ -123,6 +129,34 @@ async def test_ten_thousand_documents_release_prior_pages(
         assert len(last.items) == 25
         gc.collect()
         assert all(ref() is None for ref in previous)
+        batch_sizes: list[int] = []
+
+        def observe(db: Session, *_args: object) -> None:
+            batch_sizes.append(len(db.new))
+
+        event.listen(Session, "before_flush", observe)
+        started = time.monotonic()
+        try:
+            job_id = create_job(
+                CreateJob(
+                    preview_id=preview.id,
+                    preview_token=preview.preview_token,
+                    transformation=spec(),
+                    target_fingerprint=preview.target_fingerprint,
+                    result_fingerprint=preview.result_fingerprint,
+                    version=1,
+                    acknowledge=True,
+                )
+            )
+        finally:
+            event.remove(Session, "before_flush", observe)
+        assert max(batch_sizes) <= 200  # 100 targets + 100 field audit rows
+        assert page_calls == 100  # Job creation performs no fresh selection HTTP.
+        assert target_page(job_id, 400, 25, None).items[-1].document_id == 10000
+        assert len(operation_page(job_id, 400, 25, None).items) == 25
+        print(
+            f"Synthetic 10000-target adoption and History page: {time.monotonic() - started:.2f}s"
+        )
 
 
 async def test_cancellation_removes_staging_and_releases_builder(

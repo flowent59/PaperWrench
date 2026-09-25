@@ -781,4 +781,31 @@ count/duplicate checks cannot establish an atomic upstream snapshot.
 
 The [M7 API contract](preview-api.md) and
 [ADR-0013](decisions/0013-expiring-preview-staging-and-confirmation.md) describe
-the distinction between preview at T0 and future execution checks at T2.
+the distinction between preview at T0 and execution checks at T2.
+
+## 11. M8 Job execution verification
+
+**VERIFIED_LIVE (3.1.2)** — `test_jobs_live.py` applies the compiled vacation
+dataset using `Relevé de vacations – {Période concernée}`, rereads every target
+and compares History `written` to the actual title. Scratch probes verify title
+edge-whitespace normalization, a combined title/monetary PATCH preserving the
+neighbouring period, removal of change permission and permission-hidden 404
+after preview, and conflict refusal after an intervening external edit.
+
+An acknowledged real PATCH followed by **injected** response loss stays ambiguous.
+A real subprocess exits before intent, before PATCH, after PATCH, after GET
+readback and after local result commit. Recovery preserves verified success,
+resumes only unsent work on request, and never promotes an uncertain send to
+rollback provenance because current equals intended. This is process-crash
+evidence, not an actual network outage or power-loss simulation.
+
+**VERIFIED_SOURCE** — transactional handoff/rollback, replay refusal, bounded
+target copying, durable progress/pagination, one coordinated mutation per
+document, shared Inspector coordination, runtime loss/fencing and concurrency
+ceiling. No mutation retry is introduced. Synthetic 10k target adoption is
+bounded by local batches, not a live capacity claim.
+
+**ASSUMED** — operator quiescence for external writers; consistent observation
+during upstream pagination. **NOT_RUN** — live 10k/50k/100k capacity, real proxy
+failure and machine power loss. ADR-0012's verified external race is unchanged;
+neither readback nor SQLite can make the Paperless GET/PATCH window atomic.

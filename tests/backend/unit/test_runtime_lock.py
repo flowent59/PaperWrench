@@ -77,3 +77,21 @@ def test_release_is_scoped_to_the_holder(session: Session) -> None:
 
 def test_instance_ids_are_unique() -> None:
     assert build_instance_id() != build_instance_id()
+
+
+def test_concurrent_acquisition_has_exactly_one_owner(session: Session) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from paperwrench.db.session import session_scope
+
+    def claim(owner: str) -> bool:
+        try:
+            with session_scope() as db:
+                acquire_lock(db, owner)
+            return True
+        except SingleInstanceViolationError:
+            return False
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(claim, ["a", "b", "c", "d"]))
+    assert sum(results) == 1

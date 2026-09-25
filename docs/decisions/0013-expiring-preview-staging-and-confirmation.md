@@ -5,6 +5,10 @@
 Accepted for M7. Qualifies the preview portion of ADR-0003. Job creation and
 execution remain M8; this record implements neither.
 
+The handoff is now implemented by [ADR-0014](0014-durable-jobs-and-write-provenance.md).
+New preview results also bind document/catalogue revisions. The historical
+review-only route retains its original non-executing semantics.
+
 ## Context
 
 Issue #10 needs exact, paginated before/intended results for explicit IDs or a

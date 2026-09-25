@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
-import { ApiError, previewsApi } from '@/api/client'
+import { ApiError, jobsApi, previewsApi } from '@/api/client'
 import type { CreatedPreview, Transformation } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
@@ -19,6 +19,10 @@ export function DryRun({ build }: { build: () => Transformation }) {
   const [acknowledged, setAcknowledged] = useState(false)
   const [expired, setExpired] = useState(false)
   const [error, setError] = useState('')
+  const [raceAcknowledged, setRaceAcknowledged] = useState(false)
+  const [jobId, setJobId] = useState<number | null>(null)
+  const [uncertainApply, setUncertainApply] = useState(false)
+  const customWrite = spec?.operations.some((operation) => operation.field.source === 'custom_field') ?? false
   const alive = useRef(true)
   const retainedId = useRef<string | null>(null)
   const pageQuery = useQuery({
@@ -50,6 +54,9 @@ export function DryRun({ build }: { build: () => Transformation }) {
     setBusy(true)
     setError('')
     setAcknowledged(false)
+    setRaceAcknowledged(false)
+    setJobId(null)
+    setUncertainApply(false)
     setExpired(false)
     try {
       const transformation = build()
@@ -76,12 +83,16 @@ export function DryRun({ build }: { build: () => Transformation }) {
     setBusy(true)
     setError('')
     try {
-      const result = await previewsApi.confirm(preview, spec)
-      if (alive.current) setPreview({ ...preview, ...result })
+      const result = await jobsApi.create(preview, spec, raceAcknowledged)
+      if (alive.current) {
+        setPreview({ ...preview, confirmed: true, preview_token: '' })
+        setJobId(result.id)
+      }
     } catch (cause) {
       if (alive.current) {
         setError(cause instanceof Error ? cause.message : m.failure)
         if (cause instanceof ApiError && cause.code === 'PREVIEW_STALE') setExpired(true)
+        if (!(cause instanceof ApiError) || cause.status >= 500) setUncertainApply(true)
       }
     } finally { if (alive.current) setBusy(false) }
   }
@@ -141,11 +152,19 @@ export function DryRun({ build }: { build: () => Transformation }) {
         <label className="flex items-center gap-2 text-sm"><input type="checkbox"
           checked={acknowledged} disabled={preview.confirmed || preview.errors > 0 || !preview.changed}
           onChange={(event) => setAcknowledged(event.target.checked)} />{m.acknowledge}</label>
+        {customWrite && <div className="space-y-2 text-sm">
+          <p>{messages.jobs.race}</p>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={raceAcknowledged}
+            disabled={preview.confirmed || busy}
+            onChange={(event) => setRaceAcknowledged(event.target.checked)} />{messages.jobs.acknowledgeRace}</label>
+        </div>}
         <Button variant="outline" onClick={confirm} disabled={busy || loading || !rows || !acknowledged ||
-          preview.confirmed || preview.errors > 0 || !preview.changed}>{m.confirm}</Button>
+          uncertainApply || (customWrite && !raceAcknowledged) || preview.confirmed || preview.errors > 0 || !preview.changed}>{m.confirm}</Button>
         {preview.confirmed && <p role="status">{m.confirmed}</p>}
       </>}
     </>}
-    <div><Button disabled>{m.apply}</Button><p className="mt-2 text-sm">{m.applyUnavailable}</p></div>
+    {jobId !== null && <a className="text-primary underline" href={`/jobs/${jobId}`}>{messages.jobs.open}</a>}
+    {uncertainApply && <div role="alert"><p>{messages.jobs.uncertainApply}</p>
+      <a className="text-primary underline" href="/history">{messages.jobs.open}</a></div>}
   </section>
 }
