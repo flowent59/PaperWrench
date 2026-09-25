@@ -27,6 +27,9 @@ class PreviewRow(EvaluationResult):
     issue: TransformationIssue | None = None
     observed_revision: str | None = None
     catalog_revision: str | None = None
+    rollback_spec: Transformation | None = None
+    rollback_operation_ids: list[int] = Field(default_factory=list)
+    excluded_operations: dict[str, str] = Field(default_factory=dict)
 
 
 class PreviewSummary(BaseModel):
@@ -44,6 +47,8 @@ class PreviewSummary(BaseModel):
     target_fingerprint: str
     result_fingerprint: str
     confirmed: bool = False
+    rollback_of_job_id: int | None = None
+    requires_external_race_ack: bool = False
 
 
 class CreatedPreview(PreviewSummary):

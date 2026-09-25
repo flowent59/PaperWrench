@@ -1,7 +1,8 @@
 # Job and History API (M8)
 
 All paths start with `/api/v1`. Responses use `Cache-Control: no-store` and the
-normal error envelope. No endpoint runs a rollback or cancellation.
+normal error envelope. Rollback endpoints are documented in [rollback-api.md](rollback-api.md).
+Cancellation remains unavailable.
 
 ## Explicit Apply
 
@@ -48,7 +49,7 @@ reached that point), `intended` is the reviewed M6 result, and `written` is a
 post-PATCH GET value consistent with the acknowledged response. Preview evidence
 remains on the target. Unchanged/conflicted/ambiguous operations never acquire a
 manufactured written value. `rollback_candidate` is informational and cannot
-authorize restoration, which remains M9.
+authorize restoration. M9 requires a fresh rollback preview and confirmation.
 
 ## Recovery and resume
 

@@ -213,6 +213,13 @@ export const previewsApi = {
 }
 
 export const jobsApi = {
+  rollbackPreview: (id: number) => apiFetch<CreatedPreview>(`/jobs/${id}/rollback-preview`, { method: 'POST' }),
+  rollback: (id: number, preview: CreatedPreview, acknowledgeExternalRace: boolean) =>
+    apiFetch<import('./types').JobView>(`/jobs/${id}/rollback`, { method: 'POST', body: JSON.stringify({
+      preview_id: preview.id, preview_token: preview.preview_token,
+      target_fingerprint: preview.target_fingerprint, result_fingerprint: preview.result_fingerprint,
+      version: preview.version, acknowledge: true, acknowledge_external_race: acknowledgeExternalRace,
+    }) }),
   create: (preview: CreatedPreview, transformation: Transformation, acknowledgeExternalRace: boolean) =>
     apiFetch<import('./types').JobView>('/jobs', { method: 'POST', body: JSON.stringify({
       preview_id: preview.id, preview_token: preview.preview_token, transformation,

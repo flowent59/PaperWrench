@@ -264,7 +264,12 @@ a job's target document ids (that belongs with the Job Engine, M8).
 - Rollback as a linked job, built entirely on M8's per-document operation
   history
 - Refuses per document where the value has moved since the original write
-- Same preview-before-confirm discipline as any other job
+- Same expiring, single-use preview-before-confirm discipline as any other Job
+- Shared M8 execution/recovery; original History remains immutable
+- One rollback per original; grouped conflicts and ambiguous writes fail closed
+- VERIFIED_LIVE on disposable 3.1.2: normalized title/money restored, later custom
+  neighbor preserved, later title and deleted document refused
+- Contract and evidence: [ADR-0015](decisions/0015-safe-rollback-jobs.md)
 
 ## M10 — Schema · Planned
 

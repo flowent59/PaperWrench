@@ -9,7 +9,7 @@ why the boundaries are where they are. Individual decisions are recorded in
 PaperWrench is a single container running a FastAPI backend that serves a
 React SPA from the same origin, talks to an existing Paperless-ngx instance
 over its REST API, and uses local SQLite for its own working state. M5 manual edits return a
-receipt without durable history; M8 bulk Jobs have durable history. Rollback remains M9.
+receipt without durable history; M8 bulk Jobs have durable history. M9 adds safe rollback of proven Job writes.
 
 ## Component map
 
@@ -313,15 +313,18 @@ is ambiguous, even when the current value happens to equal the intended value.
 
 **5. Report.** The job ends `COMPLETED`, `PARTIAL` or `FAILED`, with a durable
 per-document breakdown. Interrupted Jobs can resume unsent targets explicitly.
-Rollback execution is out of scope until M9; only verified succeeded operations
-are candidates for its future current-value checks.
+M9 rollback creates a linked Job after a paginated review. Only proven changed
+writes qualify. Candidate fields must still match original written values; one
+conflict blocks that document, while unrelated later fields are preserved. The
+shared engine supplies execution, provenance and recovery. See
+[ADR-0015](decisions/0015-safe-rollback-jobs.md) and [rollback API](rollback-api.md).
 
 ## Data model
 
 The interesting parts:
 
 **`Job`** — type, status, transformation operations, original DatasetQuery/source,
-preview fingerprints, timestamps and reserved rollback linkage. Explicit IDs are
+preview fingerprints, timestamps and original/rollback linkage. Explicit IDs are
 not duplicated into the transformation JSON.
 
 **`JobTarget`** — exact document ID and stable position, immutable preview evidence,
@@ -422,7 +425,7 @@ Before/intended/actual values are returned immediately, not persisted. The UI
 shows actual normalization, invalidates document/grid/count caches, and requires
 a fresh read before the next edit. M5 has no durable history, crash recovery,
 exactly-once delivery or rollback. Timeout/disconnect can leave an unknown result;
-never infer that no write happened. M8/M9 remain future milestones.
+never infer that no write happened. Durable bulk Jobs and rollback use the separate M8/M9 workflow.
 
 ## M6 Transformation Engine
 

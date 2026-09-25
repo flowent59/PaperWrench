@@ -9,7 +9,7 @@ import { messages } from '@/i18n/messages'
 import { HistoryPageView, JobPage } from '.'
 
 const m = messages.jobs
-const job: JobView = { id: 1, title: 'Document transformation', status: 'partial', total: 2, processed: 2,
+const job: JobView = { id: 1, type: 'transform', rollback_of_job_id: null, rollback_job_id: null, title: 'Document transformation', status: 'partial', total: 2, processed: 2,
   counts: { pending: 0, reading: 0, writing: 0, succeeded: 1, unchanged: 0, conflict: 0, permission: 0,
     missing: 0, failed: 0, ambiguous: 1 }, source_kind: 'ids', dataset_query: null, operations: [],
   preview: null, created_at: '2026-09-24T10:00:00Z', started_at: '2026-09-24T10:00:01Z',
@@ -42,7 +42,7 @@ function setup(path = '/jobs/1', value = job) {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('durable History', () => {
-  it('shows partial and ambiguous outcomes, actual operation evidence and no restore action', async () => {
+  it('shows partial and ambiguous outcomes, actual operation evidence and an explicit rollback preview action', async () => {
     setup()
     await screen.findByText(m.ambiguous)
     expect(screen.getByRole('progressbar', { name: m.progress })).toHaveAttribute('value', '2')
@@ -51,7 +51,8 @@ describe('durable History', () => {
     await within(details).findByText('Before', { selector: 'dd' })
     expect(within(details).getByText('Intended', { selector: 'dd' })).toBeInTheDocument()
     expect(within(details).getByText(m.noProvenance)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /rollback|restore/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Preview rollback' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create rollback Job' })).not.toBeInTheDocument()
   })
 
   it('loads server target pages and status filters', async () => {
@@ -79,5 +80,15 @@ describe('durable History', () => {
     await screen.findByRole('link', { name: 'Document transformation #1' })
     fireEvent.click(screen.getByRole('button', { name: m.next }))
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/jobs?page=2&page_size=25'))).toBe(true))
+  })
+
+  it('links original and rollback History and never offers recursive rollback', async () => {
+    const first = setup('/jobs/1', { ...job, rollback_job_id: 2 })
+    expect(await screen.findByRole('link', { name: 'Rollback Job #2' })).toHaveAttribute('href', '/jobs/2')
+    expect(screen.queryByRole('button', { name: 'Preview rollback' })).not.toBeInTheDocument()
+    first.view.unmount()
+    setup('/jobs/2', { ...job, id: 2, type: 'rollback', rollback_of_job_id: 1 })
+    expect(await screen.findByRole('link', { name: 'Original Job #1' })).toHaveAttribute('href', '/jobs/1')
+    expect(screen.queryByRole('button', { name: 'Preview rollback' })).not.toBeInTheDocument()
   })
 })

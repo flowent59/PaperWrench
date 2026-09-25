@@ -414,3 +414,20 @@ it must never be repurposed for a real library. Operator quiescence is ASSUMED.
 CI's complete gate list in `.github/workflows/ci.yml` remains mandatory.
 On Windows, the runtime instance ID uses portable `platform.node()`; Linux
 Python 3.11 CI remains authoritative for the production environment.
+
+
+## M9 rollback verification
+
+`tests/backend/unit/test_rollback.py` and the Job HTTP tests verify provenance,
+typed restoration, grouped conflicts, single-use/cross-Job/expired confirmation,
+concurrent duplicate requests, pagination, crash/recovery and ownership loss.
+Frontend rollback tests exercise review, race acknowledgement, linked Jobs and
+blocked replay after stale or uncertain confirmation.
+
+On the guarded disposable 3.1.2 sandbox, run
+`pytest tests/backend/live/test_rollback_live.py -v` with the existing live gates.
+These tests create scratch documents: Dry Run ? original Job ? linked rollback,
+normalized title and EUR0.00 restoration, preservation of a later custom neighbor,
+external title conflict and deletion. They passed live for M9. No personal
+instance is used. Operator quiescence remains ASSUMED; 100,000-target capacity
+is NOT_RUN. See [ADR-0015](decisions/0015-safe-rollback-jobs.md).

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pydantic import TypeAdapter
+from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy import text
@@ -33,12 +35,33 @@ from paperwrench.previews.service import PreviewService
 from paperwrench.previews.service import canonical
 from paperwrench.previews.service import limit
 from paperwrench.previews.service import stale
+from paperwrench.transformations.model import FieldValue
 
 ACTIVE_TARGETS = (TargetStatus.PENDING, TargetStatus.READING, TargetStatus.WRITING)
 
 
 def encoded(value: Any) -> str:
     return canonical(value).decode("utf-8")
+
+
+def rollback_candidate(operation: JobOperation) -> bool:
+    if (
+        operation.status != OperationStatus.SUCCEEDED
+        or operation.attempts <= 0
+        or operation.before_value_json is None
+        or operation.written_value_json is None
+    ):
+        return False
+    try:
+        before = _field_value.validate_json(operation.before_value_json)
+        written = _field_value.validate_json(operation.written_value_json)
+    except ValidationError:
+        # Legacy scalar evidence cannot acquire M8 write provenance via migration.
+        return False
+    return encoded(before.model_dump(mode="json")) != encoded(written.model_dump(mode="json"))
+
+
+_field_value: TypeAdapter[FieldValue] = TypeAdapter(FieldValue)
 
 
 def create_job(request: CreateJob) -> int:
@@ -175,6 +198,9 @@ def _view(session: Session, job: Job) -> JobView:
     counts = counts_for(session, job.id)
     return JobView(
         id=job.id,
+        type=job.type,
+        rollback_of_job_id=job.rollback_of_job_id,
+        rollback_job_id=session.scalar(select(Job.id).where(Job.rollback_of_job_id == job.id)),
         title=job.title,
         status=job.status,
         total=job.total_count,
@@ -240,6 +266,10 @@ def target_page(
                     document_id=t.document_id,
                     position=t.position,
                     title=json.loads(t.preview_json).get("title") if t.preview_json else None,
+                    excluded_operations=(
+                        json.loads(t.preview_json).get("excluded_operations", {})
+                        if t.preview_json else {}
+                    ),
                     status=t.status,
                     error=t.error,
                     http_status=t.http_status,
@@ -274,6 +304,7 @@ def operation_page(
             items=[
                 OperationView(
                     id=o.id,
+                    rollback_of_operation_id=o.rollback_of_operation_id,
                     document_id=o.document_id,
                     field_kind=o.field_kind,
                     field_key=o.field_key,
@@ -281,8 +312,7 @@ def operation_page(
                     before=json.loads(o.before_value_json) if o.before_value_json else None,
                     intended=json.loads(o.intended_value_json) if o.intended_value_json else None,
                     written=json.loads(o.written_value_json) if o.written_value_json else None,
-                    rollback_candidate=o.status == OperationStatus.SUCCEEDED
-                    and o.written_value_json is not None,
+                    rollback_candidate=rollback_candidate(o),
                     error=o.error,
                     http_status=o.http_status,
                     attempts=o.attempts,
