@@ -431,3 +431,26 @@ normalized title and EUR0.00 restoration, preservation of a later custom neighbo
 external title conflict and deletion. They passed live for M9. No personal
 instance is used. Operator quiescence remains ASSUMED; 100,000-target capacity
 is NOT_RUN. See [ADR-0015](decisions/0015-safe-rollback-jobs.md).
+
+## M10 schema verification
+
+Schema definitions live in PaperWrench SQLite's existing `schemas` table as
+versioned JSON. See [schema-api.md](schema-api.md) for the request, rule and
+document result contract. The editor uses Filter Engine capabilities and the
+same compiler as Explorer; never introduce a second scope language.
+
+Focused checks:
+
+```sh
+pytest tests/backend/unit/test_schemas.py -q
+cd frontend && npm test -- src/pages/schemas
+PAPERWRENCH_ALLOW_LIVE_TESTS=true PAPERWRENCH_LIVE_PAPERLESS_URL=http://127.0.0.1:8010 pytest tests/backend/live/test_schemas_live.py -v
+```
+
+The guarded live test reads the seeded 3.1.2 vacation dataset and asserts that
+an amount of EUR0.00 passes while an absent amount fails. It intercepts every
+Paperless request and permits GET only. Null and empty text semantics are
+covered by the pure rule tests; a sandbox without existing null/empty vacation
+documents cannot provide independent live evidence without writing documents.
+The existing CI gates, including Alembic drift, Docker smoke and token leak
+checks, remain required.

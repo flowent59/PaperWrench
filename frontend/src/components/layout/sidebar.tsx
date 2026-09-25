@@ -54,7 +54,7 @@ export const navSections: NavSection[] = [
       { to: '/quality', label: messages.nav.quality, icon: ShieldCheck, available: false },
       { to: '/duplicates', label: messages.nav.duplicates, icon: Copy, available: false },
       { to: '/extraction', label: messages.nav.extraction, icon: ScanText, available: false },
-      { to: '/schemas', label: messages.nav.schemas, icon: ListChecks, available: false },
+      { to: '/schemas', label: messages.nav.schemas, icon: ListChecks, available: true },
       { to: '/analytics', label: messages.nav.analytics, icon: BarChart3, available: false },
     ],
   },

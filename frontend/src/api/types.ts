@@ -203,6 +203,56 @@ export interface CustomFieldRef {
 
 export type FieldRef = CoreFieldRef | CustomFieldRef
 
+export interface DatasetQuery {
+  search?: SearchSpec | null
+  filters?: FilterSet | null
+  ordering?: string | null
+}
+
+export type SchemaRule =
+  | { kind: 'required'; field: FieldRef; field_type: FieldType }
+  | { kind: 'equals'; field: FieldRef; field_type: FieldType; value: unknown }
+
+export interface SchemaDefinition {
+  name: string
+  description: string | null
+  applies_when: DatasetQuery
+  rules: SchemaRule[]
+}
+
+export interface DocumentSchema extends SchemaDefinition {
+  id: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SchemaRuleResult {
+  rule_index: number
+  field: FieldRef
+  kind: 'required' | 'equals'
+  status: 'pass' | 'fail'
+  value_kind: CustomFieldValueKind
+  actual: unknown
+  expected: unknown
+  code: string | null
+}
+
+export interface DocumentSchemaResult {
+  document_id: number
+  title: string
+  status: 'pass' | 'fail'
+  rules: SchemaRuleResult[]
+}
+
+export interface SchemaEvaluationPage {
+  schema_id: number
+  items: DocumentSchemaResult[]
+  page: number
+  page_size: number
+  total: number
+  page_count: number
+}
+
 export type FilterOperator =
   | 'equals'
   | 'not_equals'

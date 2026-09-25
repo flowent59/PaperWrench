@@ -11,6 +11,7 @@ import { InspectorPage } from '@/pages/inspector'
 import { HistoryPageView, JobPage } from '@/pages/jobs'
 import { TransformationsRoute } from '@/pages/transformations'
 import { NotFoundPage } from '@/pages/not-found'
+import { SchemasPage } from '@/pages/schemas'
 
 import './index.css'
 
@@ -43,6 +44,7 @@ createRoot(container).render(
               <Route path="jobs" element={<HistoryPageView />} />
               <Route path="history" element={<HistoryPageView />} />
               <Route path="jobs/:jobId" element={<JobPage />} />
+              <Route path="schemas" element={<SchemasPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

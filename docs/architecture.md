@@ -9,7 +9,7 @@ why the boundaries are where they are. Individual decisions are recorded in
 PaperWrench is a single container running a FastAPI backend that serves a
 React SPA from the same origin, talks to an existing Paperless-ngx instance
 over its REST API, and uses local SQLite for its own working state. M5 manual edits return a
-receipt without durable history; M8 bulk Jobs have durable history. M9 adds safe rollback of proven Job writes.
+receipt without durable history; M8 bulk Jobs have durable history. M9 adds safe rollback of proven Job writes. M10 adds read-only document schemas.
 
 ## Component map
 
@@ -32,6 +32,7 @@ receipt without durable history; M8 bulk Jobs have durable history. M9 adds safe
 |                         structured refusal. Never a        |
 |                         local fallback.                    |
 |     transformations   - preview and value computation      |
+|     schemas           - typed rules and read-only checks    |
 |     job engine        - asyncio, bounded concurrency       |
 |                                                            |
 |   Paperless client (httpx.AsyncClient)                     |
@@ -73,6 +74,14 @@ validated, compiled or refused without a single request leaving the process.
 normalized `Document`, a transformation and a snapshot of custom-field
 definitions. It has no client, registry, database, clock or write path.
 Dataset-wide preview is orchestrated by M7 `previews/`; M8 `jobs/` owns execution.
+
+**`schemas/`** — the M10 typed rule contract and pure per-document evaluator.
+The API stores versioned definitions in the existing `DocumentSchema` row,
+compiles `applies_when` through the shared dataset path before any Paperless
+list request and evaluates one bounded page at a time. Field types are checked
+against the current Metadata Registry snapshot, so deleted or retyped metadata
+halts evaluation. The result shape is reusable by M11; see
+[schema-api.md](schema-api.md).
 
 **`previews/`** — the M7 read-only orchestration layer. Compiles DatasetQuery
 through the existing query adapter or reads explicit IDs, calls M6 for each
@@ -343,8 +352,9 @@ prevent replay of ambiguous or completed sends.
 **`RuntimeLock`** — a single row (`CHECK (id = 1)`) holding the instance id and
 heartbeat that enforce single-instance execution.
 
-**`Schema`, `Collection`, `CollectionDocument`, `AppSettings`** — supporting
-state. `AppSettings` deliberately has **no token column**: the Paperless token
+**`DocumentSchema`** — versioned named applicability and typed rules, with no
+cached documents. **`Collection`, `CollectionDocument`, `AppSettings`** are
+supporting state. `AppSettings` deliberately has **no token column**: the Paperless token
 comes from the environment and is never persisted.
 
 What is deliberately *not* persisted: document content, OCR text, thumbnails,
