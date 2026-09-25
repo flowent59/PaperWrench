@@ -153,9 +153,10 @@ function bodiesFor(spy: ReturnType<typeof vi.fn>, path: string): Record<string, 
 
 /** Routes a mocked fetch by URL path, so each test only wires what it needs. */
 function mockFetchRouter(
-  handlers: Record<string, () => Response> = {},
+  handlers: Record<string, (init?: RequestInit) => Response> = {},
 ): ReturnType<typeof vi.fn> {
-  const defaultHandlers: Record<string, () => Response> = {
+  const defaultHandlers: Record<string, (init?: RequestInit) => Response> = {
+    '/api/v1/collections': () => jsonResponse([]),
     '/api/v1/metadata/tags': () => jsonResponse([]),
     '/api/v1/metadata/correspondents': () => jsonResponse([]),
     '/api/v1/metadata/document-types': () => jsonResponse([]),
@@ -170,14 +171,14 @@ function mockFetchRouter(
   }
   const merged = { ...defaultHandlers, ...handlers }
 
-  const spy = vi.fn((input: RequestInfo | URL) => {
+  const spy = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     const path = url.split('?')[0] ?? url
     const handler = merged[path]
     if (handler === undefined) {
       throw new Error(`Unhandled fetch in test: ${url}`)
     }
-    return Promise.resolve(handler())
+    return Promise.resolve(handler(init))
   })
   vi.stubGlobal('fetch', spy)
   return spy
@@ -361,6 +362,60 @@ describe('ExplorerPage', () => {
 
     await user.click(screen.getByLabelText('Select all on this page'))
     expect(await screen.findByText('2 selected')).toBeInTheDocument()
+  })
+
+  it('saves exact IDs selected on two Explorer pages', async () => {
+    let saved: number[] = []
+    const spy = mockFetchRouter({
+      '/api/v1/documents/query': (init) => {
+        const body = JSON.parse(String(init?.body)) as { page: number }
+        const first = makePage({ total: 4, page_count: 2 })
+        return jsonResponse(body.page === 1 ? first : {
+          ...first, page: 2, items: first.items.map(item => ({
+            ...item, id: item.id + 2, title: `Vacation ${item.id + 2}`,
+          })),
+        })
+      },
+      '/api/v1/collections': (init) => {
+        if (init?.method === 'POST') {
+          saved = (JSON.parse(String(init.body)) as { document_ids: number[] }).document_ids
+          return jsonResponse({ id: 1, name: 'Vacations', description: null,
+            member_count: saved.length, created_at: '', updated_at: '' }, 201)
+        }
+        return jsonResponse([])
+      },
+    })
+    renderWithProviders(<ExplorerPage />)
+    await screen.findByText('Invoice #1')
+    const user = userEvent.setup()
+    await user.click(screen.getAllByLabelText('Select row', { selector: 'input' })[0]!)
+    await user.click(screen.getByLabelText('Next page'))
+    await screen.findByText('Vacation 3')
+    await user.click(screen.getAllByLabelText('Select row', { selector: 'input' })[1]!)
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Name'), 'Vacations')
+    await user.click(screen.getByRole('button', { name: 'Save selected IDs' }))
+    await waitFor(() => expect(saved).toEqual([1, 4]))
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('adds selected IDs to an existing collection', async () => {
+    let added: number[] = []
+    mockFetchRouter({
+      '/api/v1/collections': () => jsonResponse([{ id: 7, name: 'Vacations',
+        description: null, member_count: 0, created_at: '', updated_at: '' }]),
+      '/api/v1/collections/7/documents': (init) => {
+        added = (JSON.parse(String(init?.body)) as { document_ids: number[] }).document_ids
+        return jsonResponse({ id: 7, name: 'Vacations', member_count: added.length })
+      },
+    })
+    renderWithProviders(<ExplorerPage />)
+    await screen.findByText('Invoice #1')
+    const user = userEvent.setup()
+    await user.click(screen.getAllByLabelText('Select row', { selector: 'input' })[0]!)
+    await user.selectOptions(screen.getByLabelText('Collection'), '7')
+    await user.click(screen.getByRole('button', { name: 'Save selected IDs' }))
+    await waitFor(() => expect(added).toEqual([1]))
   })
 
   it('never issues a mutating request while browsing', async () => {

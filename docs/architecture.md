@@ -364,6 +364,14 @@ cached documents. **`Collection`, `CollectionDocument`, `AppSettings`** are
 supporting state. `AppSettings` deliberately has **no token column**: the Paperless token
 comes from the environment and is never persisted.
 
+M12 collections use the existing static `Collection` and `CollectionDocument`
+tables. The compound membership key makes each Paperless ID unique within a
+collection. Creation and additions accept bounded explicit ID lists and verify
+visibility with the configured Paperless credential. A member page reads at most
+100 documents from Paperless. Deleted or inaccessible members keep their ID in
+SQLite and appear as unavailable with no document metadata; users can remove
+those rows. `kind=dynamic` and `filterset_json` remain reserved scaffolding.
+
 What is deliberately *not* persisted: document content, OCR text, thumbnails,
 any cached copy of Paperless data that could drift, and the API token.
 

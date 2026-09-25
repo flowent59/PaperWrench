@@ -40,10 +40,10 @@ import {
   X,
 } from 'lucide-react'
 import * as React from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation } from 'react-router-dom'
 
-import { documentsApi } from '@/api/client'
+import { collectionsApi, documentsApi } from '@/api/client'
 
 import {
   useCorrespondents,
@@ -84,6 +84,12 @@ function sortingToOrdering(sorting: SortingState): string | undefined {
 }
 
 export function ExplorerPage() {
+  const queryClient = useQueryClient()
+  const collections = useQuery({ queryKey: ['collections'], queryFn: collectionsApi.list })
+  const [collectionName, setCollectionName] = React.useState('')
+  const [collectionId, setCollectionId] = React.useState('')
+  const [collectionError, setCollectionError] = React.useState('')
+  const [collectionBusy, setCollectionBusy] = React.useState(false)
   const location = useLocation()
   const qualityTarget = React.useMemo(() => qualityLocation(location.search), [location.search])
   const explicitIds = qualityTarget.ids
@@ -104,6 +110,25 @@ export function ExplorerPage() {
   const [columnVisibility, setColumnVisibility] = usePersistedColumnVisibility()
   const [columnsMenuOpen, setColumnsMenuOpen] = React.useState(false)
   const selection = useDocumentSelection()
+  async function saveSelection() {
+    const ids = [...selection.selected].sort((a, b) => a - b)
+    setCollectionBusy(true)
+    setCollectionError('')
+    try {
+      if (collectionId) {
+        await collectionsApi.add(Number(collectionId), ids)
+      } else {
+        await collectionsApi.create({ name: collectionName, description: null, document_ids: ids })
+        setCollectionName('')
+      }
+      await queryClient.invalidateQueries({ queryKey: ['collections'] })
+      selection.clear()
+    } catch (error) {
+      setCollectionError(error instanceof Error ? error.message : messages.collections.error)
+    } finally {
+      setCollectionBusy(false)
+    }
+  }
 
   React.useEffect(() => {
     const target = qualityLocation(location.search).query
@@ -451,7 +476,7 @@ export function ExplorerPage() {
       )}
 
       {selection.count > 0 && (
-        <div className="flex items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
           <span className="font-medium">
             {messages.explorer.selectedCount.replace('{count}', String(selection.count))}
           </span>
@@ -462,6 +487,17 @@ export function ExplorerPage() {
             state={{ targets: { source: 'ids', document_ids: [...selection.selected].sort((a, b) => a - b) } }}>
             {messages.preview.selected}
           </Link>
+          <select aria-label={messages.collections.destination} value={collectionId}
+            onChange={event => setCollectionId(event.target.value)} className="rounded border bg-background px-2 py-1">
+            <option value="">{messages.collections.new}</option>
+            {collections.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+          {!collectionId && <input aria-label={messages.collections.name} value={collectionName}
+            onChange={event => setCollectionName(event.target.value)} placeholder={messages.collections.name}
+            className="rounded border bg-background px-2 py-1" />}
+          <Button size="sm" disabled={collectionBusy || (!collectionId && !collectionName.trim())}
+            onClick={saveSelection}>{messages.collections.saveSelection}</Button>
+          {collectionError && <span role="alert" className="text-destructive">{collectionError}</span>}
         </div>
       )}
 

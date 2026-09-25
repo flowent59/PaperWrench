@@ -471,3 +471,16 @@ The live test compares all missing-Montant vacation IDs with the exact
 compiled drill-down IDs, excludes EUR0.00, and guards every Paperless request
 to GET. The page counters intentionally do not claim a whole-dataset violation
 total. The CI jobs in `.github/workflows/ci.yml` remain mandatory.
+
+## M12 collections verification
+
+Collections store names and explicit document IDs only. Explorer's cross-page
+selection can create a collection or add to an existing one. Membership is
+paginated and unavailable members expose only their stored ID. The API contract
+is documented in [collections-api.md](collections-api.md).
+
+```sh
+pytest tests/backend/unit/test_collections.py -q
+cd frontend && npm test -- src/pages/collections
+PAPERWRENCH_ALLOW_LIVE_TESTS=true PAPERWRENCH_LIVE_PAPERLESS_URL=http://127.0.0.1:8010 pytest tests/backend/live/test_collections_live.py -v
+```
