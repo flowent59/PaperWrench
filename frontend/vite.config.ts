@@ -7,7 +7,7 @@ import { defineConfig } from 'vitest/config'
 /**
  * The SPA is served by FastAPI from the same origin in production
  * (ADR-0001), so the build output goes straight into the backend's static
- * directory and every asset URL stays relative.
+ * directory and asset URLs resolve from the origin root even on nested routes.
  */
 export default defineConfig({
   plugins: [react()],

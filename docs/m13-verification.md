@@ -11,11 +11,11 @@ by this report. CI status is attached to the M13 PR and must be green before mer
 | --- | --- |
 | Explorer → Schemas/Quality → Transformation → Dry Run → Job → History → Rollback | VERIFIED_LIVE: compiled Chromium journey on disposable local Paperless 3.1.2; schema fixture setup, real UI evaluation/drill-down/authoring/confirmation and real backend execution |
 | Missing/zero values and later external title | VERIFIED_LIVE: Quality excludes EUR0.00 from required-amount violations; rollback preserves a later third-party title and restores other eligible titles |
-| Custom-field neighbours, normalization, conflict, ambiguous writes and real-process interruption | Existing guarded live suite and unit regressions retained; final full-suite result recorded below |
+| Custom-field neighbours, normalization, conflict, ambiguous writes and real-process interruption | VERIFIED_LIVE: all 111 existing guarded live tests pass, including real-process crash boundaries; existing unit regressions retained |
 | No false provenance, explicit resume, no overwrite of later edits | VERIFIED_SOURCE: existing Job/rollback unit and mocked integration tests; no execution architecture changed |
 | Large target enumeration/adoption/History | VERIFIED_SOURCE: instrumented synthetic HTTP/SQLite test at 10k and 100k, with bounds and measured results below |
 | Fresh install, migrations, restoration | VERIFIED_SOURCE: Alembic fresh/drift CI; legacy migration regression; populated M12 backup restored/upgraded twice without loss of schemas/collection membership |
-| Production Docker/non-root/compiled SPA | Installed-wheel local smoke passed with UID 10001, read-only root, dropped capabilities, fresh migrations, deep-route assets, unknown API JSON 404 and origin rejection; final-image verification below |
+| Production Docker/non-root/compiled SPA | Final installed-wheel local smoke passed with UID 10001, read-only root, dropped capabilities, fresh migrations, deep-route assets, unknown API JSON 404 and origin rejection |
 | Security/accessibility/docs | Targeted fixes and scoped audits in [security.md](security.md); installation/upgrade/backup/restore and historical/current documentation aligned |
 
 The browser scenario uses real Golden Dataset documents, restores fixture titles
@@ -35,6 +35,14 @@ Command: `pytest tests/backend/integration_mocked/test_preview_bounds.py -s`
 | ---: | ---: | ---: | ---: | ---: | ---: |
 | 10,000 | 100 | 16.43 s | 2.76 s | 0.022 s | 24,424,224 |
 | 100,000 | 1,000 | 221.59 s | 37.21 s | 0.197 s | 235,864,048 |
+
+The [first green PR CI run](https://github.com/flowent59/PaperWrench/actions/runs/36129052138)
+on Ubuntu/Python 3.11 measured the same assertions/data:
+
+| Targets | Preview | Atomic Job adoption | Last target + operation pages |
+| ---: | ---: | ---: | ---: |
+| 10,000 | 5.72 s | 1.55 s | 0.016 s |
+| 100,000 | 45.63 s | 15.74 s | 0.100 s |
 
 Assertions: prior batches reach SQLite before the next GET; at most one prior
 100-document page remains referenced; zero retained Documents after enumeration;
@@ -56,12 +64,31 @@ block writers for the measured tens of seconds. Do not extrapolate to live
 ## Verification execution
 
 - Local backend unit + mocked integration regression: passed; focused new
-  origin and M12 backup/restore tests also passed. Ruff and strict mypy passed.
+  origin and M12 backup/restore tests also passed. Final suite contains 585 unit
+  and 76 mocked integration cases. Ruff and strict mypy passed (118 source files).
 - Local built Chromium journey: **1 passed**, 92.59 s including server startup.
   Axe WCAG 2 A/AA and 2.1 AA checks: zero violations at the tested light-theme
   stages after fixing badge contrast, missing label and nested main landmark.
-- Full existing live regression, frontend repeat and final-image audit: in progress
-  while preparing the PR; replace with final results before completion.
+- Existing guarded live regression: **111 passed**, zero skips, 402.08 s.
+  Together with Chromium this gives **112 live acceptance cases**. This includes
+  normalization, missing/zero, permission/partial failure, competing edits,
+  injected lost responses, real process exits and explicit recovery/resume.
+- Frontend: **153 passed** (16 files, 40.40 s with two workers), ESLint (three
+  existing warnings), TypeScript and production build pass. The first local run
+  under concurrent load timed out on an Inspector lookup; the bounded repeat
+  and the initial PR CI run pass without altering that test.
+- Final Docker image: smoke and log/HTTP token-leak checks pass. `pip-audit` on
+  its installed Python versions reports zero known findings (pip 26.2.1,
+  setuptools 84.0.0). npm retains five moderate dependency-node findings,
+  representing the three scoped advisories documented in the security review;
+  zero high/critical findings after compatible lockfile updates.
+- PR [#27](https://github.com/flowent59/PaperWrench/pull/27) carries the required
+  CI checks for the final commit; the final completion message records their
+  outcome. Evidence in this file is from executed local checks and the initial
+  CI checks, not an assertion that a pending final run has completed.
+- Initial CI run `36129052138` passed **all 11 gates** on `95d4f30`: 585 unit,
+  76 mocked integration, 112 live (zero skips, 221.29 s) and 153 frontend tests,
+  plus lint/typecheck/build, Alembic fresh/drift and non-root Docker checks.
 - All **11 CI gates retained**. Browser acceptance runs inside the live gate;
   compiled route/installed-wheel checks run inside Docker; 100k bounds inside
   mocked integration. No release or auto-merge workflow added.
