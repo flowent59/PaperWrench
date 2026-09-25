@@ -1,14 +1,13 @@
 # PaperWrench development sandbox.
 #
-# Starts a DEDICATED, DISPOSABLE Paperless-ngx 3.1.2 instance plus a seeder.
+# Starts a DEDICATED, DISPOSABLE Paperless-ngx instance plus a seeder.
 # This exists precisely so that destructive tests never touch a real library.
 #
 #   docker compose -f docker-compose.dev.yml up -d
 #   docker compose -f docker-compose.dev.yml run --rm seed
 #
-# The pinned tag is not cosmetic: 3.1.2 is the version whose serialisers,
-# filters and API version negotiation the architecture review was verified
-# against (see docs/paperless-api.md). Bumping it means re-verifying.
+# The default is the fixed compatibility reference. CI overrides PAPERLESS_IMAGE
+# per matrix entry; see docs/paperless-api.md before moving the default.
 #
 # Credentials here are intentionally weak and public: this stack must never be
 # exposed outside a development machine.
@@ -31,7 +30,7 @@ services:
       - dev_pgdata:/var/lib/postgresql/data
 
   paperless:
-    image: ghcr.io/paperless-ngx/paperless-ngx:3.1.2
+    image: ${PAPERLESS_IMAGE:-ghcr.io/paperless-ngx/paperless-ngx:3.2.1}
     restart: unless-stopped
     depends_on:
       - db

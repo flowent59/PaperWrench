@@ -125,7 +125,7 @@ migration: ## Autogenerate a migration: make migration m="add jobs table"
 # ---------------------------------------------------------------------------
 
 .PHONY: dev-paperless-up
-dev-paperless-up: ## Start the disposable Paperless-ngx 3.1.2 sandbox on :8010
+dev-paperless-up: ## Start the disposable Paperless-ngx 3.2.1 sandbox on :8010
 	docker compose -f docker-compose.dev.yml up -d
 
 .PHONY: dev-paperless-seed

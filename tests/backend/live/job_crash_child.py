@@ -19,6 +19,7 @@ from paperwrench.paperless import PaperlessClient
 from paperwrench.paperless.models import Document
 from tests.backend.live.conftest import MAX_SANDBOX_DOCUMENTS
 from tests.backend.live.conftest import assert_authorised_target
+from tests.backend.live.conftest import expected_paperless_version
 from tests.backend.live.conftest import live_tests_allowed
 
 
@@ -54,7 +55,7 @@ async def run() -> None:
 
     async with CrashClient(settings) as client:
         probe = await client.check_connection()
-        assert probe.paperless_version == "3.1.2"
+        assert probe.paperless_version == expected_paperless_version()
         assert probe.document_count is not None and probe.document_count <= MAX_SANDBOX_DOCUMENTS
         init_engine(database_url)
         with session_scope() as session:

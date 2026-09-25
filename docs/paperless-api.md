@@ -3,9 +3,10 @@
 This is not a copy of the upstream documentation. It records what PaperWrench
 actually depends on, and how sure we are about each item.
 
-Everything below was gathered against **Paperless-ngx 3.1.2** (the version the
-project targets first), running as the sandbox stack defined in
-`docker-compose.dev.yml` (Paperless 3.1.2 + PostgreSQL 16 + Redis 7).
+The field observations below were gathered against **Paperless-ngx 3.1.2**
+in the original disposable sandbox. They remain historical evidence for that
+release. The current fixed-reference and moving-tag results are recorded
+separately in [Paperless compatibility](paperless-compatibility.md).
 
 ## Confidence nomenclature
 
@@ -729,7 +730,7 @@ accident. A further guard refuses to run if the target instance holds more than
 Reproduce the environment with:
 
 ```sh
-make dev-paperless-up      # Paperless 3.1.2 + PostgreSQL + Redis on :8010
+make dev-paperless-up      # default: Paperless 3.2.1 + PostgreSQL + Redis on :8010
 make dev-paperless-golden  # 17 deliberately imperfect documents, 7 custom fields
 make test-live             # opt-in live suite
 ```

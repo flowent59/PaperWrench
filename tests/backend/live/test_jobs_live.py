@@ -1,4 +1,4 @@
-"""Guarded M8 real Paperless 3.1.2 writes; fixtures restore/remove sandbox data.
+"""Guarded M8 real Paperless writes; fixtures restore/remove sandbox data.
 
 Injected response loss is distinguished from an actual network outage. It proves
 the handling of an unknown outcome after a real PATCH, not global atomicity.
@@ -71,6 +71,7 @@ async def test_vacation_dataset_apply_and_history_live(
     live_client: PaperlessClient,
     raw_live: httpx.AsyncClient,
     live_settings: Settings,
+    live_paperless_version: str,
     session: Session,
 ) -> None:
     registry = MetadataRegistry(live_client)
@@ -105,7 +106,7 @@ async def test_vacation_dataset_apply_and_history_live(
         d.id: d
         async for d in live_client.iter_documents(params={"document_type__id": document_type.id})
     }
-    assert live_client.paperless_version == "3.1.2"
+    assert live_client.paperless_version == live_paperless_version
     try:
         job_id = await confirm(live_client, body)
         await execute(live_client, live_settings, session)

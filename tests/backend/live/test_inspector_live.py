@@ -1,4 +1,4 @@
-"""M5 contract on the guarded, disposable Paperless 3.1.2 sandbox only."""
+"""M5 contract on the guarded, disposable Paperless sandbox."""
 
 import asyncio
 from collections.abc import AsyncIterator
