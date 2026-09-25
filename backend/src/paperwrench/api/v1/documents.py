@@ -58,6 +58,7 @@ from paperwrench.api.deps import get_paperless_client
 from paperwrench.errors import ErrorCode
 from paperwrench.errors import InvalidOrderingError
 from paperwrench.errors import InvalidPageSizeError
+from paperwrench.errors import PaperlessForbiddenError
 from paperwrench.errors import PaperWrenchError
 from paperwrench.filters import DatasetPageRequest
 from paperwrench.filters import FieldCatalog
@@ -70,6 +71,7 @@ from paperwrench.paperless import Document
 from paperwrench.paperless import DocumentType
 from paperwrench.paperless import MetadataRegistry
 from paperwrench.paperless import PaperlessClient
+from paperwrench.paperless import PaperlessNotFoundError
 from paperwrench.paperless import Tag
 from paperwrench.paperless.models import CustomFieldValueKind
 from paperwrench.paperless.registry import MetadataNotFoundError
@@ -281,6 +283,16 @@ class DocumentPage(BaseModel):
     page_count: int
 
 
+class ExplicitIdsRequest(BaseModel):
+    """A bounded exact selection, separate from DatasetQuery/FilterSet."""
+
+    document_ids: list[int] = Field(min_length=1, max_length=100)
+
+
+class ExplicitIdsPage(DocumentPage):
+    unavailable_count: int
+
+
 # ------------------------------------------------------------------ mapping
 async def _resolve_ref(
     registry: MetadataRegistry, kind: str, object_id: int | None
@@ -436,6 +448,31 @@ async def build_query_params(
 
 
 # -------------------------------------------------------------------- route
+@router.post("/by-ids", response_model=ExplicitIdsPage)
+async def documents_by_ids(
+    request: ExplicitIdsRequest,
+    client: PaperlessClient = Depends(get_paperless_client),
+    registry: MetadataRegistry = Depends(get_metadata_registry),
+) -> ExplicitIdsPage:
+    """Read an exact bounded ID selection; omit deleted or inaccessible IDs."""
+    items: list[DocumentListItem] = []
+    ids = list(dict.fromkeys(request.document_ids))
+    for document_id in ids:
+        if document_id < 1:
+            raise PaperWrenchError(
+                "Document IDs must be positive.", status_code=422, code=ErrorCode.VALIDATION_ERROR
+            )
+        try:
+            document = await client.get_document(document_id)
+        except (PaperlessNotFoundError, PaperlessForbiddenError):
+            continue
+        items.append(await _document_to_list_item(document, registry))
+    return ExplicitIdsPage(
+        items=items, page=1, page_size=100, total=len(items), page_count=1,
+        unavailable_count=len(ids) - len(items),
+    )
+
+
 @router.post(
     "/query",
     response_model=DocumentPage,

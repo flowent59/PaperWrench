@@ -38,6 +38,8 @@ import type {
   DocumentSchema,
   SchemaDefinition,
   SchemaEvaluationPage,
+  ExplicitIdsPage,
+  QualityPage,
 } from './types'
 
 export const API_PREFIX = '/api/v1'
@@ -126,6 +128,9 @@ export const systemApi = {
 }
 
 export const documentsApi = {
+  byIds: (documentIds: number[]) => apiFetch<ExplicitIdsPage>('/documents/by-ids', {
+    method: 'POST', body: JSON.stringify({ document_ids: documentIds }),
+  }),
   detail: (id: number) => apiFetch<DocumentDetail>(`/documents/${id}`),
   edit: (id: number, request: EditRequest) =>
     apiFetch<EditResponse>(`/documents/${id}`, {
@@ -146,6 +151,11 @@ export const documentsApi = {
       method: 'POST',
       body: JSON.stringify(request),
     }),
+}
+
+export const qualityApi = {
+  page: (schemaId: number, page: number) =>
+    apiFetch<QualityPage>(`/quality/schemas/${schemaId}?page=${page}&page_size=25`),
 }
 
 /**

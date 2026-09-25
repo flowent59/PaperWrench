@@ -131,6 +131,8 @@ export interface DocumentPage {
   page_count: number
 }
 
+export interface ExplicitIdsPage extends DocumentPage { unavailable_count: number }
+
 export interface DocumentDetail extends DocumentListItem {
   revision: string
   catalog_revision: string
@@ -251,6 +253,32 @@ export interface SchemaEvaluationPage {
   page_size: number
   total: number
   page_count: number
+}
+
+export interface QualityFinding {
+  document_id: number
+  title: string
+  rule: SchemaRuleResult
+}
+
+export interface QualityRuleSummary {
+  rule_index: number
+  violation_count: number
+  exact_query: DatasetQuery | null
+  page_document_ids: number[]
+}
+
+export interface QualityPage {
+  schema_id: number
+  schema_name: string
+  items: QualityFinding[]
+  rules: QualityRuleSummary[]
+  page: number
+  page_size: number
+  page_count: number
+  dataset_total: number
+  evaluated_count: number
+  violation_count: number
 }
 
 export type FilterOperator =

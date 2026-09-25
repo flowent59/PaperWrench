@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentPage, FilterCapabilities } from '@/api/types'
 
 import { ExplorerPage } from './index'
+import { exactQueryHref } from '@/pages/quality/navigation'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -53,12 +54,12 @@ function makePage(overrides: Partial<DocumentPage> = {}): DocumentPage {
   }
 }
 
-function renderWithProviders(children: React.ReactNode) {
+function renderWithProviders(children: React.ReactNode, initialEntry = '/') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
-    <QueryClientProvider client={queryClient}><MemoryRouter>{children}</MemoryRouter></QueryClientProvider>,
+    <QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[initialEntry]}>{children}</MemoryRouter></QueryClientProvider>,
   )
 }
 
@@ -187,6 +188,38 @@ afterEach(() => {
 })
 
 describe('ExplorerPage', () => {
+  it('refuses malformed Quality URLs without widening to the normal dataset', () => {
+    const spy = mockFetchRouter()
+    renderWithProviders(<ExplorerPage />, '/documents?quality_ids=1,not-an-id')
+    expect(screen.getByRole('alert')).toHaveTextContent('Invalid Quality drill-down')
+    expect(bodiesFor(spy, '/api/v1/documents/query')).toEqual([])
+    expect(bodiesFor(spy, '/api/v1/documents/by-ids')).toEqual([])
+  })
+
+  it('opens only explicit Quality IDs and reports unavailable documents', async () => {
+    const spy = mockFetchRouter({
+      '/api/v1/documents/by-ids': () => jsonResponse({ ...makePage({
+        items: [makePage().items[0]!], total: 1,
+      }), unavailable_count: 1 }),
+    })
+    renderWithProviders(<ExplorerPage />, '/documents?quality_ids=1,999')
+    expect(await screen.findByText('Invoice #1')).toBeInTheDocument()
+    expect(screen.getByText(/1 document\(s\) are unavailable/)).toBeInTheDocument()
+    expect(bodiesFor(spy, '/api/v1/documents/by-ids')).toEqual([{ document_ids: [1, 999] }])
+    expect(bodiesFor(spy, '/api/v1/documents/query')).toEqual([])
+  })
+
+  it('passes the exact compiled Quality query to the normal Explorer path', async () => {
+    const query = { filters: { root: { kind: 'group' as const, operator: 'and' as const,
+      children: [{ kind: 'condition' as const, field: { source: 'custom_field' as const, field_id: 2 },
+        operator: 'is_missing' as const }] } } }
+    const spy = mockFetchRouter()
+    renderWithProviders(<ExplorerPage />, exactQueryHref(query))
+    expect(await screen.findByText('Invoice #1')).toBeInTheDocument()
+    expect(bodiesFor(spy, '/api/v1/documents/query')[0]?.filters).toEqual(query.filters)
+    expect(bodiesFor(spy, '/api/v1/documents/by-ids')).toEqual([])
+  })
+
   it('renders the loading state before data arrives', () => {
     mockFetchRouter({
       '/api/v1/documents/query': () => jsonResponse(makePage()),

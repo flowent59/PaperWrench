@@ -454,3 +454,20 @@ covered by the pure rule tests; a sandbox without existing null/empty vacation
 documents cannot provide independent live evidence without writing documents.
 The existing CI gates, including Alembic drift, Docker smoke and token leak
 checks, remain required.
+
+## M11 quality verification
+
+Quality reads one page of a saved schema scope and reuses M10 evaluation.
+See [quality-api.md](quality-api.md) for count and Explorer drill-down semantics.
+Focused checks:
+
+```sh
+pytest tests/backend/unit/test_quality.py -q
+cd frontend && npm test -- src/pages/quality
+PAPERWRENCH_ALLOW_LIVE_TESTS=true PAPERWRENCH_LIVE_PAPERLESS_URL=http://127.0.0.1:8010 pytest tests/backend/live/test_quality_live.py -v
+```
+
+The live test compares all missing-Montant vacation IDs with the exact
+compiled drill-down IDs, excludes EUR0.00, and guards every Paperless request
+to GET. The page counters intentionally do not claim a whole-dataset violation
+total. The CI jobs in `.github/workflows/ci.yml` remain mandatory.
