@@ -809,3 +809,16 @@ bounded by local batches, not a live capacity claim.
 during upstream pagination. **NOT_RUN** — live 10k/50k/100k capacity, real proxy
 failure and machine power loss. ADR-0012's verified external race is unchanged;
 neither readback nor SQLite can make the Paperless GET/PATCH window atomic.
+
+## M13 release acceptance
+
+The complete compiled-browser vacation workflow and existing live write,
+normalization, missing/zero, conflict and real-process interruption suites run
+only on guarded Paperless 3.1.2. The shared guard now checks X-Version before
+any destructive fixture. This test pin is distinct from runtime compatibility
+(ADR-0008: HTTP 406, not an exact release/header match).
+
+See [M13 verification](m13-verification.md) for executed evidence and counts.
+Synthetic 100,000-target results do not establish live Paperless throughput.
+No atomic external compare-and-swap, snapshot pagination or exactly-once HTTP
+write delivery is claimed. Operator quiescence remains ASSUMED.

@@ -38,3 +38,10 @@ backend/src/paperwrench/static/
 .idea/
 .DS_Store
 *.swp
+
+# Local verification outputs
+.m13-*
+.pytest-m13-*
+.pytest_m13*/
+frontend/test-results/
+frontend/playwright-report/

@@ -14,7 +14,7 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },
-  base: './',
+  base: '/',
   build: {
     outDir: path.resolve(__dirname, '../backend/src/paperwrench/static'),
     emptyOutDir: true,
@@ -31,6 +31,7 @@ export default defineConfig({
     },
   },
   test: {
+    include: ['src/**/*.test.{ts,tsx}'],
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],

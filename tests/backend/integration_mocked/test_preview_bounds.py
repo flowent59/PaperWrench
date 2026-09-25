@@ -6,6 +6,7 @@ import asyncio
 import gc
 import time
 import weakref
+from pathlib import Path
 
 import httpx
 import pytest
@@ -74,10 +75,13 @@ async def test_iterator_does_not_fetch_next_page_until_consumed(settings: Settin
         assert calls == [1]
 
 
-async def test_ten_thousand_documents_release_prior_pages(
+@pytest.mark.parametrize("target_count", [10_000, 100_000])
+async def test_large_target_documents_release_prior_pages(
     settings: Settings,
     session: Session,
     monkeypatch: pytest.MonkeyPatch,
+    target_count: int,
+    db_path: Path,
 ) -> None:
     page_calls = 0
     previous: list[weakref.ReferenceType[Document]] = []
@@ -107,8 +111,8 @@ async def test_ten_thousand_documents_release_prior_pages(
         return httpx.Response(
             200,
             json={
-                "count": 10000,
-                "next": "next" if page < 100 else None,
+                "count": target_count,
+                "next": "next" if page < target_count // 100 else None,
                 "results": [
                     {"id": i, "title": "Old", "user_can_change": True}
                     for i in range((page - 1) * 100 + 1, page * 100 + 1)
@@ -121,11 +125,13 @@ async def test_ten_thousand_documents_release_prior_pages(
     ) as http:
         client = PaperlessClient(settings, http_client=http)
         previews = PreviewService()
+        preview_started = time.monotonic()
         preview = await previews.create(spec(), client, MetadataRegistry(client))
-        assert preview.matched == preview.changed == 10000
-        assert page_calls == 100
-        last = previews.page(preview.id, 400, 25)
-        assert last.items[-1].document_id == 10000
+        preview_seconds = time.monotonic() - preview_started
+        assert preview.matched == preview.changed == target_count
+        assert page_calls == target_count // 100
+        last = previews.page(preview.id, target_count // 25, 25)
+        assert last.items[-1].document_id == target_count
         assert len(last.items) == 25
         gc.collect()
         assert all(ref() is None for ref in previous)
@@ -150,12 +156,18 @@ async def test_ten_thousand_documents_release_prior_pages(
             )
         finally:
             event.remove(Session, "before_flush", observe)
+        adoption_seconds = time.monotonic() - started
+        started = time.monotonic()
         assert max(batch_sizes) <= 200  # 100 targets + 100 field audit rows
-        assert page_calls == 100  # Job creation performs no fresh selection HTTP.
-        assert target_page(job_id, 400, 25, None).items[-1].document_id == 10000
-        assert len(operation_page(job_id, 400, 25, None).items) == 25
+        assert page_calls == target_count // 100  # Job creation performs no fresh selection HTTP.
+        targets = target_page(job_id, target_count // 25, 25, None)
+        assert targets.items[-1].document_id == target_count
+        assert len(operation_page(job_id, target_count // 25, 25, None).items) == 25
         print(
-            f"Synthetic 10000-target adoption and History page: {time.monotonic() - started:.2f}s"
+            f"Synthetic targets={target_count} pages={page_calls} "
+            f"preview={preview_seconds:.2f}s adoption={adoption_seconds:.2f}s "
+            f"history_pages={time.monotonic() - started:.3f}s "
+            f"db_bytes={sum(p.stat().st_size for p in db_path.parent.glob('test.db*'))}"
         )
 
 

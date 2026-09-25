@@ -128,5 +128,7 @@ released and prior batches reach SQLite before the next request.
 VERIFIED_LIVE on guarded Paperless 3.1.2: Golden Dataset count/list/preview
 agreement, two-item traversal pages, vacation titles, missing-period errors,
 zero money, GET-only probe and unchanged normalized documents after preview.
-50,000/100,000-document capacity and production timeout/proxy behavior are
-NOT_RUN. A stable upstream library during enumeration remains ASSUMED.
+M13 extends the synthetic retention/adoption test to 100,000 targets; measured
+results are in [m13-verification.md](../m13-verification.md). Live 50,000/100,000
+capacity and production timeout/proxy behavior remain NOT_RUN. A stable upstream
+library during enumeration remains ASSUMED.

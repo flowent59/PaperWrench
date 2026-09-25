@@ -1,6 +1,12 @@
 # PaperWrench — Architecture Review (Sections A–L)
 
-**Status:** pre-implementation review, awaiting approval
+**Status:** historical pre-implementation review; retained as design history.
+
+Current behavior is documented in [architecture.md](architecture.md) and accepted
+[ADRs](decisions/). In particular ADR-0008 supersedes this review's
+X-Api-Version negotiation assumption; ADR-0014/0015 supersede SSE, monolithic
+target arrays and exactly-once/provenance assumptions. This is not a current
+implementation or release acceptance report.
 **Reviewed spec:** PaperWrench Master Development Brief
 **Verification base:** Paperless-ngx official docs (`docs.paperless-ngx.com/api/`) + `paperless-ngx@main` source (`src/documents/filters.py`, `serialisers.py`, `views.py`, `models.py`, `src/paperless/views.py`), API version **10**
 

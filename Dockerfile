@@ -6,8 +6,7 @@
 # image serves the API and the frontend from one origin: no CORS, no reverse
 # proxy required, one port.
 #
-# NOTE: this file has NOT been built or run in the authoring environment
-# (no Docker daemon available). It is verified by CI on first push.
+# Built wheel, non-root startup and compiled SPA routing are verified in CI.
 
 # ---------------------------------------------------------------------------
 # Stage 1 - build the SPA
@@ -70,7 +69,8 @@ RUN groupadd --gid 10001 paperwrench \
 COPY --from=backend /wheels/*.whl /tmp/
 # Alembic revisions live inside the package, so the wheel is self-contained
 # and migrations run on boot without any extra files.
-RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
+RUN pip install --no-cache-dir --upgrade "pip>=26.2" "setuptools>=83.0.0" \
+    && pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
 
 RUN mkdir -p /data /app && chown -R paperwrench:paperwrench /data /app
 

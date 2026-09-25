@@ -1,10 +1,10 @@
 /**
  * Backend response types.
  *
- * These are hand-written for M0 only. From M1 they are replaced by types
- * generated from the OpenAPI schema (`npm run generate:api` ->
- * `src/api/schema.d.ts`), so that a backend contract change becomes a
- * frontend compile error instead of a runtime surprise.
+ * Hand-written contracts maintained alongside backend response models.
+ * `npm run generate:api` optionally writes src/api/schema.d.ts for comparison;
+ * that file is not imported by this client. There is no automated OpenAPI
+ * drift guarantee. Update these types and API/component tests together.
  */
 
 export interface HealthResponse {

@@ -429,8 +429,8 @@ On the guarded disposable 3.1.2 sandbox, run
 These tests create scratch documents: Dry Run ? original Job ? linked rollback,
 normalized title and EUR0.00 restoration, preservation of a later custom neighbor,
 external title conflict and deletion. They passed live for M9. No personal
-instance is used. Operator quiescence remains ASSUMED; 100,000-target capacity
-is NOT_RUN. See [ADR-0015](decisions/0015-safe-rollback-jobs.md).
+instance is used. Operator quiescence remains ASSUMED; 100,000-target live capacity
+is NOT_RUN; M13 synthetic measurements are recorded in m13-verification.md. See [ADR-0015](decisions/0015-safe-rollback-jobs.md).
 
 ## M10 schema verification
 
@@ -484,3 +484,31 @@ pytest tests/backend/unit/test_collections.py -q
 cd frontend && npm test -- src/pages/collections
 PAPERWRENCH_ALLOW_LIVE_TESTS=true PAPERWRENCH_LIVE_PAPERLESS_URL=http://127.0.0.1:8010 pytest tests/backend/live/test_collections_live.py -v
 ```
+
+## M13 acceptance and release checks
+
+The frontend contracts in `src/api/types.ts` are hand-written. The optional
+`npm run generate:api` command reads a running backend and emits
+`src/api/schema.d.ts` for comparison, but no production code imports it and CI
+does not enforce generated-schema drift. Update the manual contracts and tests
+with backend changes; replacing this workflow is deferred.
+
+Build the SPA (`cd frontend && npm ci && npm run build`) and install Chromium
+(`npx playwright install --with-deps chromium`) before the live suite. The
+existing guarded `test_mvp_browser_live.py` launches an isolated PaperWrench
+SQLite database on loopback port 8020, then executes `frontend/e2e/mvp.spec.ts`
+against the disposable Golden Dataset at loopback port 8010. It restores titles
+in finally cleanup. Never run it against a personal library. The browser suite
+uses real API routes and jobs; axe and keyboard activation run on the built SPA.
+No mocked route replaces Paperless in that journey. Schema creation is fixture
+setup; schema editing behavior remains covered by existing component tests.
+
+Run `pytest tests/backend/integration_mocked/test_preview_bounds.py -s` for
+10k/100k synthetic measurements. Page retention and insert-batch assertions are
+the CI contract; timings are observational, not portable performance thresholds.
+Run `pytest tests/backend/unit/test_release_migrations.py` for M12 restore and
+idempotent upgrade, alongside the existing legacy evidence migration test.
+
+CI still has 11 gates: browser acceptance is inside the existing live gate,
+and compiled route checks are inside Docker. Use [the release checklist and
+limits](m13-verification.md); building or merging does not publish a release.

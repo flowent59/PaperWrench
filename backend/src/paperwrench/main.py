@@ -101,7 +101,7 @@ class OriginGuardMiddleware(BaseHTTPMiddleware):
             origin = request.headers.get("origin")
             if origin and origin not in self._allowed:
                 host = request.headers.get("host", "")
-                if host and origin.split("://")[-1] != host:
+                if not host or origin != f"{request.url.scheme}://{host}":
                     return JSONResponse(
                         status_code=403,
                         content=ErrorResponse(

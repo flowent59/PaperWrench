@@ -9,7 +9,7 @@
 
 services:
   paperwrench:
-    image: ghcr.io/flowent59/paperwrench:latest
+    image: paperwrench:0.1.0
     # Build locally instead of pulling:
     #   docker compose build
     build:
@@ -26,7 +26,7 @@ services:
       PAPERLESS_TOKEN: ${PAPERLESS_TOKEN:-}
       PAPERLESS_TOKEN_FILE: ${PAPERLESS_TOKEN_FILE:-}
       # Pinned explicitly rather than relying on the server default (ADR-0003).
-      PAPERLESS_API_VERSION: "10"
+      PAPERWRENCH_PAPERLESS_API_VERSION: "10"
 
       # --- PaperWrench runtime -------------------------------------------
       PAPERWRENCH_DATABASE_URL: sqlite+pysqlite:////data/paperwrench.db
