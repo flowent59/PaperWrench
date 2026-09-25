@@ -98,21 +98,25 @@ See [docs/roadmap.md](docs/roadmap.md), [preview API](docs/preview-api.md) and
 
 ## Quick start
 
-Requires an existing Paperless-ngx instance and an API token
-(*Settings > My Profile > API Auth Token*).
+Requires an existing Paperless-ngx Docker stack and an API token
+(*Settings > My Profile > API Auth Token*). This local-network setup needs no
+domain, TLS certificate or reverse proxy.
 
 ```bash
 git clone https://github.com/flowent59/PaperWrench.git
 cd PaperWrench
-cp .env.example .env
-$EDITOR .env          # set PAPERLESS_URL and PAPERLESS_TOKEN
-docker compose up -d --build
+mkdir -p secrets
+${EDITOR:-vi} secrets/paperless_token  # paste the dedicated Paperless API token
+PAPERLESS_DOCKER_NETWORK=paperless_default docker compose -f docker-compose.paperless.yml up -d --build
 ```
 
-PaperWrench is then available at <http://localhost:8000>.
+Replace `paperless_default` with the Docker network used by your Paperless
+service. Open `http://IP_DU_SERVEUR:8000` (or set `PAPERWRENCH_HTTP_PORT`).
+For a differently named Paperless service, set `PAPERLESS_SERVICE` too.
+See the [installation guide](docs/deployment.md) for exact steps and checks.
 
-The compose file binds to `127.0.0.1` on purpose. See
-[Threat model](#threat-model) before exposing it.
+See [Threat model](#threat-model) before making the port reachable beyond a
+trusted LAN.
 
 ## Development
 
@@ -155,9 +159,9 @@ What this means concretely:
   the container.
 - **Back up your Paperless library.** M5 edits have no durable rollback.
   `/data` holds durable Job history and write provenance. M8 cannot restore data.
-- **Keep TLS verification on.** `PAPERLESS_VERIFY_SSL=false` exists for
-  self-signed certificates on a LAN, and it removes protection against an
-  active network attacker.
+- **Keep TLS verification on for HTTPS connections.**
+  `PAPERWRENCH_PAPERLESS_VERIFY_SSL=false` exists for self-signed certificates
+  on a LAN, and it removes protection against an active network attacker.
 
 What PaperWrench does *not* do: it never sends your token to the browser, never
 writes it to its database, never includes it in logs (log output is scrubbed at

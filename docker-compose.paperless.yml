@@ -1,0 +1,37 @@
+# Add PaperWrench to an existing Paperless Docker network. Build this local
+# checkout; no published PaperWrench image is required.
+services:
+  paperwrench:
+    build: .
+    image: paperwrench:0.1.0-local
+    restart: unless-stopped
+    ports:
+      - "${PAPERWRENCH_HTTP_PORT:-8000}:8000"
+    environment:
+      PAPERLESS_URL: "http://${PAPERLESS_SERVICE:-paperless}:8000"
+      PAPERLESS_TOKEN_FILE: /run/secrets/paperless_token
+    secrets:
+      - paperless_token
+    volumes:
+      - paperwrench_data:/data
+    networks:
+      - paperless
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+secrets:
+  paperless_token:
+    file: ./secrets/paperless_token
+
+volumes:
+  paperwrench_data:
+
+networks:
+  paperless:
+    external: true
+    name: ${PAPERLESS_DOCKER_NETWORK:?set the existing Paperless Docker network name}

@@ -1,24 +1,48 @@
 # Install, upgrade, back up and restore 0.1.0
 
 This is a proposed first release, not a published image or tag. Build from the
-reviewed M13 commit until a release is approved. The supplied Compose file uses
-the local `paperwrench:0.1.0` image. Paperless 3.1.2 is the verified upstream;
-other releases require separate validation. PaperWrench never reads its files
-or database.
+reviewed checkout until a release is approved. Paperless 3.1.2 is the verified
+upstream; other releases require separate validation. PaperWrench never reads
+Paperless files or database.
 
-## Fresh installation
+## LAN installation alongside an existing Paperless stack
 
-1. Check out the reviewed commit and copy `.env.example` to `.env`.
-2. Set `PAPERLESS_URL` to an address reachable **from the container**, and
-   `PAPERLESS_TOKEN` to a dedicated, minimally privileged Paperless user's token.
-   `localhost` inside the container is not the Docker host. Keep TLS verification
-   enabled for remote connections. Protect `.env` from other users.
-3. Run `docker compose up -d --build`. This builds the SPA and wheel, creates
-   the named `/data` volume and applies Alembic migrations automatically.
-4. Check `docker compose ps`, `/api/v1/system/health` and the connection status
-   at `http://127.0.0.1:8000`. Refresh a nested document/Job URL to check routing.
-   A healthy local database does not imply Paperless connectivity.
-5. Test a small preview and inspect its exact selection before confirming.
+1. Check out the reviewed PaperWrench source. Find the Docker network shared by
+   your Paperless service (`docker compose -f /path/to/paperless/compose.yml ps`
+   and `docker network ls`); it is often `<paperless-project>_default`. Note the
+   Paperless **service name**, often `paperless` or `webserver`, not its container
+   name or public URL. The service must listen on port 8000 inside that network.
+2. In the PaperWrench checkout, create `secrets/paperless_token` containing only
+   a dedicated, minimally privileged Paperless user's API token. Keep this file
+   private. The `secrets/` directory is Git-ignored. Compose mounts it read-only
+   at `/run/secrets/paperless_token`; the token is absent from the container
+   environment and browser responses.
+3. Start the supplied Compose example, substituting your network, service name
+   and preferred host port:
+
+   ```sh
+   mkdir -p secrets
+   chmod 700 secrets
+   ${EDITOR:-vi} secrets/paperless_token
+   chmod 600 secrets/paperless_token
+   PAPERLESS_DOCKER_NETWORK=paperless_default PAPERLESS_SERVICE=paperless PAPERWRENCH_HTTP_PORT=8000 \
+     docker compose -f docker-compose.paperless.yml up -d --build
+   ```
+
+4. Check `docker compose -f docker-compose.paperless.yml ps`, open
+   `http://IP_DU_SERVEUR:PORT`, and verify the connection status in the UI or at
+   `/api/v1/system/paperless`. The SPA and API use the same HTTP origin, so no
+   CORS allowlist is needed. A healthy `/api/v1/system/health` only proves the
+   local database is available. Test a small preview before confirming a write.
+
+The example publishes only PaperWrench's HTTP port. Paperless is reached at
+`http://<PAPERLESS_SERVICE>:8000` through its existing Docker network, even if
+its host port or public URL differs. `PAPERLESS_DOCKER_NETWORK` names an
+**external network** that must already exist; Compose does not create or remove
+it. If Paperless uses a different internal port, edit `PAPERLESS_URL` in the
+example. Set `PAPERWRENCH_HTTP_PORT` to avoid a host-port collision. Keep this
+port on a trusted LAN or restrict it with the host firewall: PaperWrench has no
+built-in login and anyone who can reach it can exercise the configured token.
 
 The image runs as UID/GID **10001**, one process and one worker. For a bind mount,
 prepare a directory owned/writable by 10001; do not run the container as root to
@@ -26,18 +50,20 @@ work around volume permissions. Compose makes the root filesystem read-only,
 drops capabilities and uses `/tmp` as tmpfs. Keep `/data` on reliable local disk;
 SQLite WAL and the runtime lock are not a distributed deployment protocol.
 
-For a file secret, mount it read-only (readable by UID 10001) and set
-`PAPERLESS_TOKEN_FILE` to its **container** path; setting a host path alone does
-not mount it. Remove the inline token afterward. The token must never be in a
-Vite variable or browser configuration. The Docker build context excludes local
-secrets, databases, caches and installed dependencies.
+The token must never be in a Vite variable or browser configuration. The Docker
+build context excludes local secrets, databases, caches and dependencies.
 
-There is no built-in user authentication. Keep the loopback binding or put an
-authenticated TLS reverse proxy in front of **all** routes, including `/api`,
-assets and OpenAPI. See [security.md](security.md). Deploy at the origin root;
-URL subpath hosting is not supported. Disable proxy retries for mutations and
-allow at least the five-minute preview build window plus network overhead. A
-lost Apply response means inspect History, never automatically submit again.
+## Advanced: reverse proxy and HTTPS (optional)
+
+For remote access, put an authenticated TLS reverse proxy in front of **all**
+routes, including `/api`, assets and OpenAPI. Restrict direct access to the
+PaperWrench port. Forward the original Host and scheme; trust forwarded headers
+only from the proxy's addresses. Leave `PAPERWRENCH_CORS_ORIGINS` empty. See
+[security.md](security.md). Deploy at the origin root; URL subpath hosting is
+not supported. Disable proxy retries for mutations and allow at least the
+five-minute preview build window plus network overhead. A lost Apply response
+means inspect History, never automatically submit again. The original
+`docker-compose.yml` binds to loopback for this style of deployment.
 
 ## Upgrade from M12 or earlier development checkouts
 

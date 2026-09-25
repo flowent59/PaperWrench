@@ -3,10 +3,16 @@
 PaperWrench 0.1.0 is a single-operator tool. Anyone who can reach its API can
 exercise the configured Paperless credential and read local history. It does
 not implement login, roles, multi-tenancy or a public internet security boundary.
-Protect every route with authenticated TLS at the reverse proxy; retain loopback
-binding/firewall restrictions and use a dedicated least-privilege Paperless token.
+For LAN installation, restrict the published HTTP port to trusted devices with
+the host firewall or a private VLAN, and use a dedicated least-privilege Paperless
+token. A domain, TLS and reverse proxy are optional for this local deployment.
+If publishing beyond the trusted LAN, protect every route with authenticated TLS
+at the reverse proxy; retain firewall restrictions.
+
 Origin checks are a browser safeguard, not authentication: non-browser clients
-can omit Origin. A hostile Host/DNS environment requires proxy host allowlisting.
+can omit Origin. Direct LAN requests use their actual HTTP Host (IP:port or
+localhost:port) for same-origin checks. A hostile Host/DNS environment requires
+proxy host allowlisting.
 
 Forward the original Host and scheme through a trusted proxy. Trust forwarded
 headers only from that proxy's addresses; keep the backend unreachable directly.
