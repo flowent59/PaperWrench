@@ -259,7 +259,7 @@ a job's target document ids (that belongs with the Job Engine, M8).
 - No automatic write retry, rollback execution or user cancellation
 - The full critical test set green on the sandbox before any real write
 
-## M9 — Rollback · Planned
+## M9 — Rollback · Done
 
 - Rollback as a linked job, built entirely on M8's per-document operation
   history
@@ -271,11 +271,12 @@ a job's target document ids (that belongs with the Job Engine, M8).
   neighbor preserved, later title and deleted document refused
 - Contract and evidence: [ADR-0015](decisions/0015-safe-rollback-jobs.md)
 
-## M10 — Schema · Planned
+## M10 — Schemas · Done
 
-- Per-document-type expected-field definitions
-- Conformance validation and reporting
-- Suggested corrections, always through the normal preview path
+- Named schema CRUD with a compilable `DatasetQuery` applicability scope
+- Typed `required` and `equals` rules over stable field IDs
+- Read-only, bounded paginated conformance and a focused editor
+- Document-level result contract for M11; see [schema API](schema-api.md)
 
 ## M11 — Quality · Planned
 

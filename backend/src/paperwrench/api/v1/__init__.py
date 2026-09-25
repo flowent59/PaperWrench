@@ -14,6 +14,7 @@ from paperwrench.api.v1 import inspector
 from paperwrench.api.v1 import jobs
 from paperwrench.api.v1 import metadata
 from paperwrench.api.v1 import previews
+from paperwrench.api.v1 import schemas
 from paperwrench.api.v1 import system
 from paperwrench.api.v1 import transformations
 
@@ -26,5 +27,6 @@ api_router.include_router(inspector.router)
 api_router.include_router(transformations.router)
 api_router.include_router(previews.router)
 api_router.include_router(jobs.router)
+api_router.include_router(schemas.router)
 
 __all__ = ["api_router"]

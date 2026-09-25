@@ -13,6 +13,26 @@
  */
 
 export const messages = {
+  schemas: {
+    title: 'Document schemas',
+    subtitle: 'Define requirements and inspect matching documents. Evaluation only reads Paperless.',
+    new: 'New schema', create: 'Create schema', edit: 'Edit schema',
+    name: 'Name', description: 'Description', appliesWhen: 'Applies when',
+    scopeHint: 'This is the same server-side dataset query used by Explorer.',
+    titleSearch: 'Title search',
+    invalidScope: 'The scope cannot be compiled. Fix its filter before saving.',
+    rules: 'Rules', required: 'Required', equals: 'Equals',
+    requiredHint: 'Required fails for absent, null and empty text. Zero and false pass.',
+    unavailable: 'Unavailable:', removeRule: 'Remove rule', addRule: 'Add rule',
+    save: 'Save schema', delete: 'Delete schema', conformance: 'Conformance',
+    evaluate: 'Evaluate', saveBeforeEvaluation: 'Save changes before evaluating.',
+    previous: 'Previous', next: 'Next',
+    matching: (total: number, page: number, pages: number) =>
+      `${total} matching documents · page ${page} of ${pages}`,
+    ruleField: (index: number) => `Rule ${index} field`,
+    ruleKind: (index: number) => `Rule ${index} kind`,
+    requestFailed: 'Request failed.',
+  },
   transformations: {
     title: 'Transformations',
     subtitle: 'Describe changes, preview the selection, then explicitly confirm and apply.',

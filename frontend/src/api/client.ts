@@ -35,6 +35,9 @@ import type {
   CreatedPreview,
   PreviewSummary,
   PreviewPage,
+  DocumentSchema,
+  SchemaDefinition,
+  SchemaEvaluationPage,
 } from './types'
 
 export const API_PREFIX = '/api/v1'
@@ -169,6 +172,19 @@ export const filtersApi = {
       method: 'POST',
       body: JSON.stringify({ filters, search }),
     }),
+}
+
+export const schemasApi = {
+  list: () => apiFetch<DocumentSchema[]>('/schemas'),
+  create: (schema: SchemaDefinition) => apiFetch<DocumentSchema>('/schemas', {
+    method: 'POST', body: JSON.stringify(schema),
+  }),
+  update: (id: number, schema: SchemaDefinition) => apiFetch<DocumentSchema>(`/schemas/${id}`, {
+    method: 'PUT', body: JSON.stringify(schema),
+  }),
+  remove: (id: number) => apiFetch<void>(`/schemas/${id}`, { method: 'DELETE' }),
+  evaluate: (id: number, page: number) =>
+    apiFetch<SchemaEvaluationPage>(`/schemas/${id}/evaluate?page=${page}&page_size=25`),
 }
 
 // Reference metadata (tags/correspondents/document types/custom field
