@@ -111,8 +111,7 @@ class Settings(BaseSettings):
     auto_resume_jobs: bool = Field(
         default=False,
         validation_alias="PAPERWRENCH_AUTO_RESUME_JOBS",
-        description="Resume INTERRUPTED jobs on startup. Off by default: after a crash the "
-        "user should decide before we write to their archive again.",
+        description="Reserved legacy setting. M8 requires explicit resume and refuses true.",
     )
 
     # Split-origin development only. Empty in production (single origin).
@@ -148,6 +147,13 @@ class Settings(BaseSettings):
         return self
 
     # -- Derived -------------------------------------------------------------
+    @field_validator("auto_resume_jobs")
+    @classmethod
+    def _manual_resume_only(cls, value: bool) -> bool:
+        if value:
+            raise ValueError("M8 requires explicit resume; automatic resume is unsupported")
+        return value
+
     @property
     def paperless_configured(self) -> bool:
         """True when both a URL and a token are present."""

@@ -62,24 +62,32 @@ M5 exposes immediate, explicit single-document edits in the Inspector.
   this residual risk; it is not a guarantee that other writers are paused.
 - **Actual values are shown.** Each save returns before, intended and actual
   stored values, including Paperless normalization. There is **no durable edit
-  history or rollback in M5**. Jobs/history and rollback remain M8/M9.
+  history or rollback for Inspector edits**. M8 bulk Jobs have durable History;
+  rollback execution remains M9.
 - **No automatic write retries.** After an uncertain outcome, reload and inspect
   before deciding whether to make another edit.
 - **The token stays in the backend.** It is not persisted, logged or sent to the
   browser. Paperless permissions remain authoritative.
 
 See [ADR-0012](docs/decisions/0012-inspector-coordinated-writes-and-external-race.md)
-for the concurrency contract and its limitations. M7 adds read-only bulk
-dry-run; bounded job execution and durable rollback remain future capabilities.
+for the concurrency contract and its limitations. M8 adds explicitly confirmed
+bulk Jobs, exact durable targets and paginated History. PATCHes are followed by
+a GET; uncertain outcomes stay **AMBIGUOUS**, without invented write provenance
+or automatic replay. Restart requires explicit resume of unsent targets.
+See [ADR-0014](docs/decisions/0014-durable-jobs-and-write-provenance.md).
 
 ## Status
 
-**Early development, M0–M7 implemented.** Explorer uses the Dataset/FilterSet
+**Early development, M0–M8 implemented.** Explorer uses the Dataset/FilterSet
 engine and can send selected IDs or all matching documents to Transformations.
 Dry Run shows paginated before/intended values and changed/unchanged/error
-counts without writing to Paperless. Review confirmation is available; Apply
-stays disabled until M8. Single-document Inspector edits remain available.
-See [docs/roadmap.md](docs/roadmap.md) and the [preview API](docs/preview-api.md).
+counts without writing to Paperless. **Confirm and apply** atomically creates a
+durable Job from the reviewed targets. History shows progress, conflicts, errors,
+ambiguous outcomes and before/intended/verified written values. Concurrency defaults
+to 4 (maximum 16); losing the runtime lock stops new Job sends. There is no rollback
+or user cancellation yet. Single-document Inspector edits remain available.
+See [docs/roadmap.md](docs/roadmap.md), [preview API](docs/preview-api.md) and
+[Job API](docs/job-api.md).
 
 ## Quick start
 
@@ -139,7 +147,7 @@ What this means concretely:
   inline environment variable, which is visible to anything that can inspect
   the container.
 - **Back up your Paperless library.** M5 edits have no durable rollback.
-  `/data` holds PaperWrench state; it will hold job history from M8.
+  `/data` holds durable Job history and write provenance. M8 cannot restore data.
 - **Keep TLS verification on.** `PAPERLESS_VERIFY_SSL=false` exists for
   self-signed certificates on a LAN, and it removes protection against an
   active network attacker.

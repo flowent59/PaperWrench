@@ -9,7 +9,7 @@ why the boundaries are where they are. Individual decisions are recorded in
 PaperWrench is a single container running a FastAPI backend that serves a
 React SPA from the same origin, talks to an existing Paperless-ngx instance
 over its REST API, and uses local SQLite for its own working state. M5 manual edits return a
-receipt without durable history; job persistence and rollback are planned for M8/M9.
+receipt without durable history; M8 bulk Jobs have durable history. Rollback remains M9.
 
 ## Component map
 
@@ -24,7 +24,7 @@ receipt without durable history; job persistence and rollback are planned for M8
 |   FastAPI                                                  |
 |     /                -> SPA (static assets + index.html)   |
 |     /api/v1/...      -> JSON API                           |
-|     /api/v1/jobs/../events -> SSE progress stream          |
+|     /api/v1/jobs/... -> durable paginated progress         |
 |                                                            |
 |   Domain services                                          |
 |     filter engine     - FilterSet -> validate -> compile   |
@@ -72,13 +72,20 @@ validated, compiled or refused without a single request leaving the process.
 **`transformations/`** — the M6 specification and pure evaluator. It accepts a
 normalized `Document`, a transformation and a snapshot of custom-field
 definitions. It has no client, registry, database, clock or write path.
-Dataset-wide preview is orchestrated by M7 `previews/`; Jobs remain M8.
+Dataset-wide preview is orchestrated by M7 `previews/`; M8 `jobs/` owns execution.
 
 **`previews/`** — the M7 read-only orchestration layer. Compiles DatasetQuery
 through the existing query adapter or reads explicit IDs, calls M6 for each
 document, and stages bounded batches of typed results in expiring SQLite rows.
-It exposes stable paginated results and a one-time review confirmation, without
-creating or executing Jobs. See [preview-api.md](preview-api.md) and ADR-0013.
+It exposes stable paginated results and a one-time review confirmation. The separate
+M8 Apply boundary claims that token inside the Job creation transaction.
+See [preview-api.md](preview-api.md), [job-api.md](job-api.md) and ADR-0013/0014.
+
+**`jobs/`** — short SQLite transactions copy exact staged targets, claim one
+document at a time, persist send intent and record verified or uncertain outcomes.
+A fixed worker pool shares M5's coordinator and its configured mutation semaphore.
+Startup recovery never issues HTTP writes. History derives counts from targets
+and serves bounded pages; the browser polls rather than retaining execution truth.
 
 **`paperless/`** — the client. One place that knows how to talk to Paperless:
 version negotiation, pagination, error mapping, and the read-modify-write
@@ -280,7 +287,8 @@ displayed as before/after. Nothing is written. A `preview_token` binds the
 preview to what the user actually saw.
 
 **3. Create.** On confirmation, a `Job` is created and the matching document
-ids are **materialised into the job row**. The job never re-evaluates its
+ids are **copied from staging into durable JobTarget rows**, in the same transaction
+as token consumption and Job creation. The job never re-evaluates its
 FilterSet during execution: a filter is a moving target, and a job whose scope
 shifts underneath it cannot be previewed, resumed or rolled back honestly
 (ADR-0003).
@@ -288,36 +296,46 @@ shifts underneath it cannot be previewed, resumed or rolled back honestly
 **4. Execute.** For each document, at bounded concurrency:
 
 - re-read the document;
-- compare the current value with `before_value` — if it differs, record
+- compare the normalized document and catalogue revisions with preview evidence;
+  unless every affected value is already at its reviewed target, a difference records
   `SKIPPED_CONFLICT` and move on, do not overwrite;
 - for custom fields, merge into the *complete* existing collection (ADR-0004);
-- PATCH;
-- record what Paperless actually stored as `written_value` (ADR-0005);
+- commit fresh `before_value` and a `writing` intent marker, then one combined PATCH;
+- GET again, compare affected response/readback values, and record actual
+  `written_value` only with acknowledged-write provenance (ADR-0014);
 - commit the `JobOperation` row before starting the next document.
 
-The `preview_token` and future per-document revalidation are complementary.
-M7 binds confirmation to the staged observation. M8 must detect changes since
+The `preview_token` and per-document revalidation are complementary.
+M7 binds confirmation to the staged observation. M8 detects changes since
 preview by re-reading before writing; that check still cannot close the external
-GET/PATCH race described in ADR-0012. Stages 3–5 remain future M8/M9 work.
+GET/PATCH race described in ADR-0012. A send without committed verified evidence
+is ambiguous, even when the current value happens to equal the intended value.
 
-**5. Report and undo.** The job ends `COMPLETED`, `PARTIAL` or `FAILED`, with a
-per-document breakdown. A rollback is a new job linked by `rollback_of_job_id`
-that restores `before_value` only where the current value still equals
-`written_value`.
+**5. Report.** The job ends `COMPLETED`, `PARTIAL` or `FAILED`, with a durable
+per-document breakdown. Interrupted Jobs can resume unsent targets explicitly.
+Rollback execution is out of scope until M9; only verified succeeded operations
+are candidates for its future current-value checks.
 
 ## Data model
 
 The interesting parts:
 
-**`Job`** — type, status, title, the materialised `document_ids_json`, the
-originating filter (for explanation), counts, `heartbeat_at`, and
-`rollback_of_job_id` when it is a rollback.
+**`Job`** — type, status, transformation operations, original DatasetQuery/source,
+preview fingerprints, timestamps and reserved rollback linkage. Explicit IDs are
+not duplicated into the transformation JSON.
+
+**`JobTarget`** — exact document ID and stable position, immutable preview evidence,
+pending/reading/writing or outcome state, attempt owner, fresh custom-field snapshot
+and timestamps. The `(job_id, status, position)` index supports claims and pages.
+Migration `c814b207f001` removes the monolithic `document_ids_json`. Any legacy
+dormant rows remain manual-review evidence, never executable provenance.
 
 **`JobOperation`** — one row per document per field, carrying `before_value`,
-`intended_value`, `written_value`, a snapshot of the document's custom fields
-before the write, and a status. A unique constraint on
-`(job_id, document_id, field_kind, field_key)` makes resumption idempotent at
-the storage layer rather than by convention.
+`intended_value`, verified `written_value` and a status. Fresh custom-field evidence
+is stored once on the target. The existing legacy operation snapshot column remains
+readable. A unique `(job_id, document_id, field_kind, field_key)` prevents duplicate
+audit rows; it does not prove exactly-once HTTP delivery. Durable target states
+prevent replay of ambiguous or completed sends.
 
 **`RuntimeLock`** — a single row (`CHECK (id = 1)`) holding the instance id and
 heartbeat that enforce single-instance execution.
@@ -332,7 +350,7 @@ any cached copy of Paperless data that could drift, and the API token.
 ## Job status model
 
 ```
-PENDING -> RUNNING -> COMPLETED | PARTIAL | FAILED | CANCELLED
+PENDING -> RUNNING -> COMPLETED | PARTIAL | FAILED
               |
               +-----> INTERRUPTED  (process died mid-job)
 ```
@@ -340,6 +358,12 @@ PENDING -> RUNNING -> COMPLETED | PARTIAL | FAILED | CANCELLED
 `INTERRUPTED` is not terminal — it is the resumable state. Jobs are never
 resumed automatically at startup: an unattended automatic resume of a
 destructive write is not a decision software should make. The operator decides.
+`PENDING` on boot also becomes interrupted. Reading without a send marker is
+safe to resume; writing becomes ambiguous. Completed results stay completed.
+`CANCELLED` remains a reserved legacy value, with no cancellation endpoint.
+All targets succeeded/unchanged means completed; some good and some negative
+outcomes means partial; none good means failed. Any ambiguous outcome means
+partial with manual review. Progress is always a grouped query of target rows.
 
 ## Errors
 
@@ -372,9 +396,11 @@ read-only; no taxonomy definitions or ownership/permissions can be edited.
 
 The lifecycle client owns `DocumentMutationCoordinator`. Its per-document lock
 covers GET → permission/revision check → complete merge → one PATCH → result
-capture. Both low-level write helpers share this lock; later Jobs must use the
+capture. Both low-level write helpers and M8 Jobs share this lock and a global
+mutation semaphore (default 4, configurable 1–16). Jobs use the
 same lifecycle client/coordinator. `update_document` is strictly core-only;
-`mutate_document` is the combined, preconditioned path. There is no public
+`mutate_document` is the Inspector path; `mutate_document_with_plan` is its shared
+implementation with fresh planning and durable pre-send callbacks for Jobs. There is no public
 complete-array passthrough. The API accepts custom operations with explicit
 `absent`, `null` or `present` state, never raw upstream `custom_fields` arrays.
 
@@ -508,7 +534,7 @@ The properties it does guarantee:
 | Tables | TanStack Table | Preview grids are large and need virtualisation |
 | Server state | TanStack Query | Caching and invalidation, not hand-rolled |
 | Styling | Tailwind + shadcn/ui | Owned components, no runtime theme dependency |
-| Progress | SSE | One-directional; WebSocket would add protocol for nothing |
+| Progress | Polling durable History | Bounded pages and persisted counts survive reconnect/restart (ADR-0014) |
 
 ## Testing strategy
 

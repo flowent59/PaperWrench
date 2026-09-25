@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import json
 from collections.abc import AsyncIterator
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -77,6 +78,18 @@ class MutationResult:
     before: Document
     intended: dict[str, Any]
     written: Document
+    response: Document | None = None
+
+
+@dataclass
+class MutationPlan:
+    core: dict[str, Any]
+    custom_updates: list[dict[str, Any]]
+    remove_custom_fields: list[int]
+    acknowledge_external_race: bool = False
+    before_send: Callable[[], None] | None = None
+    after_response: Callable[[], None] | None = None
+    readback: bool = False
 
 
 class DocumentMutationCoordinator:
@@ -87,15 +100,16 @@ class DocumentMutationCoordinator:
     Entries include waiters and are removed even on cancellation.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_concurrency: int = 4) -> None:
         self._entries: dict[int, tuple[asyncio.Lock, int]] = {}
+        self._capacity = asyncio.Semaphore(max_concurrency)
 
     @asynccontextmanager
     async def hold(self, document_id: int) -> AsyncIterator[None]:
         lock, users = self._entries.get(document_id, (asyncio.Lock(), 0))
         self._entries[document_id] = (lock, users + 1)
         try:
-            async with lock:
+            async with lock, self._capacity:
                 yield
         finally:
             _, users = self._entries[document_id]

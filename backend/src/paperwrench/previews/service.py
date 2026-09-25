@@ -21,6 +21,7 @@ from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from paperwrench.db.base import utcnow
 from paperwrench.db.models import Preview
@@ -30,11 +31,13 @@ from paperwrench.errors import ErrorCode
 from paperwrench.errors import PaperlessForbiddenError
 from paperwrench.errors import PaperWrenchError
 from paperwrench.filters.model import DatasetPageRequest
+from paperwrench.inspector import catalog_revision
 from paperwrench.paperless import MetadataRegistry
 from paperwrench.paperless import PaperlessClient
 from paperwrench.paperless.errors import PaperlessNotFoundError
 from paperwrench.paperless.models import CustomField
 from paperwrench.paperless.models import Document
+from paperwrench.paperless.mutations import revision
 from paperwrench.previews.model import MAX_BYTES
 from paperwrench.previews.model import MAX_DOCUMENTS
 from paperwrench.previews.model import MAX_PREVIEWS
@@ -116,7 +119,11 @@ def _row(document: Document, spec: Transformation, fields: dict[int, CustomField
         if any(c.status == ResultStatus.CHANGE for c in result.changes)
         else ResultStatus.UNCHANGED
     )
-    return PreviewRow(**result.model_dump(), title=document.title, status=status, issue=issue)
+    return PreviewRow(
+        **result.model_dump(), title=document.title, status=status, issue=issue,
+        observed_revision=revision(document),
+        catalog_revision=catalog_revision(list(fields.values())),
+    )
 
 
 def _error_row(document_id: int, code: str, message: str) -> PreviewRow:
@@ -372,7 +379,19 @@ class PreviewService:
             )
 
     def confirm(self, preview_id: str, request: ConfirmPreview) -> PreviewSummary:
-        summary = self.summary(preview_id)
+        with session_scope() as session:
+            return self.claim(session, preview_id, request)
+
+    def claim(
+        self, session: Session, preview_id: str, request: ConfirmPreview
+    ) -> PreviewSummary:
+        """Consume inside the caller's transaction; never commit here."""
+        preview = session.get(Preview, preview_id)
+        if preview is None or not preview.ready or preview.expires_at <= utcnow():
+            raise stale()
+        summary = PreviewSummary.model_validate_json(preview.summary_json).model_copy(
+            update={"confirmed": preview.confirmed}
+        )
         selection, spec_hash = identities(request.transformation)
         if (
             summary.confirmed
@@ -385,25 +404,23 @@ class PreviewService:
             or request.version != summary.version
         ):
             raise stale("Confirmation does not match an error-free, changed preview.")
-        with session_scope() as session:
-            preview = session.get(Preview, preview_id)
-            token_hash = hashlib.sha256(request.preview_token.encode()).hexdigest()
-            if preview is None or not hmac.compare_digest(preview.token_hash, token_hash):
-                raise stale("Invalid preview token.")
-            claimed = session.execute(
-                update(Preview)
-                .where(
-                    Preview.id == preview_id,
-                    Preview.confirmed.is_(False),
-                    Preview.ready.is_(True),
-                    Preview.expires_at > utcnow(),
-                    Preview.token_hash == token_hash,
-                )
-                .values(confirmed=True)
-                .returning(Preview.id)
-            ).scalar_one_or_none()
-            if claimed is None:
-                raise stale()
+        token_hash = hashlib.sha256(request.preview_token.encode()).hexdigest()
+        if not hmac.compare_digest(preview.token_hash, token_hash):
+            raise stale("Invalid preview token.")
+        claimed = session.execute(
+            update(Preview)
+            .where(
+                Preview.id == preview_id,
+                Preview.confirmed.is_(False),
+                Preview.ready.is_(True),
+                Preview.expires_at > utcnow(),
+                Preview.token_hash == token_hash,
+            )
+            .values(confirmed=True)
+            .returning(Preview.id)
+        ).scalar_one_or_none()
+        if claimed is None:
+            raise stale()
         return summary.model_copy(update={"confirmed": True})
 
     def discard(self, preview_id: str) -> None:

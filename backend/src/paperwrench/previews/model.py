@@ -25,6 +25,8 @@ class PreviewRow(EvaluationResult):
     title: str | None = None
     status: ResultStatus
     issue: TransformationIssue | None = None
+    observed_revision: str | None = None
+    catalog_revision: str | None = None
 
 
 class PreviewSummary(BaseModel):

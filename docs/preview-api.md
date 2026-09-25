@@ -1,9 +1,12 @@
 # M7 Dry Run API
 
 All paths are below `/api/v1`. These routes stage/review proposed results in
-PaperWrench only. They never mutate Paperless documents. No Apply route exists.
+PaperWrench only. They never mutate Paperless documents. M8 Apply is the separate
+[`POST /jobs` transaction](job-api.md), not a preview-route mutation.
 See [ADR-0013](decisions/0013-expiring-preview-staging-and-confirmation.md) for
-canonicalization, lifecycle, error policy and the M8 handoff contract.
+canonicalization, lifecycle and error policy. ADR-0014 implements the M8 handoff.
+New result rows include normalized document/catalogue revisions in their result
+fingerprint. Older rows without these preconditions require a new preview for Apply.
 
 ## Create
 
@@ -91,7 +94,9 @@ On success, 200 returns the summary with `confirmed=true`. The token is consumed
 once; no Job is created and no Paperless request occurs. Invalid/replayed/
 expired/mismatched tokens produce 409 `PREVIEW_STALE`; invalid DTOs produce 422.
 Readiness/expiry are also checked on page/summary access. The frontend discards
-its confirmation when any selection/operation changes and keeps Apply disabled.
+its confirmation when any selection/operation changes. M8 exposes a separate
+explicit Apply action that atomically creates a Job; it never calls this review
+endpoint as a first step.
 
 `DELETE /previews/{id}` idempotently discards local completed staging (204).
 It does not delete a Paperless document. Expiry cleanup and startup removal of

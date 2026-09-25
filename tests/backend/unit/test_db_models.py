@@ -31,7 +31,7 @@ def _job(session: Session, **kwargs: object) -> Job:
 def test_job_defaults_to_pending(session: Session) -> None:
     job = _job(session)
     assert job.status == JobStatus.PENDING
-    assert job.document_ids_json == "[]"
+    assert job.preview_id is None
     assert job.created_at is not None
 
 

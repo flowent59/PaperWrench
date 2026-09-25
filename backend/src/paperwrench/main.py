@@ -42,6 +42,8 @@ from paperwrench.errors import ErrorCode
 from paperwrench.errors import ErrorDetail
 from paperwrench.errors import ErrorResponse
 from paperwrench.errors import PaperWrenchError
+from paperwrench.jobs.engine import JobEngine
+from paperwrench.jobs.engine import recover
 from paperwrench.logging import configure_logging
 from paperwrench.logging import get_logger
 from paperwrench.logging import register_secret
@@ -63,7 +65,7 @@ _HTTP_ERROR_CODES = {
 }
 
 
-async def _heartbeat_loop(instance_id: str) -> None:
+async def _heartbeat_loop(instance_id: str, jobs: JobEngine) -> None:
     """Keep the runtime lock fresh so a crash is detectable."""
     while True:  # pragma: no cover - background task
         await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
@@ -72,8 +74,12 @@ async def _heartbeat_loop(instance_id: str) -> None:
             with session_scope() as session:
                 if not refresh_lock(session, instance_id):
                     logger.error("runtime_lock_lost", instance_id=instance_id)
+                    jobs.stop_scheduling()
+                    return
         except Exception as exc:
+            jobs.stop_scheduling()
             logger.warning("runtime_lock_heartbeat_failed", error=str(exc))
+            return
 
 
 class OriginGuardMiddleware(BaseHTTPMiddleware):
@@ -245,8 +251,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.metadata_registry = MetadataRegistry(app.state.paperless_client)
         cleanup_previews(startup=True)
         app.state.previews = PreviewService()
+        recover()
+        app.state.jobs = JobEngine(
+            app.state.paperless_client, app.state.metadata_registry, settings, instance_id
+        )
+        app.state.jobs.start()
 
-        heartbeat = asyncio.create_task(_heartbeat_loop(instance_id))
+        heartbeat = asyncio.create_task(_heartbeat_loop(instance_id, app.state.jobs))
         logger.info(
             "paperwrench_started",
             version=__version__,
@@ -258,6 +269,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             heartbeat.cancel()
+            await asyncio.gather(heartbeat, return_exceptions=True)
+            await app.state.jobs.close()
             try:
                 with session_scope() as session:
                     release_lock(session, instance_id)

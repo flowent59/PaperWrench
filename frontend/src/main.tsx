@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { DashboardPage } from '@/pages/dashboard'
 import { ExplorerPage } from '@/pages/explorer'
 import { InspectorPage } from '@/pages/inspector'
+import { HistoryPageView, JobPage } from '@/pages/jobs'
 import { TransformationsRoute } from '@/pages/transformations'
 import { NotFoundPage } from '@/pages/not-found'
 
@@ -39,6 +40,9 @@ createRoot(container).render(
               <Route path="documents" element={<ExplorerPage />} />
               <Route path="documents/:documentId" element={<InspectorPage />} />
               <Route path="transformations" element={<TransformationsRoute />} />
+              <Route path="jobs" element={<HistoryPageView />} />
+              <Route path="history" element={<HistoryPageView />} />
+              <Route path="jobs/:jobId" element={<JobPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

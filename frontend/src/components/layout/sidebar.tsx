@@ -61,8 +61,8 @@ export const navSections: NavSection[] = [
   {
     title: messages.nav.sectionOperations,
     items: [
-      { to: '/jobs', label: messages.nav.jobs, icon: Wrench, available: false },
-      { to: '/history', label: messages.nav.history, icon: History, available: false },
+      { to: '/jobs', label: messages.nav.jobs, icon: Wrench, available: true },
+      { to: '/history', label: messages.nav.history, icon: History, available: true },
     ],
   },
   {

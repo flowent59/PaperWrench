@@ -211,3 +211,21 @@ export const previewsApi = {
     }),
   discard: (id: string) => apiFetch<void>(`/previews/${id}`, { method: 'DELETE' }),
 }
+
+export const jobsApi = {
+  create: (preview: CreatedPreview, transformation: Transformation, acknowledgeExternalRace: boolean) =>
+    apiFetch<import('./types').JobView>('/jobs', { method: 'POST', body: JSON.stringify({
+      preview_id: preview.id, preview_token: preview.preview_token, transformation,
+      target_fingerprint: preview.target_fingerprint, result_fingerprint: preview.result_fingerprint,
+      version: preview.version, acknowledge: true, acknowledge_external_race: acknowledgeExternalRace,
+    }) }),
+  list: (page: number) => apiFetch<import('./types').HistoryPage<import('./types').JobView>>(`/jobs?page=${page}&page_size=25`),
+  detail: (id: number) => apiFetch<import('./types').JobView>(`/jobs/${id}`),
+  targets: (id: number, page: number, status: string) =>
+    apiFetch<import('./types').HistoryPage<import('./types').TargetView>>(
+      `/jobs/${id}/targets?page=${page}&page_size=25${status ? `&status=${status}` : ''}`),
+  operations: (id: number, document: number, page: number) =>
+    apiFetch<import('./types').HistoryPage<import('./types').OperationView>>(
+      `/jobs/${id}/operations?document_id=${document}&page=${page}&page_size=25`),
+  resume: (id: number) => apiFetch<import('./types').JobView>(`/jobs/${id}/resume`, { method: 'POST' }),
+}

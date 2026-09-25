@@ -27,28 +27,55 @@ function page(number = 1): PreviewPage {
   page: number, page_size: 25, total: 10000, page_count: 400 }
 }
 
-function setup(value = preview(), confirmationStatus = 200) {
+function setup(value = preview(), confirmationStatus = 200, transformation = spec) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input)
     if (init?.method === 'DELETE') return new Response(null, { status: 204 })
-    if (path.endsWith('/confirm')) return new Response(JSON.stringify(confirmationStatus === 200
-      ? { ...value, confirmed: true } : { error: { code: 'PREVIEW_STALE', message: 'Expired on server' } }),
+    if (path.endsWith('/jobs')) return new Response(JSON.stringify(confirmationStatus === 200
+      ? { id: 42 } : { error: { code: 'PREVIEW_STALE', message: 'Expired on server' } }),
     { status: confirmationStatus })
     if (path.includes('/documents?')) return new Response(JSON.stringify(page(path.includes('page=2&') ? 2 : 1)))
     return new Response(JSON.stringify(value), { status: 201 })
   })
   vi.stubGlobal('fetch', fetchMock)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const view = render(<QueryClientProvider client={client}><DryRun build={() => spec} /></QueryClientProvider>)
+  const view = render(<QueryClientProvider client={client}><DryRun build={() => transformation} /></QueryClientProvider>)
   return { fetchMock, view, client }
 }
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('M7 Dry Run', () => {
-  it('shows counts, before/intended and server pages; confirms once while Apply stays disabled', async () => {
+  it('requires a separate acknowledgement before a custom-field Apply', async () => {
+    const { fetchMock } = setup(preview(), 200, { ...spec, operations: [{ operation: 'set',
+      field: { source: 'custom_field', field_id: 1 }, value: 'Août' }] })
+    fireEvent.click(screen.getByRole('button', { name: m.create }))
+    await screen.findByText('Ancien → Été')
+    fireEvent.click(screen.getByRole('checkbox', { name: m.acknowledge }))
+    expect(screen.getByRole('button', { name: m.confirm })).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox', { name: messages.jobs.acknowledgeRace }))
+    fireEvent.click(screen.getByRole('button', { name: m.confirm }))
+    await screen.findByText(m.confirmed)
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/jobs'))
+    expect(JSON.parse(String(call?.[1]?.body)).acknowledge_external_race).toBe(true)
+  })
+
+  it('directs a lost Apply response to History without automatically resubmitting', async () => {
     const { fetchMock } = setup()
-    expect(screen.getByRole('button', { name: m.apply })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: m.create }))
+    await screen.findByText('Ancien → Été')
+    fetchMock.mockRejectedValueOnce(new TypeError('offline'))
+    fireEvent.click(screen.getByRole('checkbox', { name: m.acknowledge }))
+    fireEvent.click(screen.getByRole('button', { name: m.confirm }))
+    await screen.findByText(messages.jobs.uncertainApply)
+    expect(screen.getByRole('button', { name: m.confirm })).toBeDisabled()
+    expect(screen.getByRole('link', { name: messages.jobs.open })).toHaveAttribute('href', '/history')
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/jobs'))).toHaveLength(1)
+  })
+
+  it('shows counts and pages, then explicitly creates one Job with the reviewed token', async () => {
+    const { fetchMock } = setup()
+    expect(screen.queryByRole('button', { name: m.confirm })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: m.create }))
     await screen.findByText('Ancien → Été')
     expect(screen.getByText(m.changed, { selector: 'dt' }).parentElement).toHaveTextContent('9000')
@@ -62,12 +89,13 @@ describe('M7 Dry Run', () => {
     fireEvent.click(screen.getByRole('button', { name: m.confirm }))
     await screen.findByText(m.confirmed)
     expect(screen.getByRole('button', { name: m.confirm })).toBeDisabled()
-    expect(screen.getByRole('button', { name: m.apply })).toBeDisabled()
-    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/confirm'))
+    expect(screen.getByRole('link', { name: messages.jobs.open })).toHaveAttribute('href', '/jobs/42')
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/jobs'))
     expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ transformation: spec,
       preview_token: 'opaque-token', target_fingerprint: 'targets', result_fingerprint: 'results',
       version: 1, acknowledge: true })
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false)
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/jobs'))).toHaveLength(1)
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/confirm'))).toBe(false)
   })
 
   it('shows exact unresolved rows and prevents confirmation when any document has errors', async () => {
@@ -99,7 +127,7 @@ describe('M7 Dry Run', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: m.acknowledge }))
     fireEvent.click(screen.getByRole('button', { name: m.confirm }))
     await screen.findByText(m.expired)
-    expect(screen.getByRole('button', { name: m.apply })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: m.confirm })).not.toBeInTheDocument()
   })
 
   it('filters on the server and resets page navigation', async () => {

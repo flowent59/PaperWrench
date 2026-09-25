@@ -509,3 +509,50 @@ export interface PreviewPage {
   total: number
   page_count: number
 }
+
+export type JobStatus = 'pending' | 'running' | 'completed' | 'partial' | 'failed' | 'interrupted' | 'cancelled'
+export type TargetStatus = 'pending' | 'reading' | 'writing' | 'succeeded' | 'unchanged' | 'conflict' | 'permission' | 'missing' | 'failed' | 'ambiguous'
+export interface JobView {
+  id: number
+  title: string
+  status: JobStatus
+  total: number
+  processed: number
+  counts: Record<TargetStatus, number>
+  source_kind: 'ids' | 'dataset' | null
+  dataset_query: Extract<Transformation['targets'], { source: 'dataset' }>['query'] | null
+  operations: TransformationOperation[]
+  preview: PreviewSummary | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+  resumable: boolean
+}
+export interface TargetView {
+  document_id: number
+  position: number
+  title: string | null
+  status: TargetStatus
+  error: string | null
+  http_status: number | null
+  attempts: number
+  started_at: string | null
+  finished_at: string | null
+}
+export interface OperationView {
+  id: number
+  document_id: number
+  field_kind: string
+  field_key: string
+  status: string
+  before: TransformationValue | null
+  intended: TransformationValue | null
+  written: TransformationValue | null
+  rollback_candidate: boolean
+  error: string | null
+  http_status: number | null
+  attempts: number
+  started_at: string | null
+  finished_at: string | null
+}
+export interface HistoryPage<T> { items: T[]; page: number; page_size: number; total: number; page_count: number }

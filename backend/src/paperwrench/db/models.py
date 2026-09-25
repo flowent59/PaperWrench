@@ -75,6 +75,7 @@ class OperationStatus(StrEnum):
     """Outcome of a single document/field write."""
 
     PENDING = "pending"
+    AMBIGUOUS = "ambiguous"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     SKIPPED_UNCHANGED = "skipped_unchanged"
@@ -93,6 +94,19 @@ class OperationStatus(StrEnum):
 class FieldKind(StrEnum):
     CORE = "core"
     CUSTOM_FIELD = "custom_field"
+
+
+class TargetStatus(StrEnum):
+    PENDING = "pending"
+    READING = "reading"
+    WRITING = "writing"
+    SUCCEEDED = "succeeded"
+    UNCHANGED = "unchanged"
+    CONFLICT = "conflict"
+    PERMISSION = "permission"
+    MISSING = "missing"
+    FAILED = "failed"
+    AMBIGUOUS = "ambiguous"
 
 
 class CollectionKind(StrEnum):
@@ -169,10 +183,11 @@ class Job(Base):
     filterset_json: Mapped[str | None] = mapped_column(Text)
     transformation_json: Mapped[str | None] = mapped_column(Text)
 
-    #: Target set materialised at creation time. The job must NOT re-evaluate
-    #: its FilterSet while running, so documents that start or stop matching
-    #: mid-run cannot implicitly change its scope.
-    document_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    #: Staging may expire; this identifier intentionally has no preview FK.
+    preview_id: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
+    preview_summary_json: Mapped[str | None] = mapped_column(Text)
+    source_kind: Mapped[str | None] = mapped_column(String(16))
+    acknowledge_external_race: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     rollback_of_job_id: Mapped[int | None] = mapped_column(
         ForeignKey("jobs.id", ondelete="SET NULL")
@@ -232,8 +247,7 @@ class JobOperation(Base):
     __table_args__ = (
         Index("ix_ops_job", "job_id", "status"),
         Index("ix_ops_doc", "document_id"),
-        # Idempotency: a job cannot contain the same document/field twice, so
-        # a resumed job can never double-apply an operation.
+        # Audit identity only. The durable target state prevents unsafe replay.
         UniqueConstraint(
             "job_id",
             "document_id",
@@ -285,6 +299,32 @@ class JobOperation(Base):
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
     job: Mapped[Job] = relationship(back_populates="operations")
+
+
+class JobTarget(Base):
+    """Immutable target identity plus the durable per-document execution state."""
+
+    __tablename__ = "job_targets"
+    __table_args__ = (
+        UniqueConstraint("job_id", "position", name="target_job_position"),
+        Index("ix_targets_claim", "job_id", "status", "position"),
+    )
+    job_id: Mapped[int] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    preview_json: Mapped[str | None] = mapped_column(Text)
+    execution_owner: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[TargetStatus] = mapped_column(
+        String(32), nullable=False, default=TargetStatus.PENDING
+    )
+    before_custom_fields_json: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+    http_status: Mapped[int | None] = mapped_column(Integer)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
 
 # ---------------------------------------------------------------------------
