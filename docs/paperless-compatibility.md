@@ -18,10 +18,23 @@ suite's destructive-test guard. A missing version, a non-200 API v10 response,
 any failed test or any skipped live test fails the job. JUnit reports are kept
 as CI artifacts.
 
-| Image tag | Reported `X-Version` | Image digest | Complete live suite | Chromium | CI run |
+| Image tag | Reported `X-Version` | Image digest | Complete live suite | Chromium | CI job |
 | --- | --- | --- | --- | --- | --- |
-| `3.2.1` | Pending new matrix run | Pending | Pending | Pending | Pending |
-| `latest` | Pending new matrix run | Pending | Pending | Pending | Pending |
+| `3.2.1` | `3.2.1` | `sha256:5fa76604a81df6945086e0837b14b56543d137e8ce4f311cc5d9ebe907e74e79` | 112 passed, 0 skipped | Passed | [fixed job](https://github.com/flowent59/PaperWrench/actions/runs/36190742655/job/108254979945) |
+| `latest` | `3.2.1` | `sha256:5fa76604a81df6945086e0837b14b56543d137e8ce4f311cc5d9ebe907e74e79` | 112 passed, 0 skipped | Passed | [moving-tag job](https://github.com/flowent59/PaperWrench/actions/runs/36190742655/job/108254979948) |
+
+Verified on 2026-09-25 at commit `494df0c` in a
+[fully green CI run](https://github.com/flowent59/PaperWrench/actions/runs/36190742655).
+Both API v10 probes returned HTTP 200. At this time `latest` resolves to the
+**same release and image digest** as the fixed reference, so this run does not
+provide evidence for a newer Paperless release. There was no observed API or
+business-behaviour incompatibility on 3.2.1.
+
+The first matrix run exposed a stale `3.1.2` assertion in the Chromium test's
+own safety probe: 111 backend live tests passed on each tag, then the browser
+stopped before its journey. Commit `494df0c` aligned that probe with the
+CI-verified expected release; the full rerun above passed. No application
+business rule or journey assertion was weakened.
 
 The live suite still requires explicit opt-in, an exact local-host allowlist,
 a matching expected server release and at most 500 existing documents. The
