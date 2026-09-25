@@ -25,8 +25,8 @@ PaperWrench is a self-hosted companion application for an existing
 Paperless-ngx instance. It is the toolbox for everything that happens *after*
 your documents are in Paperless: renaming three hundred documents from a
 template, fixing a custom field across a whole document type, finding the
-records that are missing a date, reviewing near-duplicates, and undoing all of
-it when you get it wrong.
+records that are missing a date, and reviewing safe rollback of proven bulk
+writes. Duplicate detection remains outside the MVP.
 
 It talks to Paperless exclusively through the public REST API, the same one
 your browser uses.
@@ -78,7 +78,12 @@ See [ADR-0014](docs/decisions/0014-durable-jobs-and-write-provenance.md).
 
 ## Status
 
-**Early development, M0–M8 implemented.** Explorer uses the Dataset/FilterSet
+Schemas, Data Quality and static Collections complete the workflow. Read the
+[release notes](docs/releases/0.1.0.md), [installation/upgrade/backup guide](docs/deployment.md)
+and [M13 evidence and limits](docs/m13-verification.md). No release image is
+published by this change; build from the reviewed checkout.
+
+**MVP 0.1.0 release candidate; publication pending.** Explorer uses the Dataset/FilterSet
 engine and can send selected IDs or all matching documents to Transformations.
 Dry Run shows paginated before/intended values and changed/unchanged/error
 counts without writing to Paperless. **Confirm and apply** atomically creates a
@@ -101,7 +106,7 @@ git clone https://github.com/flowent59/PaperWrench.git
 cd PaperWrench
 cp .env.example .env
 $EDITOR .env          # set PAPERLESS_URL and PAPERLESS_TOKEN
-docker compose up -d
+docker compose up -d --build
 ```
 
 PaperWrench is then available at <http://localhost:8000>.
@@ -173,7 +178,7 @@ service. There is no telemetry.
 ## Contributing
 
 Issues and pull requests are welcome. Please run `make check` before opening a
-pull request; CI runs the same gates.
+pull request; CI additionally runs guarded live/browser, migration and Docker gates.
 
 Given what this tool does, changes to the write path are held to a higher
 standard: a pull request that can modify documents must come with tests

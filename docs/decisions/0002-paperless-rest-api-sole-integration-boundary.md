@@ -4,6 +4,10 @@
 
 Accepted (M0).
 
+Compatibility qualification: [ADR-0008](0008-api-compatibility-is-decided-by-status-code.md)
+supersedes the header-negotiation assumption below. HTTP 406 rejects the requested
+version; X-Api-Version advertises the server maximum, not the negotiated version.
+
 ## Context
 
 PaperWrench needs to read and modify documents that live in Paperless-ngx.

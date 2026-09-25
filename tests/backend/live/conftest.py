@@ -155,6 +155,8 @@ def _guard_not_a_real_library(live_settings: Settings, live_url: str) -> Iterato
         timeout=10.0,
     )
     response.raise_for_status()
+    if response.headers.get("X-Version") != "3.1.2":
+        pytest.fail("Destructive live tests require the pinned Paperless 3.1.2 sandbox.")
     count = int(response.json().get("count", 0))
     if count > MAX_SANDBOX_DOCUMENTS:
         pytest.fail(

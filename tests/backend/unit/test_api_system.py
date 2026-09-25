@@ -6,6 +6,7 @@ part of the public API contract from now on.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from paperwrench import __version__
@@ -64,3 +65,17 @@ def test_openapi_schema_is_generated(client: TestClient) -> None:
     schema = response.json()
     assert "/api/v1/system/health" in schema["paths"]
     assert "/api/v1/system/info" in schema["paths"]
+
+
+@pytest.mark.parametrize("origin", ["https://testserver", "null", "https://evil://testserver"])
+def test_origin_guard_compares_the_complete_origin(client: TestClient, origin: str) -> None:
+    response = client.post("/api/v1/collections", json={"name": "blocked", "document_ids": []},
+                           headers={"Origin": origin})
+    assert response.status_code == 403
+    assert client.get("/api/v1/collections").json() == []
+
+
+def test_same_origin_mutation_is_allowed(client: TestClient) -> None:
+    response = client.post("/api/v1/collections", json={"name": "allowed", "document_ids": []},
+                           headers={"Origin": "http://testserver"})
+    assert response.status_code == 201

@@ -102,7 +102,7 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
     }
   }
 
-  return <main className="space-y-6 p-6">
+  return <div className="space-y-6 p-6">
     <header>
       <h1 className="text-2xl font-semibold">{m.title}</h1>
       <p className="text-sm text-muted-foreground">{m.subtitle}</p>
@@ -122,7 +122,7 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
             {(['title', 'content', 'advanced'] as const).map((mode) =>
               <option key={mode} value={mode}>{mode}</option>)}
           </select>
-          <input className={`${INPUT} ml-2`} value={search}
+          <input aria-label="Search text" className={`${INPUT} ml-2`} value={search}
             onChange={(event) => setSearch(event.target.value)} />
         </label>
         <label className="block text-sm">{messages.preview.ordering}
@@ -229,5 +229,5 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
         </div>)}
       </div>}
     </section>
-  </main>
+  </div>
 }

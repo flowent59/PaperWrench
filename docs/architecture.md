@@ -16,7 +16,7 @@ receipt without durable history; M8 bulk Jobs have durable history. M9 adds safe
 ```
                     Browser
                        |
-                       |  same origin, relative URLs only
+                       |  same origin, origin-root URLs
                        v
 +----------------------------------------------------------+
 |  PaperWrench container (single process, single worker)     |
@@ -62,8 +62,8 @@ library.
 The backend is organised so that the dangerous parts are small and isolated.
 
 **`api/v1/`** — HTTP concerns only: request and response models, status codes,
-dependency wiring. No business logic, so that a route handler is never the
-place a data-safety rule lives.
+dependency wiring. Routes also orchestrate schema/quality/collection persistence and bounded reads;
+mutation safety is centralized in the shared client and Job engine.
 
 **`filters/`** — the Filter Engine (M4). The domain model, the field
 catalogue, validation and the compiler. Pure once the catalogue is built:
@@ -581,3 +581,12 @@ zero writes during a Dry Run; forward conflict detection; rollback conflict
 detection; a crash between the PATCH and the local commit followed by a resume
 producing exactly one write; concurrency actually bounded; and no token in any
 log line.
+
+## M13 release boundary
+
+Version 0.1.0 includes M0-M12 and focused hardening, with no new worker or
+execution architecture. Compiled assets use `/assets/...` so deep SPA refreshes
+resolve correctly. The deployment is at the origin root, not a URL subpath.
+Frontend API types remain hand-written; optional OpenAPI output is not wired
+into the client. See [deployment](deployment.md), [security](security.md), and
+[M13 acceptance evidence](m13-verification.md).
