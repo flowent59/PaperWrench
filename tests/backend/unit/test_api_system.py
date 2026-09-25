@@ -79,3 +79,25 @@ def test_same_origin_mutation_is_allowed(client: TestClient) -> None:
     response = client.post("/api/v1/collections", json={"name": "allowed", "document_ids": []},
                            headers={"Origin": "http://testserver"})
     assert response.status_code == 201
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8787", "192.168.1.42:8787", "localhost:8787"])
+def test_lan_http_same_origin_mutation_is_allowed(client: TestClient, host: str) -> None:
+    response = client.post(
+        "/api/v1/collections",
+        json={"name": "lan", "document_ids": []},
+        headers={"Host": host, "Origin": f"http://{host}"},
+    )
+    assert response.status_code == 201
+
+
+@pytest.mark.parametrize(
+    "origin", ["https://192.168.1.42:8787", "http://192.168.1.42:8788", "null"]
+)
+def test_lan_http_cross_origin_mutation_is_rejected(client: TestClient, origin: str) -> None:
+    response = client.post(
+        "/api/v1/collections",
+        json={"name": "blocked", "document_ids": []},
+        headers={"Host": "192.168.1.42:8787", "Origin": origin},
+    )
+    assert response.status_code == 403
