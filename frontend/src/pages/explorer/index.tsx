@@ -40,7 +40,10 @@ import {
   X,
 } from 'lucide-react'
 import * as React from 'react'
-import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { Link, useLocation } from 'react-router-dom'
+
+import { documentsApi } from '@/api/client'
 
 import {
   useCorrespondents,
@@ -71,6 +74,7 @@ import { usePersistedColumnVisibility } from './column-visibility'
 import { FilterBuilder } from './filter-builder'
 import { emptyFilterSet, isEmpty } from './filter-builder/model'
 import { useDocumentSelection } from './selection'
+import { qualityLocation } from '@/pages/quality/navigation'
 
 /** Maps a TanStack Table sort state to the single `ordering` key PaperWrench accepts. */
 function sortingToOrdering(sorting: SortingState): string | undefined {
@@ -80,18 +84,38 @@ function sortingToOrdering(sorting: SortingState): string | undefined {
 }
 
 export function ExplorerPage() {
+  const location = useLocation()
+  const qualityTarget = React.useMemo(() => qualityLocation(location.search), [location.search])
+  const explicitIds = qualityTarget.ids
+  const initialQuery = qualityTarget.query
   const [page, setPage] = React.useState(1)
   const [pageSize, setPageSize] = React.useState<DocumentPageSize>(100)
-  const [searchInput, setSearchInput] = React.useState('')
-  const [search, setSearch] = React.useState('')
-  const [searchMode, setSearchMode] = React.useState<SearchMode>('title')
-  const [sorting, setSorting] = React.useState<SortingState>([])
-  const [filters, setFilters] = React.useState<FilterSet>(emptyFilterSet)
+  const [searchInput, setSearchInput] = React.useState(initialQuery?.search?.text ?? '')
+  const [search, setSearch] = React.useState(initialQuery?.search?.text ?? '')
+  const [searchMode, setSearchMode] = React.useState<SearchMode>(initialQuery?.search?.mode ?? 'title')
+  const [sorting, setSorting] = React.useState<SortingState>(() => {
+    const value = initialQuery?.ordering
+    return value ? [{ id: value.startsWith('-') ? value.slice(1) : value,
+      desc: value.startsWith('-') }] : []
+  })
+  const [filters, setFilters] = React.useState<FilterSet>(initialQuery?.filters ?? emptyFilterSet)
   const [filtersOpen, setFiltersOpen] = React.useState(false)
   const [showCompiled, setShowCompiled] = React.useState(false)
   const [columnVisibility, setColumnVisibility] = usePersistedColumnVisibility()
   const [columnsMenuOpen, setColumnsMenuOpen] = React.useState(false)
   const selection = useDocumentSelection()
+
+  React.useEffect(() => {
+    const target = qualityLocation(location.search).query
+    setPage(1)
+    setSearchInput(target?.search?.text ?? '')
+    setSearch(target?.search?.text ?? '')
+    setSearchMode(target?.search?.mode ?? 'title')
+    setFilters(target?.filters ?? emptyFilterSet())
+    const value = target?.ordering
+    setSorting(value ? [{ id: value.startsWith('-') ? value.slice(1) : value,
+      desc: value.startsWith('-') }] : [])
+  }, [location.search]) // Reopen a different stable Quality URL in the same Explorer route.
 
   // Debounce the search box so every keystroke does not fire a request.
   React.useEffect(() => {
@@ -137,13 +161,19 @@ export function ExplorerPage() {
     ...(ordering !== undefined ? { ordering } : {}),
   }
 
-  const documentsQuery = useDocuments(request, filtersRunnable)
+  const datasetDocuments = useDocuments(request, filtersRunnable && explicitIds === null && !qualityTarget.invalid)
+  const idsDocuments = useQuery({
+    queryKey: ['documents', 'exact-ids', explicitIds],
+    queryFn: () => documentsApi.byIds(explicitIds ?? []),
+    enabled: explicitIds !== null,
+  })
+  const documentsQuery = explicitIds === null ? datasetDocuments : idsDocuments
 
   // The count comes from the Filter Engine, which asks Paperless for its own
   // `count` without fetching anything. It is shown next to the page total so
   // a disagreement between "what the grid is paging through" and "what a
   // later operation would act on" would be visible rather than silent.
-  const countQuery = useFilterCount(filters, searchSpec, !filtersEmpty && filtersRunnable)
+  const countQuery = useFilterCount(filters, searchSpec, explicitIds === null && !filtersEmpty && filtersRunnable)
 
   const tagsQuery = useTags()
   const correspondentsQuery = useCorrespondents()
@@ -224,10 +254,25 @@ export function ExplorerPage() {
         <p className="text-sm text-muted-foreground">{messages.explorer.subtitle}</p>
       </div>
 
+      {qualityTarget.invalid && <div role="alert" className="rounded-md border border-destructive p-3 text-sm">
+        {messages.quality.invalidDrilldown}{' '}
+        <Link className="underline" to="/documents">{messages.quality.clearDrilldown}</Link>
+      </div>}
+      {explicitIds !== null && <div className="rounded-md border border-border p-3 text-sm">
+        {messages.quality.exactIdsSelection(explicitIds.length)}
+        {idsDocuments.data && idsDocuments.data.unavailable_count > 0 &&
+          <span> {messages.quality.unavailable(idsDocuments.data.unavailable_count)}</span>}
+        {' '}<Link className="underline" to="/documents">{messages.quality.clearSelection}</Link>
+      </div>}
+      {initialQuery !== null && <div className="rounded-md border border-border p-3 text-sm">
+        {messages.quality.exactQuerySelection} <Link className="underline" to="/documents">{messages.quality.clearDrilldown}</Link>
+      </div>}
+
       {/* Toolbar: search, filters, column visibility, selection summary. */}
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="text"
+          disabled={explicitIds !== null}
           value={searchInput}
           onChange={(event) => setSearchInput(event.target.value)}
           placeholder={messages.explorer.searchPlaceholder}
@@ -236,6 +281,7 @@ export function ExplorerPage() {
         />
 
         <select
+          disabled={explicitIds !== null}
           value={searchMode}
           onChange={(event) => {
             setSearchMode(event.target.value as SearchMode)
@@ -255,6 +301,7 @@ export function ExplorerPage() {
         </select>
 
         <Button
+          disabled={explicitIds !== null}
           variant={filtersOpen ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFiltersOpen((open) => !open)}
@@ -269,7 +316,7 @@ export function ExplorerPage() {
           )}
         </Button>
 
-        <Button variant="outline" size="sm" onClick={resetFilters}>
+        <Button variant="outline" size="sm" disabled={explicitIds !== null} onClick={resetFilters}>
           <X className="h-3.5 w-3.5" aria-hidden="true" />
           {messages.explorer.resetFilters}
         </Button>
@@ -312,7 +359,7 @@ export function ExplorerPage() {
           rules all come from the backend's capabilities endpoint, so it can
           only build shapes the compiler can translate - and the verdict
           underneath is the backend's, not a local guess. */}
-      {filtersOpen && (
+      {filtersOpen && explicitIds === null && !qualityTarget.invalid && (
         <Card>
           <CardContent className="flex flex-col gap-4 p-4">
             {capabilitiesQuery.isPending ? (
@@ -418,7 +465,7 @@ export function ExplorerPage() {
         </div>
       )}
 
-      {filtersRunnable && !documentsQuery.isPending && !documentsQuery.isError && total > 0 &&
+      {explicitIds === null && !qualityTarget.invalid && filtersRunnable && !documentsQuery.isPending && !documentsQuery.isError && total > 0 &&
         <Link className="text-sm underline" to="/transformations"
           state={{ targets: { source: 'dataset', query: { search: searchSpec,
             filters: filtersEmpty ? null : filters, ordering: ordering ?? null } } }}>
@@ -427,7 +474,9 @@ export function ExplorerPage() {
 
       <Card>
         <CardContent className="p-0">
-          {filtersKnownBad ? (
+          {qualityTarget.invalid ? (
+            <div className="p-10 text-center text-sm">{messages.quality.invalidDrilldownGrid}</div>
+          ) : filtersKnownBad ? (
             <div className="flex flex-col items-center gap-2 p-10 text-center">
               <AlertTriangle className="h-8 w-8 text-amber-500" aria-hidden="true" />
               <p className="font-medium">{messages.filters.notCompilable}</p>
@@ -541,6 +590,7 @@ export function ExplorerPage() {
           <label className="flex items-center gap-1.5 text-muted-foreground">
             {messages.explorer.pageSize}
             <select
+              disabled={explicitIds !== null}
               value={pageSize}
               onChange={(event) => {
                 setPageSize(Number(event.target.value) as DocumentPageSize)

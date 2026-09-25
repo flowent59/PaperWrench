@@ -9,7 +9,7 @@ why the boundaries are where they are. Individual decisions are recorded in
 PaperWrench is a single container running a FastAPI backend that serves a
 React SPA from the same origin, talks to an existing Paperless-ngx instance
 over its REST API, and uses local SQLite for its own working state. M5 manual edits return a
-receipt without durable history; M8 bulk Jobs have durable history. M9 adds safe rollback of proven Job writes. M10 adds read-only document schemas.
+receipt without durable history; M8 bulk Jobs have durable history. M9 adds safe rollback of proven Job writes. M10 adds read-only document schemas, and M11 projects their violations into Quality.
 
 ## Component map
 
@@ -82,6 +82,13 @@ list request and evaluates one bounded page at a time. Field types are checked
 against the current Metadata Registry snapshot, so deleted or retyped metadata
 halts evaluation. The result shape is reusable by M11; see
 [schema-api.md](schema-api.md).
+
+**`quality/`** — the M11 read-only projection of those M10 results. The API
+evaluates one schema dataset page and reports evaluated documents, failed rules
+and the exact Paperless scope count separately. It constructs a violation
+`FilterSet` only when the M4 compiler accepts the full scope plus complement;
+otherwise Explorer uses bounded explicit IDs from that page. See
+[quality-api.md](quality-api.md).
 
 **`previews/`** — the M7 read-only orchestration layer. Compiles DatasetQuery
 through the existing query adapter or reads explicit IDs, calls M6 for each

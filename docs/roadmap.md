@@ -278,13 +278,14 @@ a job's target document ids (that belongs with the Job Engine, M8).
 - Read-only, bounded paginated conformance and a focused editor
 - Document-level result contract for M11; see [schema API](schema-api.md)
 
-## M11 — Quality · Planned
+## M11 — Quality · Done
 
-- Rules: missing field, malformed date, inconsistent type, orphan tag
-- Never collapses `0` / `false` / `""` / `null` / absent into one "empty"
-  notion when evaluating a rule — this is why M2 keeps them distinct
-- Quality dashboard with drill-down into the offending documents
-- One-click construction of a FilterSet from a finding
+- Read-only summary and paginated violations from M10 `required`/`equals` rules
+- Separate evaluated-document, violation and exact dataset counts
+- Exact compiled `FilterSet` drill-down where available; bounded explicit IDs
+  otherwise, with stable Explorer links
+- Distinct absent, null, empty, zero, false, Decimal and Select ID results
+- Contract and limits: [quality API](quality-api.md)
 
 ## M12 — Collections · Planned
 

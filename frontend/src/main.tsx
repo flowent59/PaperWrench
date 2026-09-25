@@ -12,6 +12,7 @@ import { HistoryPageView, JobPage } from '@/pages/jobs'
 import { TransformationsRoute } from '@/pages/transformations'
 import { NotFoundPage } from '@/pages/not-found'
 import { SchemasPage } from '@/pages/schemas'
+import { QualityPageView } from '@/pages/quality'
 
 import './index.css'
 
@@ -45,6 +46,7 @@ createRoot(container).render(
               <Route path="history" element={<HistoryPageView />} />
               <Route path="jobs/:jobId" element={<JobPage />} />
               <Route path="schemas" element={<SchemasPage />} />
+              <Route path="quality" element={<QualityPageView />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>
