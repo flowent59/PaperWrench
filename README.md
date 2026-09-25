@@ -63,7 +63,7 @@ M5 exposes immediate, explicit single-document edits in the Inspector.
 - **Actual values are shown.** Each save returns before, intended and actual
   stored values, including Paperless normalization. There is **no durable edit
   history or rollback for Inspector edits**. M8 bulk Jobs have durable History;
-  rollback execution remains M9.
+  M9 adds safe, explicitly confirmed rollback of proven Job writes.
 - **No automatic write retries.** After an uncertain outcome, reload and inspect
   before deciding whether to make another edit.
 - **The token stays in the backend.** It is not persisted, logged or sent to the
@@ -84,10 +84,12 @@ Dry Run shows paginated before/intended values and changed/unchanged/error
 counts without writing to Paperless. **Confirm and apply** atomically creates a
 durable Job from the reviewed targets. History shows progress, conflicts, errors,
 ambiguous outcomes and before/intended/verified written values. Concurrency defaults
-to 4 (maximum 16); losing the runtime lock stops new Job sends. There is no rollback
-or user cancellation yet. Single-document Inspector edits remain available.
+to 4 (maximum 16); losing the runtime lock stops new Job sends. History offers
+rollback preview and confirmation: changed values conflict, uncertain writes are
+never automatically restored. One linked rollback Job is allowed per original.
+The external GET/PATCH race remains; pause other writers. No user cancellation yet. Single-document Inspector edits remain available.
 See [docs/roadmap.md](docs/roadmap.md), [preview API](docs/preview-api.md) and
-[Job API](docs/job-api.md).
+[Job API](docs/job-api.md) and [rollback API](docs/rollback-api.md).
 
 ## Quick start
 

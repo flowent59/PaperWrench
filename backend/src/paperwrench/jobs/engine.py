@@ -20,6 +20,7 @@ from paperwrench.db.models import Job
 from paperwrench.db.models import JobOperation
 from paperwrench.db.models import JobStatus
 from paperwrench.db.models import JobTarget
+from paperwrench.db.models import JobType
 from paperwrench.db.models import OperationStatus
 from paperwrench.db.models import RuntimeLock
 from paperwrench.db.models import TargetStatus
@@ -358,12 +359,14 @@ class JobEngine:
                 assert target is not None and target.preview_json is not None
                 staged = PreviewRow.model_validate_json(target.preview_json)
                 job = require_job(session, job_id)
-                spec = Transformation.model_validate(
+                rollback = job.type == JobType.ROLLBACK
+                spec = staged.rollback_spec if rollback else Transformation.model_validate(
                     {
                         "targets": {"source": "ids", "document_ids": [document_id]},
                         "operations": json.loads(job.transformation_json or "[]"),
                     }
                 )
+                assert spec is not None
                 race_ack = job.acknowledge_external_race
             await self.registry.refresh(MetadataKind.CUSTOM_FIELD)
             definitions = {field.id: field for field in await self.registry.all_custom_fields()}
@@ -375,7 +378,7 @@ class JobEngine:
                 fresh = evaluate(current, spec, definitions)
                 # Already at the reviewed target is a no-write observation, never
                 # a claim that this runtime performed an earlier unknown write.
-                if all(
+                if not rollback and all(
                     equal(c.before, p.intended)
                     for c, p in zip(fresh.changes, staged.changes, strict=True)
                 ):
@@ -385,7 +388,7 @@ class JobEngine:
                     ]
                     self._before(job_id, current, observed, send=False)
                     return None
-                if revision(current) != staged.observed_revision or any(
+                if (not rollback and revision(current) != staged.observed_revision) or any(
                     c.status == ResultStatus.ERROR
                     or not equal(c.before, p.before)
                     or not equal(c.intended, p.intended)

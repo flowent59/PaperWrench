@@ -57,9 +57,56 @@ def test_apply_requires_matching_confirmation_and_history_is_paginated(client: T
         route = "/api/v1/jobs" if path == "" else f"/api/v1/jobs/{job_id}{path}"
         assert client.get(f"{route}?page_size=100000").status_code == 422
     assert client.post(f"/api/v1/jobs/{job_id}/resume").status_code == 409
-    assert client.post(f"/api/v1/jobs/{job_id}/rollback").status_code in (404, 405)
+    assert client.post(f"/api/v1/jobs/{job_id}/rollback").status_code == 422
     assert client.get("/api/v1/jobs/99999").status_code == 404
     assert preview["preview_token"] not in json.dumps(history)
+
+    rollback_preview = client.post(f"/api/v1/jobs/{job_id}/rollback-preview")
+    assert rollback_preview.status_code == 201, rollback_preview.text
+    assert rollback_preview.headers["cache-control"] == "no-store"
+    staged = rollback_preview.json()
+    rollback_request = {
+        "preview_id": staged["id"],
+        "preview_token": staged["preview_token"],
+        "target_fingerprint": staged["target_fingerprint"],
+        "result_fingerprint": staged["result_fingerprint"],
+        "version": 1,
+        "acknowledge": True,
+    }
+    assert (
+        client.post(
+            f"/api/v1/jobs/{job_id}/rollback",
+            json={
+                **rollback_request,
+                "preview_token": "wrong",
+            },
+        ).status_code
+        == 409
+    )
+    assert (
+        client.post(
+            f"/api/v1/jobs/{job_id}/rollback",
+            json={
+                **rollback_request,
+                "acknowledge": False,
+            },
+        ).status_code
+        == 422
+    )
+    assert writes.call_count == 1
+    restored = client.post(f"/api/v1/jobs/{job_id}/rollback", json=rollback_request)
+    assert restored.status_code == 201, restored.text
+    rollback_id = restored.json()["id"]
+    assert restored.json()["rollback_of_job_id"] == job_id
+    for _ in range(100):
+        final = client.get(f"/api/v1/jobs/{rollback_id}").json()
+        if final["status"] == "completed":
+            break
+        time.sleep(0.01)
+    assert final["status"] == "completed" and state["title"] == "Ancien"
+    assert client.post(f"/api/v1/jobs/{job_id}/rollback", json=rollback_request).status_code == 409
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["rollback_job_id"] == rollback_id
+    assert writes.call_count == 2
 
 
 @respx.mock

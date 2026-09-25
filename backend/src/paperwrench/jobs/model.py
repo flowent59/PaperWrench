@@ -1,12 +1,15 @@
 from datetime import datetime
 from typing import Any
 from typing import Generic
+from typing import Literal
 from typing import TypeVar
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 
 from paperwrench.db.models import JobStatus
+from paperwrench.db.models import JobType
 from paperwrench.db.models import OperationStatus
 from paperwrench.db.models import TargetStatus
 from paperwrench.previews.model import ConfirmPreview
@@ -17,8 +20,22 @@ class CreateJob(ConfirmPreview):
     acknowledge_external_race: bool = False
 
 
+class CreateRollback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    preview_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    preview_token: str = Field(min_length=1, max_length=200)
+    target_fingerprint: str
+    result_fingerprint: str
+    version: Literal[1]
+    acknowledge: Literal[True]
+    acknowledge_external_race: bool = False
+
+
 class JobView(BaseModel):
     id: int
+    type: JobType
+    rollback_of_job_id: int | None
+    rollback_job_id: int | None
     title: str
     status: JobStatus
     total: int
@@ -38,6 +55,7 @@ class TargetView(BaseModel):
     document_id: int
     position: int
     title: str | None
+    excluded_operations: dict[str, str]
     status: TargetStatus
     error: str | None
     http_status: int | None
@@ -48,6 +66,7 @@ class TargetView(BaseModel):
 
 class OperationView(BaseModel):
     id: int
+    rollback_of_operation_id: int | None
     document_id: int
     field_kind: str
     field_key: str

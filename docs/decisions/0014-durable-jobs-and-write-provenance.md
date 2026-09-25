@@ -7,6 +7,9 @@ ADR-0003/0006, and the future transactional handoff in ADR-0013. Qualifies
 ADR-0005/0012: database uniqueness does not establish exactly-once HTTP delivery.
 No rollback execution is introduced.
 
+M9 extends this execution contract with linked rollback Jobs in
+[ADR-0015](0015-safe-rollback-jobs.md); provenance and recovery remain unchanged.
+
 ## Analysis of the existing implementation
 
 1. `Job` and `JobOperation` are dormant M0 tables. No scheduler, recovery or

@@ -24,12 +24,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from paperwrench.db.base import utcnow
+from paperwrench.db.models import JobTarget
 from paperwrench.db.models import Preview
 from paperwrench.db.models import PreviewDocument
 from paperwrench.db.session import session_scope
 from paperwrench.errors import ErrorCode
 from paperwrench.errors import PaperlessForbiddenError
 from paperwrench.errors import PaperWrenchError
+from paperwrench.filters.model import CustomFieldRef
 from paperwrench.filters.model import DatasetPageRequest
 from paperwrench.inspector import catalog_revision
 from paperwrench.paperless import MetadataRegistry
@@ -37,6 +39,7 @@ from paperwrench.paperless import PaperlessClient
 from paperwrench.paperless.errors import PaperlessNotFoundError
 from paperwrench.paperless.models import CustomField
 from paperwrench.paperless.models import Document
+from paperwrench.paperless.models import MetadataKind
 from paperwrench.paperless.mutations import revision
 from paperwrench.previews.model import MAX_BYTES
 from paperwrench.previews.model import MAX_DOCUMENTS
@@ -143,9 +146,10 @@ class PreviewService:
 
     async def create(
         self,
-        spec: Transformation,
+        spec: Transformation | None,
         client: PaperlessClient,
         registry: MetadataRegistry,
+        *, rollback_of_job_id: int | None = None,
     ) -> CreatedPreview:
         if self._building:
             raise PaperWrenchError(
@@ -157,7 +161,7 @@ class PreviewService:
         preview_id = uuid4().hex
         try:
             async with asyncio.timeout(TIMEOUT_SECONDS):
-                return await self._build(preview_id, spec, client, registry)
+                return await self._build(preview_id, spec, client, registry, rollback_of_job_id)
         except BaseException as exc:
             with session_scope() as session:
                 session.execute(delete(Preview).where(Preview.id == preview_id))
@@ -172,9 +176,10 @@ class PreviewService:
     async def _build(
         self,
         preview_id: str,
-        spec: Transformation,
+        spec: Transformation | None,
         client: PaperlessClient,
         registry: MetadataRegistry,
+        rollback_of_job_id: int | None = None,
     ) -> CreatedPreview:
         # The existing query adapter is re-used verbatim. Import after router
         # assembly to avoid the api.v1 package's eager router imports.
@@ -184,19 +189,31 @@ class PreviewService:
         with session_scope() as session:
             if (session.scalar(select(func.count()).select_from(Preview)) or 0) >= MAX_PREVIEWS:
                 raise limit("Four previews are retained; discard one or wait for expiry.")
-        if spec.targets.source == "ids" and len(spec.targets.document_ids) > MAX_DOCUMENTS:
+        if (spec is not None and spec.targets.source == "ids"
+                and len(spec.targets.document_ids) > MAX_DOCUMENTS):
             raise limit("Preview supports at most 100000 explicit IDs.")
 
         # One metadata snapshot for compiler and evaluator. Compilation must finish
         # before any document GET. Metadata reads may warm the existing TTL cache.
+        if rollback_of_job_id is not None:
+            from paperwrench.jobs.rollback import require_original
+
+            with session_scope() as session:
+                require_original(session, rollback_of_job_id)
+            await registry.refresh(MetadataKind.CUSTOM_FIELD)
         fields = {field.id: field for field in await registry.all_custom_fields()}
         params: dict[str, Any] = {}
-        if isinstance(spec.targets, DatasetTargets):
+        if spec is not None and isinstance(spec.targets, DatasetTargets):
             params = await build_query_params(
                 DatasetPageRequest(**spec.targets.query.model_dump(), page_size=PAGE_SIZE),
                 registry=registry,
             )
-        selection, spec_hash = identities(spec)
+        if rollback_of_job_id is not None:
+            selection = fingerprint({"rollback_of_job_id": rollback_of_job_id})
+            spec_hash = fingerprint({"rollback": selection, "version": PREVIEW_VERSION})
+        else:
+            assert spec is not None
+            selection, spec_hash = identities(spec)
         token = secrets.token_urlsafe(32)
         started = utcnow()
         expiry = started + timedelta(seconds=TTL_SECONDS)
@@ -213,11 +230,16 @@ class PreviewService:
         evaluated = 0
         byte_count = 0
         results_hash = hashlib.sha256()
+        requires_race_ack = False
 
         def stage(rows: list[PreviewRow]) -> None:
-            nonlocal evaluated, byte_count
+            nonlocal evaluated, byte_count, requires_race_ack
             with session_scope() as session:
                 for row in rows:
+                    if row.rollback_spec and any(
+                        isinstance(o.field, CustomFieldRef) for o in row.rollback_spec.operations
+                    ):
+                        requires_race_ack = True
                     payload = canonical(row.model_dump(mode="json"))
                     byte_count += len(payload)
                     if byte_count > MAX_BYTES:
@@ -241,7 +263,26 @@ class PreviewService:
                 except IntegrityError as exc:
                     raise stale("Dataset returned a repeated ID; run a new preview.") from exc
 
-        if spec.targets.source == "ids":
+        if rollback_of_job_id is not None:
+            from paperwrench.jobs.rollback import preview_row
+
+            position = -1
+            while True:
+                with session_scope() as session:
+                    batch_targets = session.execute(select(
+                        JobTarget.document_id, JobTarget.position
+                    ).where(
+                        JobTarget.job_id == rollback_of_job_id, JobTarget.position > position
+                    ).order_by(JobTarget.position).limit(PAGE_SIZE)).all()
+                if not batch_targets:
+                    break
+                stage([
+                    await preview_row(rollback_of_job_id, target.document_id, client, fields)
+                    for target in batch_targets
+                ])
+                position = batch_targets[-1].position
+            matched = evaluated
+        elif spec is not None and spec.targets.source == "ids":
             matched = len(spec.targets.document_ids)
             buffer: list[PreviewRow] = []
             for document_id in sorted(spec.targets.document_ids):
@@ -270,6 +311,7 @@ class PreviewService:
                     buffer.clear()
             stage(buffer)
         else:
+            assert spec is not None
             page = 1
             matched = -1
             while True:
@@ -322,6 +364,8 @@ class PreviewService:
                 spec_fingerprint=spec_hash,
                 target_fingerprint=targets_hash.hexdigest(),
                 result_fingerprint=results_hash.hexdigest(),
+                rollback_of_job_id=rollback_of_job_id,
+                requires_external_race_ack=requires_race_ack,
             )
             session.execute(
                 update(Preview)
@@ -395,6 +439,7 @@ class PreviewService:
         selection, spec_hash = identities(request.transformation)
         if (
             summary.confirmed
+            or summary.rollback_of_job_id is not None
             or summary.errors
             or not summary.changed
             or selection != summary.selection_fingerprint

@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
 import { valueText } from '@/pages/transformations/value'
 
+import { RollbackReview } from './rollback'
+
 const m = messages.jobs
 const active = (job?: JobView) => job?.status === 'pending' || job?.status === 'running'
 
@@ -55,6 +57,7 @@ function OperationDetails({ jobId, documentId, polling, revision }: { jobId: num
     {query.isLoading && <p role="status">{m.loading}</p>}
     {query.data?.items.map((operation: OperationView) => <article className="space-y-2 border-t pt-3" key={operation.id}>
       <h3 className="font-medium">{operation.field_key} · {operation.status.toUpperCase()}</h3>
+      {operation.rollback_of_operation_id != null && <p>{messages.rollback.operation} #{operation.rollback_of_operation_id}</p>}
       <dl className="grid gap-3 sm:grid-cols-3">{(['before', 'intended', 'written'] as const).map((key) =>
         <div key={key}><dt className="text-muted-foreground">{m[key]}</dt>
           <dd className="whitespace-pre-wrap break-words">{valueText(operation[key])}</dd></div>)}</dl>
@@ -108,6 +111,9 @@ export function JobPage() {
       {job.status === 'interrupted' && <p role="status">{m.interrupted}</p>}
       {job.counts.ambiguous > 0 && <p role="alert" className="rounded border border-amber-500 p-3">{m.ambiguous}</p>}
       {job.resumable && <Button onClick={resume} disabled={busy}>{busy ? m.resuming : m.resume}</Button>}
+      {job.rollback_of_job_id != null && <Link className="text-primary underline" to={`/jobs/${job.rollback_of_job_id}`}>{messages.rollback.original} #{job.rollback_of_job_id}</Link>}
+      {job.rollback_job_id != null && <Link className="text-primary underline" to={`/jobs/${job.rollback_job_id}`}>{messages.rollback.linked} #{job.rollback_job_id}</Link>}
+      {job.type === 'transform' && job.rollback_job_id == null && ['completed', 'partial', 'failed', 'cancelled'].includes(job.status) && <RollbackReview key={job.id} jobId={job.id} />}
       <details><summary>{m.transformation}</summary>
         <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">{JSON.stringify(job.operations, null, 2)}</pre></details>
       <details><summary>{m.source}</summary>{job.source_kind === 'ids' ? <p>{m.explicit}</p>
@@ -122,7 +128,9 @@ export function JobPage() {
       <div className="overflow-x-auto"><table className="w-full text-left text-sm"><tbody>
         {targets.data?.items.map((target) => <tr className="border-t" key={target.document_id}>
           <td className="p-3">{target.title} (#{target.document_id})</td>
-          <td className="p-3">{m.outcomes[target.status]}{target.error && <p>{target.error} {target.http_status ?? ''}</p>}</td>
+          <td className="p-3">{m.outcomes[target.status]}{target.error && <p>{target.error} {target.http_status ?? ''}</p>}
+            {Object.entries(target.excluded_operations ?? {}).map(([field, reason]) => <p key={field}>{field}: {reason}</p>)}
+          </td>
           <td className="p-3"><Button variant="outline" onClick={() => setDocumentId(target.document_id)}>{m.inspect}</Button></td>
         </tr>)}
       </tbody></table></div>

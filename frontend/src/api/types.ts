@@ -480,6 +480,7 @@ export interface TransformationValidationResult {
 }
 
 export interface PreviewSummary {
+  requires_external_race_ack?: boolean
   id: string
   version: 1
   created_at: string
@@ -498,6 +499,7 @@ export interface PreviewSummary {
 
 export interface CreatedPreview extends PreviewSummary { preview_token: string }
 export interface PreviewRow extends EvaluationResult {
+  excluded_operations?: Record<string, string>
   title: string | null
   status: 'change' | 'unchanged' | 'error'
   issue: { code: string; message: string } | null
@@ -514,12 +516,15 @@ export type JobStatus = 'pending' | 'running' | 'completed' | 'partial' | 'faile
 export type TargetStatus = 'pending' | 'reading' | 'writing' | 'succeeded' | 'unchanged' | 'conflict' | 'permission' | 'missing' | 'failed' | 'ambiguous'
 export interface JobView {
   id: number
+  type: 'transform' | 'rollback'
+  rollback_of_job_id: number | null
+  rollback_job_id: number | null
   title: string
   status: JobStatus
   total: number
   processed: number
   counts: Record<TargetStatus, number>
-  source_kind: 'ids' | 'dataset' | null
+  source_kind: 'ids' | 'dataset' | 'rollback' | null
   dataset_query: Extract<Transformation['targets'], { source: 'dataset' }>['query'] | null
   operations: TransformationOperation[]
   preview: PreviewSummary | null
@@ -529,6 +534,7 @@ export interface JobView {
   resumable: boolean
 }
 export interface TargetView {
+  excluded_operations?: Record<string, string>
   document_id: number
   position: number
   title: string | null
@@ -541,6 +547,7 @@ export interface TargetView {
 }
 export interface OperationView {
   id: number
+  rollback_of_operation_id: number | null
   document_id: number
   field_kind: string
   field_key: string
