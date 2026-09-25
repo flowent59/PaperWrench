@@ -87,8 +87,9 @@ def downgrade() -> None:
         "jobs", sa.Column("document_ids_json", sa.Text(), nullable=False, server_default="[]")
     )
     connection = op.get_bind()
+    job_id: int
     for job_id in connection.execute(sa.text("SELECT id FROM jobs")).scalars():
-        ids = list(
+        ids: list[int] = list(
             connection.execute(
                 sa.text("SELECT document_id FROM job_targets WHERE job_id=:id ORDER BY position"),
                 {"id": job_id},
