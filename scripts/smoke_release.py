@@ -7,11 +7,13 @@ import re
 
 import httpx
 
+from paperwrench import __version__
+
 
 def main() -> None:
     with httpx.Client(base_url="http://127.0.0.1:8000") as client:
         health = client.get("/api/v1/system/health")
-        assert health.json()["version"] == "0.1.0"
+        assert health.json()["version"] == __version__
         for path in ("/", "/documents/42", "/jobs/42", "/history", "/schemas", "/quality"):
             response = client.get(path)
             assert response.status_code == 200

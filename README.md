@@ -79,11 +79,15 @@ See [ADR-0014](docs/decisions/0014-durable-jobs-and-write-provenance.md).
 ## Status
 
 Schemas, Data Quality and static Collections complete the workflow. Read the
-[release notes](docs/releases/0.1.0.md), [installation/upgrade/backup guide](docs/deployment.md)
-and [M13 evidence and limits](docs/m13-verification.md). No release image is
-published by this change; build from the reviewed checkout.
+[release overview](docs/releases/0.1.0.md), [generated changelog](CHANGELOG.md),
+[installation/upgrade/backup guide](docs/deployment.md)
+and [M13 evidence and limits](docs/m13-verification.md). The reference Compose
+file pulls `ghcr.io/flowent59/paperwrench:0.1.0` after the generated release PR
+is merged and the package is made public. See [the release process](docs/releasing.md).
 
-**MVP 0.1.0 release candidate; publication pending.** Explorer uses the Dataset/FilterSet
+**MVP 0.1.0.** Compatibility is verified
+with Paperless-ngx 3.2.1; its `latest` tag resolved to the same image digest in
+the recorded CI run. Explorer uses the Dataset/FilterSet
 engine and can send selected IDs or all matching documents to Transformations.
 Dry Run shows paginated before/intended values and changed/unchanged/error
 counts without writing to Paperless. **Confirm and apply** atomically creates a
@@ -107,13 +111,16 @@ git clone https://github.com/flowent59/PaperWrench.git
 cd PaperWrench
 mkdir -p secrets
 ${EDITOR:-vi} secrets/paperless_token  # paste the dedicated Paperless API token
-PAPERLESS_DOCKER_NETWORK=paperless_default docker compose -f docker-compose.paperless.yml up -d --build
+PAPERLESS_DOCKER_NETWORK=paperless_default docker compose -f docker-compose.paperless.yml pull
+PAPERLESS_DOCKER_NETWORK=paperless_default docker compose -f docker-compose.paperless.yml up -d
 ```
 
 Replace `paperless_default` with the Docker network used by your Paperless
 service. Open `http://IP_DU_SERVEUR:8000` (or set `PAPERWRENCH_HTTP_PORT`).
 For a differently named Paperless service, set `PAPERLESS_SERVICE` too.
 See the [installation guide](docs/deployment.md) for exact steps and checks.
+These commands work once the versioned GHCR image is published. Until then,
+the guide gives the local-build override for a reviewed checkout.
 
 See [Threat model](#threat-model) before making the port reachable beyond a
 trusted LAN.

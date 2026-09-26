@@ -1,13 +1,15 @@
 # Install, upgrade, back up and restore 0.1.0
 
-This is a proposed first release, not a published image or tag. Build from the
-reviewed checkout until a release is approved. Paperless 3.1.2 is the verified
-upstream; other releases require separate validation. PaperWrench never reads
-Paperless files or database.
+This guide covers the first release. After the generated release PR is merged
+and its image validation succeeds, the default Compose file pulls
+`ghcr.io/flowent59/paperwrench:0.1.0` without local compilation. Paperless-ngx
+3.2.1 is the fixed verified upstream. In the recorded compatibility run,
+Paperless `latest` resolved to that same 3.2.1 image digest; it did not exercise
+a newer release. PaperWrench never reads Paperless files or database.
 
 ## LAN installation alongside an existing Paperless stack
 
-1. Check out the reviewed PaperWrench source. Find the Docker network shared by
+1. Get the reviewed Compose file and a matching release checkout. Find the Docker network shared by
    your Paperless service (`docker compose -f /path/to/paperless/compose.yml ps`
    and `docker network ls`); it is often `<paperless-project>_default`. Note the
    Paperless **service name**, often `paperless` or `webserver`, not its container
@@ -25,8 +27,9 @@ Paperless files or database.
    chmod 700 secrets
    ${EDITOR:-vi} secrets/paperless_token
    chmod 600 secrets/paperless_token
-   PAPERLESS_DOCKER_NETWORK=paperless_default PAPERLESS_SERVICE=paperless PAPERWRENCH_HTTP_PORT=8000 \
-     docker compose -f docker-compose.paperless.yml up -d --build
+   export PAPERLESS_DOCKER_NETWORK=paperless_default PAPERLESS_SERVICE=paperless PAPERWRENCH_HTTP_PORT=8000
+   docker compose -f docker-compose.paperless.yml pull
+   docker compose -f docker-compose.paperless.yml up -d
    ```
 
 4. Check `docker compose -f docker-compose.paperless.yml ps`, open
@@ -43,6 +46,20 @@ it. If Paperless uses a different internal port, edit `PAPERLESS_URL` in the
 example. Set `PAPERWRENCH_HTTP_PORT` to avoid a host-port collision. Keep this
 port on a trusted LAN or restrict it with the host firewall: PaperWrench has no
 built-in login and anyone who can reach it can exercise the configured token.
+If GHCR reports that the package is private or missing, wait for publication
+and public package visibility before using this pull-based installation.
+
+To build the reviewed checkout locally before publication or for development,
+use the optional override with the same network and secret settings:
+
+```sh
+PAPERLESS_DOCKER_NETWORK=paperless_default docker compose \
+  -f docker-compose.paperless.yml -f docker-compose.build.yml up -d --build
+```
+
+This produces `paperwrench:local` and leaves the standard Compose file
+pointing at the versioned GHCR image. The image is built from this checkout.
+The same override works with `docker-compose.yml` for loopback/proxy deployments.
 
 The image runs as UID/GID **10001**, one process and one worker. For a bind mount,
 prepare a directory owned/writable by 10001; do not run the container as root to
@@ -73,8 +90,9 @@ means inspect History, never automatically submit again. The original
 2. Back up PaperWrench and Paperless separately as described below. Do not
    upgrade without a recoverable copy of the working history.
 3. Stop the old application with `docker compose stop paperwrench`. Retain its
-   volume; **do not use `down -v`**. Check out/build the reviewed new code and run
-   `docker compose up -d --build` with the same project and volume.
+   volume; **do not use `down -v`**. Pull the reviewed versioned image and run
+   `docker compose up -d` with the same project and volume. Use the local-build
+   override above only when building a reviewed checkout yourself.
 4. Check health, connection, schemas, collections, History and nested routes.
    Review interrupted Jobs; resume only unsent targets explicitly. Startup sends
    no automatic document writes. Ambiguous targets are never replayed.
