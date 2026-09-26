@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 #
 # PaperWrench single-container image (ADR-0001).
 #
@@ -11,7 +11,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 - build the SPA
 # ---------------------------------------------------------------------------
-FROM node:22-bookworm-slim AS frontend
+FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS frontend
 
 WORKDIR /build
 
@@ -28,11 +28,11 @@ RUN npx tsc -b && npx vite build --outDir /build/dist --emptyOutDir
 # ---------------------------------------------------------------------------
 # Stage 2 - build the Python wheel
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim-bookworm AS backend
+FROM python:3.11-slim-bookworm@sha256:a36c24f9cbdf4fd0f52d67f0823eeac19c2028c637cecc392d97f980d4fec56b AS backend
 
 WORKDIR /build
 
-RUN pip install --no-cache-dir build
+RUN pip install --no-cache-dir build==1.6.1 packaging==26.3 pyproject_hooks==1.3.3
 
 COPY backend/ ./
 COPY --from=frontend /build/dist ./src/paperwrench/static
@@ -42,11 +42,13 @@ RUN python -m build --wheel --outdir /wheels
 # ---------------------------------------------------------------------------
 # Stage 3 - runtime
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim-bookworm AS runtime
+FROM python:3.11-slim-bookworm@sha256:a36c24f9cbdf4fd0f52d67f0823eeac19c2028c637cecc392d97f980d4fec56b AS runtime
 
+ARG VCS_REF
 LABEL org.opencontainers.image.title="PaperWrench" \
       org.opencontainers.image.description="Power tools for Paperless-ngx. Independent project, not affiliated with Paperless-ngx." \
       org.opencontainers.image.source="https://github.com/flowent59/PaperWrench" \
+      org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -57,22 +59,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PAPERWRENCH_HOST=0.0.0.0 \
     PAPERWRENCH_PORT=8000
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
-
 # Non-root by default. The UID is fixed so a bind-mounted /data can be
 # chowned predictably on the host.
 RUN groupadd --gid 10001 paperwrench \
     && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin paperwrench
 
 COPY --from=backend /wheels/*.whl /tmp/
+COPY backend/requirements.lock /tmp/requirements.lock
 # Alembic revisions live inside the package, so the wheel is self-contained
 # and migrations run on boot without any extra files.
-RUN pip install --no-cache-dir --upgrade "pip>=26.2" "setuptools>=83.0.0" \
-    && pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
+RUN pip install --no-cache-dir -r /tmp/requirements.lock \
+    && pip install --no-cache-dir --no-deps /tmp/*.whl \
+    && rm -f /tmp/*.whl /tmp/requirements.lock
 
-RUN mkdir -p /data /app && chown -R paperwrench:paperwrench /data /app
+RUN mkdir -p /data /app /run/secrets && chown -R paperwrench:paperwrench /data /app
 
 USER paperwrench
 WORKDIR /app
@@ -80,7 +80,7 @@ VOLUME ["/data"]
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8000/api/v1/system/health || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/system/health', timeout=5).read()" || exit 1
 
 # Single worker on purpose: the job engine holds a single-instance runtime
 # lock and runs in-process (ADR-0006). More workers would be rejected at boot.

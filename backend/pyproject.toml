@@ -46,7 +46,7 @@ Repository = "https://github.com/flowent59/PaperWrench"
 Issues = "https://github.com/flowent59/PaperWrench/issues"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

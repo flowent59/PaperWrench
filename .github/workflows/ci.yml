@@ -19,6 +19,22 @@ env:
   NODE_VERSION: "22"
 
 jobs:
+  release-metadata:
+    name: Release metadata and PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Check version synchronization and Conventional Commit title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python scripts/check_release_metadata.py
+
   # ---------------------------------------------------------------- static
   backend-lint:
     name: Backend / lint (ruff)

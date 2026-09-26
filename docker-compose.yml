@@ -9,12 +9,8 @@
 
 services:
   paperwrench:
-    image: paperwrench:0.1.0
-    # Build locally instead of pulling:
-    #   docker compose build
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${PAPERWRENCH_IMAGE:-ghcr.io/flowent59/paperwrench:0.1.0} # x-release-please-version
+    pull_policy: always
     container_name: paperwrench
     restart: unless-stopped
     ports:
@@ -49,7 +45,7 @@ services:
       - ALL
     healthcheck:
       test:
-        ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/v1/system/health"]
+        ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/system/health', timeout=5).read()"]
       interval: 30s
       timeout: 5s
       retries: 3

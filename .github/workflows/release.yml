@@ -1,0 +1,171 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-and-verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag, source and application versions
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"]
+          if not re.fullmatch(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", tag):
+              raise SystemExit(f"Invalid release tag: {tag!r}; expected vMAJOR.MINOR.PATCH")
+          version = tag[1:]
+          head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          tagged = subprocess.check_output(["git", "rev-parse", f"refs/tags/{tag}^{{commit}}"], text=True).strip()
+          event = subprocess.check_output(["git", "rev-parse", f"{os.environ['EVENT_SHA']}^{{commit}}"], text=True).strip()
+          if head != tagged or head != event:
+              raise SystemExit("The checkout does not match the pushed tag commit")
+          subprocess.run(["git", "merge-base", "--is-ancestor", "HEAD", "origin/main"], check=True)
+          backend = tomllib.loads(Path("backend/pyproject.toml").read_text())["project"]["version"]
+          frontend = json.loads(Path("frontend/package.json").read_text())["version"]
+          lock = json.loads(Path("frontend/package-lock.json").read_text())
+          manifest = json.loads(Path(".release-please-manifest.json").read_text())["."]
+          source = Path("backend/src/paperwrench/__init__.py").read_text()
+          package = re.search(r'^__version__ = "([^"]+)"(?:\s+# x-release-please-version)?$', source, re.MULTILINE)
+          versions = (backend, frontend, lock["version"], lock["packages"][""]["version"], package.group(1) if package else None)
+          if any(value != version for value in (*versions, manifest)):
+              raise SystemExit(f"Tag {tag} disagrees with application versions: {versions}")
+          if version not in Path("CHANGELOG.md").read_text():
+              raise SystemExit(f"Generated changelog has no entry for {version}")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+              output.write(f"version={version}\n")
+              output.write(f"commit={head}\n")
+              epoch = subprocess.check_output(["git", "show", "-s", "--format=%ct", "HEAD"], text=True).strip()
+              output.write(f"source_date_epoch={epoch}\n")
+          print(f"Validated {tag} at {head}")
+          PY
+
+      - name: Require the Release Please draft or published Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          for attempt in $(seq 1 10); do
+            if gh release view "$RELEASE_TAG" --json tagName --jq '.tagName' 2>/dev/null | grep -Fqx "$RELEASE_TAG"; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::No GitHub Release for $RELEASE_TAG; only Release Please releases may publish images"
+          exit 1
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR for publication
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect an already published version
+        id: existing
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_COMMIT: ${{ steps.version.outputs.commit }}
+        run: |
+          image="ghcr.io/flowent59/paperwrench:${RELEASE_VERSION}"
+          current=$(git show origin/main:.release-please-manifest.json | python -c 'import json,sys; print(json.load(sys.stdin)["."])')
+          if [ "$current" = "$RELEASE_VERSION" ]; then
+            echo "check_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "check_latest=false" >> "$GITHUB_OUTPUT"
+          fi
+          if digest=$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}' 2>/dev/null); then
+            docker pull "$image" >/dev/null
+            revision=$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+            if [ "$revision" != "$RELEASE_COMMIT" ]; then
+              echo "::error::Version tag already exists for a different commit"
+              exit 1
+            fi
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "digest=$digest" >> "$GITHUB_OUTPUT"
+            if [ "$current" = "$RELEASE_VERSION" ]; then
+              latest=ghcr.io/flowent59/paperwrench:latest
+              latest_digest=$(docker buildx imagetools inspect "$latest" --format '{{.Manifest.Digest}}' 2>/dev/null || true)
+              if [ "$latest_digest" != "$digest" ]; then
+                docker buildx imagetools create --tag "$latest" "ghcr.io/flowent59/paperwrench@${digest}"
+              fi
+            fi
+          else
+            if [ "$current" != "$RELEASE_VERSION" ]; then
+              echo "::error::Refusing to publish an older tag and move latest away from $current"
+              exit 1
+            fi
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the tagged checkout and publish both tags
+        id: build
+        if: steps.existing.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            VCS_REF=${{ steps.version.outputs.commit }}
+            SOURCE_DATE_EPOCH=${{ steps.version.outputs.source_date_epoch }}
+          tags: |
+            ghcr.io/flowent59/paperwrench:${{ steps.version.outputs.version }}
+            ghcr.io/flowent59/paperwrench:latest
+          provenance: mode=max
+          sbom: true
+
+      - name: Validate the image pulled from GHCR on disposable Paperless
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_DIGEST: ${{ steps.build.outputs.digest || steps.existing.outputs.digest }}
+          CHECK_LATEST: ${{ steps.existing.outputs.check_latest }}
+        run: bash .github/scripts/validate_published_image.sh
+
+  publish-github-release:
+    needs: publish-and-verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the reviewed Release Please notes after image validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' | grep -qx true; then
+            gh release edit "$RELEASE_TAG" --draft=false
+          else
+            echo "$RELEASE_TAG is already published"
+          fi

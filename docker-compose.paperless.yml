@@ -1,9 +1,9 @@
-# Add PaperWrench to an existing Paperless Docker network. Build this local
-# checkout; no published PaperWrench image is required.
+# Add PaperWrench to an existing Paperless Docker network. Pull the versioned
+# GHCR image by default; a local build remains available as described in docs.
 services:
   paperwrench:
-    build: .
-    image: paperwrench:0.1.0-local
+    image: ${PAPERWRENCH_IMAGE:-ghcr.io/flowent59/paperwrench:0.1.0} # x-release-please-version
+    pull_policy: always
     restart: unless-stopped
     ports:
       - "${PAPERWRENCH_HTTP_PORT:-8000}:8000"

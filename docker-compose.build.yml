@@ -1,0 +1,7 @@
+# Optional local build override for docker-compose.paperless.yml.
+# Use both files together; the default installation pulls the GHCR image.
+services:
+  paperwrench:
+    image: paperwrench:local
+    build: .
+    pull_policy: build
