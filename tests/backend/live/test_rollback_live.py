@@ -1,4 +1,4 @@
-"""M9 on the guarded disposable Paperless 3.1.2 sandbox only."""
+"""M9 on the guarded disposable Paperless sandbox only."""
 
 from __future__ import annotations
 
@@ -48,6 +48,7 @@ async def test_normalized_job_rollback_preserves_later_neighbors_live(
     live_settings: Settings,
     session: Session,
     scratch_document: int,
+    live_paperless_version: str,
 ) -> None:
     registry = MetadataRegistry(live_client)
     period = await registry.custom_field_by_name("Période concernée")
@@ -73,7 +74,7 @@ async def test_normalized_job_rollback_preserves_later_neighbors_live(
         ),
     )
     await execute(live_client, live_settings, session)
-    assert live_client.paperless_version == "3.1.2"
+    assert live_client.paperless_version == live_paperless_version
     assert job_view(job_id).status == "completed"
     operation = operation_page(job_id, 1, 25, scratch_document).items[0]
     assert operation.intended["raw"] == "  M9 normalized  "

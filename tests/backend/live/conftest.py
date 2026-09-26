@@ -43,6 +43,8 @@ AUTHORISED_LIVE_HOSTS = frozenset(
 )
 
 ALLOW_ENV = "PAPERWRENCH_ALLOW_LIVE_TESTS"
+EXPECTED_VERSION_ENV = "PAPERWRENCH_EXPECTED_PAPERLESS_VERSION"
+DEFAULT_EXPECTED_VERSION = "3.2.1"
 
 # Two accepted spellings, in priority order, for both the URL and the token.
 #
@@ -79,6 +81,11 @@ MAX_SANDBOX_DOCUMENTS = 500
 
 def live_tests_allowed() -> bool:
     return os.environ.get(ALLOW_ENV, "").strip().lower() in {"1", "true", "yes"}
+
+
+def expected_paperless_version() -> str:
+    """Use the CI-probed release, or the fixed reference for local runs."""
+    return os.environ.get(EXPECTED_VERSION_ENV, DEFAULT_EXPECTED_VERSION).strip()
 
 
 def assert_authorised_target(url: str) -> None:
@@ -139,8 +146,18 @@ def live_settings(live_url: str, live_token: str) -> Settings:
     )
 
 
+@pytest.fixture(scope="session")
+def live_paperless_version() -> str:
+    version = expected_paperless_version()
+    if not version:
+        pytest.fail(f"{EXPECTED_VERSION_ENV} must name the expected Paperless release.")
+    return version
+
+
 @pytest.fixture(scope="session", autouse=True)
-def _guard_not_a_real_library(live_settings: Settings, live_url: str) -> Iterator[None]:
+def _guard_not_a_real_library(
+    live_settings: Settings, live_url: str, live_paperless_version: str
+) -> Iterator[None]:
     """Last safety net: a big library is not a sandbox."""
     if not live_tests_allowed():
         yield
@@ -155,8 +172,12 @@ def _guard_not_a_real_library(live_settings: Settings, live_url: str) -> Iterato
         timeout=10.0,
     )
     response.raise_for_status()
-    if response.headers.get("X-Version") != "3.1.2":
-        pytest.fail("Destructive live tests require the pinned Paperless 3.1.2 sandbox.")
+    actual_version = response.headers.get("X-Version")
+    if actual_version != live_paperless_version:
+        pytest.fail(
+            f"Destructive live tests require Paperless {live_paperless_version}; "
+            f"target reports {actual_version!r}."
+        )
     count = int(response.json().get("count", 0))
     if count > MAX_SANDBOX_DOCUMENTS:
         pytest.fail(

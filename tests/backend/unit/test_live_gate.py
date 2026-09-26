@@ -26,8 +26,17 @@ GuardRefusal = pytest.fail.Exception
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in (gate.ALLOW_ENV, *gate.URL_ENVS, *gate.TOKEN_ENVS):
+    for name in (gate.ALLOW_ENV, gate.EXPECTED_VERSION_ENV, *gate.URL_ENVS, *gate.TOKEN_ENVS):
         monkeypatch.delenv(name, raising=False)
+
+
+class TestVersionSelection:
+    def test_defaults_to_fixed_reference(self) -> None:
+        assert gate.expected_paperless_version() == "3.2.1"
+
+    def test_honours_ci_probed_version(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(gate.EXPECTED_VERSION_ENV, "3.4.0")
+        assert gate.expected_paperless_version() == "3.4.0"
 
 
 class TestOptIn:

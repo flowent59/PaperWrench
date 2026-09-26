@@ -1,4 +1,4 @@
-"""Guarded M7 Golden Dataset verification on real Paperless 3.1.2."""
+"""Guarded M7 Golden Dataset verification on real Paperless."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ async def test_golden_dataset_count_list_preview_and_unchanged_documents(
     live_client: PaperlessClient,
     session: Session,
     monkeypatch: pytest.MonkeyPatch,
+    live_paperless_version: str,
 ) -> None:
     """No seed/write helpers run inside this probe; inspect every HTTP method."""
     methods: list[str] = []
@@ -66,7 +67,7 @@ async def test_golden_dataset_count_list_preview_and_unchanged_documents(
             page_size=2,
         )
     }
-    assert live_client.paperless_version == "3.1.2"
+    assert live_client.paperless_version == live_paperless_version
     assert count == len(before) >= 17
     assert all(document.document_type == document_type.id for document in before.values())
     transformation = Transformation.model_validate(

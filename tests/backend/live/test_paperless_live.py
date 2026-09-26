@@ -1,4 +1,4 @@
-"""Tests executed against a REAL Paperless-ngx 3.1.2 instance.
+"""Tests executed against the guarded real Paperless-ngx compatibility targets.
 
 Everything here is an assertion about the *server*, not about PaperWrench.
 A mocked test can only prove we handle a shape we invented; these prove the
@@ -166,7 +166,7 @@ class TestDocumentRead:
         response = await raw_live.get(f"/api/documents/{scratch_document}/")
         payload = response.json()
         for key in ("id", "title", "custom_fields", "tags", "user_can_change", "modified"):
-            assert key in payload, f"3.1.2 no longer returns {key!r}"
+            assert key in payload, f"Paperless no longer returns {key!r}"
 
 
 class TestReferenceMetadataReads:
@@ -263,7 +263,7 @@ class TestCustomFieldHazard:
         assert response.status_code == 200, "the destruction is not even reported as an error"
         after = response.json()["custom_fields"]
         assert len(after) == 1, (
-            "Paperless 3.1.2 no longer deletes omitted custom fields. "
+            "Paperless no longer deletes omitted custom fields. "
             "This is a GOOD change, but ADR-0004 and the client must be re-evaluated "
             "before relying on it."
         )

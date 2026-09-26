@@ -1,4 +1,4 @@
-"""Read-only M10 verification against the guarded Paperless 3.1.2 sandbox."""
+"""Read-only M10 verification against the guarded Paperless sandbox."""
 
 from __future__ import annotations
 
@@ -22,7 +22,8 @@ pytestmark = pytest.mark.live
 
 
 async def test_vacation_schema_reads_only_and_distinguishes_zero_from_absent(
-    live_client: PaperlessClient, monkeypatch: pytest.MonkeyPatch
+    live_client: PaperlessClient, monkeypatch: pytest.MonkeyPatch,
+    live_paperless_version: str,
 ) -> None:
     methods: list[str] = []
     original = live_client._request
@@ -35,7 +36,7 @@ async def test_vacation_schema_reads_only_and_distinguishes_zero_from_absent(
     monkeypatch.setattr(live_client, "_request", guarded)
     registry = MetadataRegistry(live_client)
     document_type = await registry.document_type_by_name("Relevé de vacations")
-    assert live_client.paperless_version == "3.1.2"
+    assert live_client.paperless_version == live_paperless_version
     definitions = {field.id: field for field in await registry.all_custom_fields()}
     period = next(field for field in definitions.values() if field.name == "Période concernée")
     amount = next(field for field in definitions.values() if field.name == "Montant")

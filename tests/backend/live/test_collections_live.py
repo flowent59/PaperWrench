@@ -1,4 +1,4 @@
-"""M12 static membership against the disposable Paperless 3.1.2 sandbox."""
+"""M12 static membership against the disposable Paperless sandbox."""
 
 from __future__ import annotations
 
@@ -19,7 +19,8 @@ pytestmark = pytest.mark.live
 
 
 async def test_static_vacation_ids_survive_reload_and_missing_member(
-    live_client: PaperlessClient, session: Session, monkeypatch: pytest.MonkeyPatch
+    live_client: PaperlessClient, session: Session, monkeypatch: pytest.MonkeyPatch,
+    live_paperless_version: str,
 ) -> None:
     methods: list[str] = []
     original = live_client._request
@@ -32,7 +33,7 @@ async def test_static_vacation_ids_survive_reload_and_missing_member(
     monkeypatch.setattr(live_client, "_request", guarded)
     registry = MetadataRegistry(live_client)
     document_type = await registry.document_type_by_name("Relevé de vacations")
-    assert live_client.paperless_version == "3.1.2"
+    assert live_client.paperless_version == live_paperless_version
     first = await live_client.list_documents(
         params={"document_type__id": document_type.id}, page=1, page_size=2
     )

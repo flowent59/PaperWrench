@@ -128,10 +128,10 @@ make dev-frontend     # Vite dev server on :5173
 ```
 
 Never develop against your real library. A disposable, pre-seeded
-Paperless-ngx 3.1.2 instance is one command away:
+Paperless-ngx 3.2.1 instance is one command away:
 
 ```bash
-make dev-paperless-up     # Paperless-ngx 3.1.2 on :8010
+make dev-paperless-up     # Paperless-ngx 3.2.1 on :8010
 make dev-paperless-seed   # reference dataset, French metadata included
 ```
 

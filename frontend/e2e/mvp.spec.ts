@@ -9,7 +9,8 @@ test('compiled MVP: Explorer → Schemas/Quality → preview → Job → History
   const upstream = await playwright.request.newContext({ baseURL: target.origin,
     extraHTTPHeaders: { Authorization: `Token ${process.env.PAPERLESS_TOKEN}`, Accept: 'application/json; version=10' } })
   const probe = await upstream.get('/api/documents/?page_size=1')
-  expect(probe.headers()['x-version']).toBe('3.1.2')
+  expect(probe.status()).toBe(200)
+  expect(probe.headers()['x-version']).toBe(process.env.PAPERWRENCH_EXPECTED_PAPERLESS_VERSION ?? '3.2.1')
   expect((await probe.json()).count).toBeLessThanOrEqual(500)
   const types = await (await request.get('/api/v1/metadata/document-types')).json()
   const fields = await (await request.get('/api/v1/metadata/custom-fields')).json()

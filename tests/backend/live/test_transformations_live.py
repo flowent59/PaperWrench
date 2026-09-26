@@ -1,4 +1,4 @@
-"""M6 representation check on the disposable 3.1.2 Golden Dataset."""
+"""M6 representation check on the disposable Golden Dataset."""
 
 from __future__ import annotations
 
