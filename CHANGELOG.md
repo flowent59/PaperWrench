@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.1](https://github.com/flowent59/PaperWrench/compare/v0.1.0...v0.1.1) (2026-09-26)
+
+
+### Bug Fixes
+
+* **a11y:** prevent low contrast during button selection ([11b2538](https://github.com/flowent59/PaperWrench/commit/11b25381582933a6d07c26573d346d4fffbebaf8))
+* **ci:** find draft releases before publishing images ([0bd02d6](https://github.com/flowent59/PaperWrench/commit/0bd02d63a6927b7363b9a68bcf33cf251ede6de3))
+* **ci:** recover draft releases before Docker publication ([8ad10f8](https://github.com/flowent59/PaperWrench/commit/8ad10f859b44866381ea9cde518781a5c6ae910c))
+
 ## 0.1.0 (2026-09-26)
 
 
