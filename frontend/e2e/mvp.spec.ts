@@ -48,12 +48,7 @@ test('compiled MVP: Explorer → Schemas/Quality → preview → Job → History
     const schemaButton = page.getByRole('button', { name: 'M13 vacations' })
     await schemaButton.click()
     await expect(schemaButton).toHaveClass(/bg-primary/)
-    const transitionProperties = (await schemaButton.evaluate(
-      'button => getComputedStyle(button).transitionProperty') as string)
-      .split(',').map(property => property.trim())
-    expect(transitionProperties).not.toContain('color')
-    expect(transitionProperties).not.toContain('background-color')
-    expect(transitionProperties).not.toContain('all')
+    await expect(schemaButton).toHaveCSS('transition-property', 'box-shadow')
     await accessible()
     await page.getByRole('button', { name: 'Evaluate', exact: true }).click()
     await expect(page.getByText(/matching documents/)).toBeVisible()
