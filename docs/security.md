@@ -31,23 +31,25 @@ The container runs non-root with a read-only root filesystem in Compose. Keep
 `/data` and backups private; preview expiry is logical deletion, not secure erasure.
 See [deployment.md](deployment.md) for consistent SQLite snapshots and restoration.
 
-## Dependency review (2026-09-25)
+## Dependency review (2026-09-26)
 
-`npm audit` found high-severity development-tool advisories in js-yaml and its
-Redocly consumer. Compatible lockfile updates remove those findings. Remaining
-moderate advisories are recorded here rather than hidden with audit overrides:
+Earlier compatible lockfile updates removed the high-severity js-yaml and Redocly
+findings. Immediately before the Vitest 5 / React Router 7 upgrade, `npm audit`
+reported 5 moderate package entries (0 high or critical), covering three advisories:
 
-- [GHSA-82fw-gwwq-j7x9](https://github.com/advisories/GHSA-82fw-gwwq-j7x9): Vitest
-  mocker file-read issue. Vitest runs in CI/local development, is not in the
-  production wheel, and must not serve untrusted network clients. Upgrade to
-  the patched major test-tool version is deferred; no exposed test server is deployed.
-- [GHSA-wrjc-x8rr-h8h6](https://github.com/advisories/GHSA-wrjc-x8rr-h8h6) and
-  [GHSA-337j-9hxr-rhxg](https://github.com/advisories/GHSA-337j-9hxr-rhxg): Router
-  redirect/SSR paths. This app renders a client-only SPA (no SSR hydration) and
-  constructs internal links from fixed route prefixes, numeric IDs and encoded
-  query data, never user-supplied destination URLs. This source review finds no
-  affected input path; it is not a general claim that Router 6 is patched.
-  A future arbitrary-link/SSR feature must first upgrade Router.
+- [GHSA-82fw-gwwq-j7x9](https://github.com/advisories/GHSA-82fw-gwwq-j7x9):
+  the Vitest mocker arbitrary file-read issue, propagated to `vitest` and
+  `@vitest/coverage-v8`. Upgrading the aligned Vitest packages to 5.0.2 removes it.
+- [GHSA-wrjc-x8rr-h8h6](https://github.com/advisories/GHSA-wrjc-x8rr-h8h6):
+  the React Router open redirect through a backslash in navigation targets.
+- [GHSA-337j-9hxr-rhxg](https://github.com/advisories/GHSA-337j-9hxr-rhxg):
+  the React Router SSR hydration constructor injection issue. Upgrading Router
+  to 7.18.4 removes both Router findings, including the transitive
+  `react-router-dom` entry; the app remains a client-only SPA.
+
+After the upgrade, `npm audit` reports 0 vulnerabilities across the frontend
+dependency tree. No audit overrides or test exclusions were added. No known npm
+advisories remain in this audit snapshot; future advisories may change that result.
 
 The Python environment/image audits identified old pip and setuptools tooling;
 the runtime build upgrades pip to at least 26.2 and setuptools to at least 83.0.0.

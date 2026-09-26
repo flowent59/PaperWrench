@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 
 import { ApiError, jobsApi, previewsApi } from '@/api/client'
 import type { CreatedPreview } from '@/api/types'

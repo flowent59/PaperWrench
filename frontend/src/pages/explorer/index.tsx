@@ -41,7 +41,7 @@ import {
 } from 'lucide-react'
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router'
 
 import { collectionsApi, documentsApi } from '@/api/client'
 
