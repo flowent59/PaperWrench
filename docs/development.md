@@ -12,7 +12,7 @@ this project is built around using it.
 ## Requirements
 
 - Python 3.11+
-- Node.js 20+
+- Node.js 22.12+ (or Node.js 24+)
 - Docker and Docker Compose (for the sandbox and to build the image)
 - `make`
 

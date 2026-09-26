@@ -1,7 +1,7 @@
 /** Read-only quality summary and bounded violation pages. */
 import { useQuery } from '@tanstack/react-query'
 import * as React from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 
 import { qualityApi, schemasApi } from '@/api/client'
 import type { QualityFinding, SchemaRuleResult } from '@/api/types'

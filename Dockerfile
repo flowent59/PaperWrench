@@ -11,7 +11,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 - build the SPA
 # ---------------------------------------------------------------------------
-FROM node:20-bookworm-slim AS frontend
+FROM node:22-bookworm-slim AS frontend
 
 WORKDIR /build
 

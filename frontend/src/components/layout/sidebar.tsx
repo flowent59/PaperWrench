@@ -14,7 +14,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import { NavLink } from 'react-router'
 
 import { messages } from '@/i18n/messages'
 import { cn } from '@/lib/utils'

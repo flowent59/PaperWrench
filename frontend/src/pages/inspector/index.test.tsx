@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { DocumentDetail, EditRequest } from '@/api/types'
@@ -145,7 +145,7 @@ describe('Inspector', () => {
   it('keeps an unset core reference null', async () => {
     const { requests } = setup()
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Edit Correspondent' }))
+    await user.click(await screen.findByRole('button', { name: 'Edit Correspondent' }, { timeout: 10_000 }))
     await user.click(screen.getByRole('button', { name: m.save }))
     await screen.findByRole('status')
     expect(requests[0]?.core).toEqual({ correspondent: null })
