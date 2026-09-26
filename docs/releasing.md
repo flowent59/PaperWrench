@@ -10,12 +10,11 @@ version. The backend, frontend package and lockfile, Compose image defaults and
 
 ## First release and version rules
 
-The manifest starts at `0.0.0`, meaning no version has been published. The
-first Release Please PR targets **0.1.0**. The bootstrap SHA makes its changelog
+The manifest started at `0.0.0`, meaning no version had been published. The
+first Release Please PR targeted **0.1.0**. The bootstrap SHA made its changelog
 start after the repository's initial commit, so the MVP's Conventional Commits
-are included. Merging this preparation PR only enables the automation; it does
-not create a tag, image or GitHub Release. Review and merge the generated
-`chore(main): release ...` PR to publish.
+were included. The generated `chore(main): release 0.1.0` PR has been merged;
+the tag and draft GitHub Release exist, while image publication is pending.
 
 Use Conventional Commit titles for all PRs, because squash merges put the PR
 title on `main`. Examples: `feat: add a view`, `fix(api): handle a 403`,
@@ -29,15 +28,18 @@ generated release PR and its CI before merging it.
 After the release PR is merged, Release Please creates the tag and a draft
 GitHub Release using `RELEASE_PLEASE_TOKEN`. A `v*` tag push starts `release.yml`,
 which verifies the tag, the main ancestry and matching application versions,
-then publishes one `linux/amd64` GHCR image under the exact version and
+then uses the Release Please token to find a draft or published Release through
+the paginated GitHub API. The Release must belong to this repository, have the
+exact tag and notes, and target the same commit as the remote Git tag. It
+publishes one `linux/amd64` GHCR image under the exact version and
 `latest`. It pulls the remote image into a disposable Paperless 3.2.1 stack and
 checks migration, network connection, direct HTTP, SPA routes, persistence and
 token redaction. After these checks pass, the workflow publishes the draft
 GitHub Release with Release Please's generated notes. If a version tag already
 exists with the same source commit, a rerun validates it without rebuilding or
 republishing; a different source commit fails. Only the release workflow writes
-GHCR. A tag without an existing
-GitHub Release cannot publish. The existing CI remains the merge gate.
+GHCR. A tag without a matching GitHub Release cannot publish. The existing CI
+remains the merge gate.
 
 The release build uses the exact tagged commit, pinned Docker base digests,
 the frontend npm lockfile, pinned wheel tooling and
@@ -48,8 +50,29 @@ normal reviewed PR when security or compatibility requires it.
 GitHub's repository `GITHUB_TOKEN` normally suppresses downstream workflow
 runs for tags it creates. `RELEASE_PLEASE_TOKEN` must be a fine-grained PAT
 that is **not** `GITHUB_TOKEN`; otherwise the tag push will not start the Docker
-workflow. The release workflow itself uses its
-short-lived `GITHUB_TOKEN`, scoped to `contents:read` and `packages:write`.
+workflow. The release workflow uses that PAT to inspect draft Releases and
+publish one only after image validation. Its short-lived `GITHUB_TOKEN` has
+`contents:read`, with `packages:write` only in the Docker publication job.
+GitHub does not expose draft Releases to a read-only token. The by-tag REST
+endpoint only returns published Releases.
+
+## Recovering the first 0.1.0 publication
+
+The first tag run failed before any image upload because its read-only token
+could not see the draft Release. Re-running that old Actions run keeps the
+workflow at the original tagged commit, including the broken lookup. After
+merging the corrective PR, open **Actions > Release > Run workflow**, select
+the **main** branch and enter `v0.1.0` as the existing tag. The manual run
+checks out the reviewed workflow tools from `main` and builds only the source
+at `v0.1.0`. It confirms that the remote tag and Release both target
+`cc9a744480ac33f0b473c38c11ee358f55766074`, and that the root manifest
+still names 0.1.0 before moving `latest`. It does not create or move the tag.
+If the version image already exists at that commit, the run skips the build;
+if the manifest has advanced to a later version, it refuses to publish the
+older image or move `latest` back. The versioned image, remote Paperless smoke
+test and draft Release publication then follow the normal path. The first GHCR
+package may need to be made public and the **new manual run** started again
+before its anonymous-pull check can pass.
 
 ## Repository setup
 
@@ -65,7 +88,7 @@ short-lived `GITHUB_TOKEN`, scoped to `contents:read` and `packages:write`.
    release PR. Prefer squash merges so PR titles become Conventional Commits.
 4. The first GHCR package may initially be private. Set
    `flowent59/paperwrench` to public in the package settings after its first
-   upload, then rerun the failed tag workflow. That workflow checks anonymous
+   upload, then rerun the release workflow. That workflow checks anonymous
    pull access before declaring the image ready. It skips the build if the
    same version was already uploaded.
 

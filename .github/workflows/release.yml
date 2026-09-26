@@ -4,32 +4,52 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing Release Please tag to resume
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   publish-and-verify:
     runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.version.outputs.commit }}
+      release_id: ${{ steps.release.outputs.release_id }}
     permissions:
       contents: read
       packages: write
     steps:
+      - name: Check out the reviewed workflow tools
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: workflow
+          persist-credentials: false
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          path: source
           fetch-depth: 0
           persist-credentials: false
 
       - name: Validate tag, source and application versions
         id: version
+        working-directory: source
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
-          EVENT_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          EVENT_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
         run: |
           python - <<'PY'
           import json
@@ -40,13 +60,20 @@ jobs:
           from pathlib import Path
 
           tag = os.environ["RELEASE_TAG"]
+          event_name = os.environ["EVENT_NAME"]
+          event_ref = os.environ["EVENT_REF"]
+          if event_name == "workflow_dispatch" and event_ref != "refs/heads/main":
+              raise SystemExit("Manual release recovery must run from main")
+          if event_name not in ("push", "workflow_dispatch"):
+              raise SystemExit(f"Unsupported release event: {event_name}")
           if not re.fullmatch(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", tag):
               raise SystemExit(f"Invalid release tag: {tag!r}; expected vMAJOR.MINOR.PATCH")
           version = tag[1:]
           head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
           tagged = subprocess.check_output(["git", "rev-parse", f"refs/tags/{tag}^{{commit}}"], text=True).strip()
-          event = subprocess.check_output(["git", "rev-parse", f"{os.environ['EVENT_SHA']}^{{commit}}"], text=True).strip()
-          if head != tagged or head != event:
+          event_sha = os.environ["EVENT_SHA"]
+          event = subprocess.check_output(["git", "rev-parse", f"{event_sha}^{{commit}}"], text=True).strip() if event_sha else None
+          if head != tagged or (event is not None and head != event):
               raise SystemExit("The checkout does not match the pushed tag commit")
           subprocess.run(["git", "merge-base", "--is-ancestor", "HEAD", "origin/main"], check=True)
           backend = tomllib.loads(Path("backend/pyproject.toml").read_text())["project"]["version"]
@@ -69,18 +96,13 @@ jobs:
           PY
 
       - name: Require the Release Please draft or published Release
+        id: release
+        working-directory: source
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          for attempt in $(seq 1 10); do
-            if gh release view "$RELEASE_TAG" --json tagName --jq '.tagName' 2>/dev/null | grep -Fqx "$RELEASE_TAG"; then
-              exit 0
-            fi
-            sleep 3
-          done
-          echo "::error::No GitHub Release for $RELEASE_TAG; only Release Please releases may publish images"
-          exit 1
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          EXPECTED_COMMIT: ${{ steps.version.outputs.commit }}
+        run: python ../workflow/scripts/release_gate.py verify
 
       - uses: docker/setup-buildx-action@v3
 
@@ -93,6 +115,7 @@ jobs:
 
       - name: Detect an already published version
         id: existing
+        working-directory: source
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           RELEASE_COMMIT: ${{ steps.version.outputs.commit }}
@@ -133,7 +156,7 @@ jobs:
         if: steps.existing.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./source
           push: true
           platforms: linux/amd64
           build-args: |
@@ -146,26 +169,29 @@ jobs:
           sbom: true
 
       - name: Validate the image pulled from GHCR on disposable Paperless
+        working-directory: source
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           RELEASE_DIGEST: ${{ steps.build.outputs.digest || steps.existing.outputs.digest }}
           CHECK_LATEST: ${{ steps.existing.outputs.check_latest }}
-        run: bash .github/scripts/validate_published_image.sh
+        run: bash ../workflow/.github/scripts/validate_published_image.sh
 
   publish-github-release:
     needs: publish-and-verify
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
+      - name: Check out the reviewed workflow tools
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
       - name: Publish the reviewed Release Please notes after image validation
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' | grep -qx true; then
-            gh release edit "$RELEASE_TAG" --draft=false
-          else
-            echo "$RELEASE_TAG is already published"
-          fi
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          EXPECTED_COMMIT: ${{ needs.publish-and-verify.outputs.commit }}
+          RELEASE_ID: ${{ needs.publish-and-verify.outputs.release_id }}
+        run: python scripts/release_gate.py publish
