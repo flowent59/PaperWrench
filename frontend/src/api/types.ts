@@ -22,6 +22,14 @@ export interface InfoResponse {
   max_concurrency: number
 }
 
+export interface AuthSession {
+  user_id: number
+  username: string
+  display_name: string
+  expires_at: string
+  csrf_token: string
+}
+
 /**
  * Result of a live probe against Paperless-ngx (`GET /system/paperless`).
  *

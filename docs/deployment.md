@@ -14,19 +14,13 @@ a newer release. PaperWrench never reads Paperless files or database.
    and `docker network ls`); it is often `<paperless-project>_default`. Note the
    Paperless **service name**, often `paperless` or `webserver`, not its container
    name or public URL. The service must listen on port 8000 inside that network.
-2. In the PaperWrench checkout, create `secrets/paperless_token` containing only
-   a dedicated, minimally privileged Paperless user's API token. Keep this file
-   private. The `secrets/` directory is Git-ignored. Compose mounts it read-only
-   at `/run/secrets/paperless_token`; the token is absent from the container
-   environment and browser responses.
+2. Ensure every intended user can create an API token in Paperless and has only
+   the global/object permissions they need. No shared token is configured in
+   PaperWrench.
 3. Start the supplied Compose example, substituting your network, service name
    and preferred host port:
 
    ```sh
-   mkdir -p secrets
-   chmod 700 secrets
-   ${EDITOR:-vi} secrets/paperless_token
-   chmod 600 secrets/paperless_token
    export PAPERLESS_DOCKER_NETWORK=paperless_default PAPERLESS_SERVICE=paperless PAPERWRENCH_HTTP_PORT=8000
    docker compose -f docker-compose.paperless.yml pull
    docker compose -f docker-compose.paperless.yml up -d
@@ -34,7 +28,8 @@ a newer release. PaperWrench never reads Paperless files or database.
 
 4. Check `docker compose -f docker-compose.paperless.yml ps`, open
    `http://IP_DU_SERVEUR:PORT`, and verify the connection status in the UI or at
-   `/api/v1/system/paperless`. The SPA and API use the same HTTP origin, so no
+   sign in with your own Paperless token, then verify the connection status in
+   the UI or at `/api/v1/system/paperless`. The SPA and API use the same HTTP origin, so no
    CORS allowlist is needed. A healthy `/api/v1/system/health` only proves the
    local database is available. Test a small preview before confirming a write.
 
@@ -44,8 +39,8 @@ its host port or public URL differs. `PAPERLESS_DOCKER_NETWORK` names an
 **external network** that must already exist; Compose does not create or remove
 it. If Paperless uses a different internal port, edit `PAPERLESS_URL` in the
 example. Set `PAPERWRENCH_HTTP_PORT` to avoid a host-port collision. Keep this
-port on a trusted LAN or restrict it with the host firewall: PaperWrench has no
-built-in login and anyone who can reach it can exercise the configured token.
+port on a trusted LAN or restrict it with the host firewall. Login prevents use
+of a shared credential but does not encrypt an HTTP-only connection.
 If GHCR reports that the package is private or missing, wait for publication
 and public package visibility before using this pull-based installation.
 
@@ -67,7 +62,8 @@ work around volume permissions. Compose makes the root filesystem read-only,
 drops capabilities and uses `/tmp` as tmpfs. Keep `/data` on reliable local disk;
 SQLite WAL and the runtime lock are not a distributed deployment protocol.
 
-The token must never be in a Vite variable or browser configuration. The Docker
+The token must never be in a Vite variable or browser configuration. It is sent
+only in the login request and then retained in server memory. The Docker
 build context excludes local secrets, databases, caches and dependencies.
 
 ## Advanced: reverse proxy and HTTPS (optional)
@@ -83,6 +79,12 @@ means inspect History, never automatically submit again. The original
 `docker-compose.yml` binds to loopback for this style of deployment.
 
 ## Upgrade from M12 or earlier development checkouts
+
+Legacy `PAPERLESS_TOKEN` and `PAPERLESS_TOKEN_FILE` values are not imported into
+user sessions and grant nobody access. Remove them before upgrading. This is
+deliberate: automatically assigning the former shared token would silently give
+every visitor its privileges. After the upgrade each operator signs in with an
+individual Paperless token; process restart and logout require signing in again.
 
 1. Record the old commit/image and database revision. Stop creating Jobs, wait
    for active Jobs to finish, and pause external writers during any document

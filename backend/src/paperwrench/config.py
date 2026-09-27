@@ -5,8 +5,9 @@ Configuration is environment-driven (see ``.env.example``). Two prefixes exist:
 * ``PAPERLESS_*``  - how to reach the Paperless-ngx instance we orchestrate.
 * ``PAPERWRENCH_*`` - PaperWrench's own behaviour.
 
-The Paperless token is held as a :class:`~pydantic.SecretStr` and must never be
-persisted to SQLite, returned by an endpoint, or logged. See ADR-0002.
+Legacy shared-token fields remain parseable for downgrade compatibility but
+normal operation uses per-user server-side sessions. Tokens must never be
+persisted to SQLite, returned by an endpoint, or logged. See ADR-0016.
 """
 
 from __future__ import annotations
@@ -118,6 +119,21 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(
         default_factory=list, validation_alias="PAPERWRENCH_CORS_ORIGINS"
     )
+    session_ttl_seconds: Annotated[int, Field(ge=300, le=604800)] = Field(
+        default=28800,
+        validation_alias="PAPERWRENCH_SESSION_TTL_SECONDS",
+        description="Absolute login-session lifetime; defaults to eight hours.",
+    )
+    session_revalidate_seconds: Annotated[int, Field(ge=0, le=3600)] = Field(
+        default=300,
+        validation_alias="PAPERWRENCH_SESSION_REVALIDATE_SECONDS",
+        description="How often Paperless token revocation is checked.",
+    )
+    session_cookie_secure: bool | None = Field(
+        default=None,
+        validation_alias="PAPERWRENCH_SESSION_COOKIE_SECURE",
+        description="Force Secure cookies; unset selects it from the request scheme.",
+    )
 
     # Directory containing the built SPA. Defaults to the packaged
     # `paperwrench/static` produced by `vite build`, which is what the
@@ -156,8 +172,13 @@ class Settings(BaseSettings):
 
     @property
     def paperless_configured(self) -> bool:
-        """True when both a URL and a token are present."""
+        """True when the shared-token legacy configuration is complete."""
         return bool(self.paperless_url) and bool(self.paperless_token.get_secret_value())
+
+    @property
+    def paperless_login_configured(self) -> bool:
+        """A URL is sufficient for per-user token login."""
+        return bool(self.paperless_url)
 
     @property
     def accept_header(self) -> str:

@@ -102,15 +102,13 @@ See [docs/roadmap.md](docs/roadmap.md), [preview API](docs/preview-api.md) and
 
 ## Quick start
 
-Requires an existing Paperless-ngx Docker stack and an API token
-(*Settings > My Profile > API Auth Token*). This local-network setup needs no
-domain, TLS certificate or reverse proxy.
+Requires an existing Paperless-ngx Docker stack. Each user signs in with the
+API token from *Settings > My Profile > API Auth Token*. This local-network
+setup needs no domain, TLS certificate or reverse proxy.
 
 ```bash
 git clone https://github.com/flowent59/PaperWrench.git
 cd PaperWrench
-mkdir -p secrets
-${EDITOR:-vi} secrets/paperless_token  # paste the dedicated Paperless API token
 PAPERLESS_DOCKER_NETWORK=paperless_default docker compose -f docker-compose.paperless.yml pull
 PAPERLESS_DOCKER_NETWORK=paperless_default docker compose -f docker-compose.paperless.yml up -d
 ```
@@ -148,30 +146,27 @@ Full instructions in [docs/development.md](docs/development.md).
 
 Read this before deciding where to run PaperWrench.
 
-**PaperWrench has no authentication of its own.** It is designed to run on a
-trusted network - a home LAN, a private VLAN, behind a VPN, or behind a reverse
-proxy that performs authentication. Anyone who can reach the PaperWrench port
-can modify documents in your Paperless library using your token.
+PaperWrench authenticates each user by validating their own Paperless API token.
+The resulting session is held in an `HttpOnly`, `SameSite=Strict` cookie and
+state-changing requests require a per-session CSRF token. On a trusted HTTP-only
+LAN the token is still encrypted in transit by neither application; use HTTPS
+when the network is not fully trusted.
 
 What this means concretely:
 
-- **Do not expose PaperWrench to the internet** without an authenticating
-  reverse proxy in front of it (Authelia, Authentik, oauth2-proxy, basic auth,
-  a VPN - anything that terminates identity).
+- **Do not expose PaperWrench over plaintext internet.** Put it behind HTTPS,
+  restrict direct backend access, and forward the original scheme correctly.
 - **The token is as powerful as the user it belongs to.** Create a dedicated
   Paperless user with only the permissions you are willing to delegate, rather
   than using an administrator token.
-- **Use `PAPERLESS_TOKEN_FILE`** with a Docker secret in preference to an
-  inline environment variable, which is visible to anything that can inspect
-  the container.
 - **Back up your Paperless library.** M5 edits have no durable rollback.
   `/data` holds durable Job history and write provenance. M8 cannot restore data.
 - **Keep TLS verification on for HTTPS connections.**
   `PAPERWRENCH_PAPERLESS_VERIFY_SSL=false` exists for self-signed certificates
   on a LAN, and it removes protection against an active network attacker.
 
-What PaperWrench does *not* do: it never sends your token to the browser, never
-writes it to its database, never includes it in logs (log output is scrubbed at
+What PaperWrench does *not* do: after login it never sends your token back to the
+browser, never writes it to its database, never includes it in logs (log output is scrubbed at
 the logging layer, not at each call site), and never contacts any third-party
 service. There is no telemetry.
 

@@ -4,8 +4,8 @@
 # Paperless-ngx instance: PaperWrench connects to the one you already run, and
 # Paperless-ngx remains the sole source of truth.
 #
-# Point PAPERLESS_URL at your existing instance and provide a token that has
-# only the permissions you are willing to delegate (see docs/security.md).
+# Point PAPERLESS_URL at your existing instance. Each user signs in with their
+# own Paperless API token (see docs/security.md).
 
 services:
   paperwrench:
@@ -18,9 +18,6 @@ services:
     environment:
       # --- Paperless-ngx connection (required) ---------------------------
       PAPERLESS_URL: ${PAPERLESS_URL:?set PAPERLESS_URL in your .env}
-      # Prefer PAPERLESS_TOKEN_FILE with a Docker secret over an inline token.
-      PAPERLESS_TOKEN: ${PAPERLESS_TOKEN:-}
-      PAPERLESS_TOKEN_FILE: ${PAPERLESS_TOKEN_FILE:-}
       # Pinned explicitly rather than relying on the server default (ADR-0003).
       PAPERWRENCH_PAPERLESS_API_VERSION: "10"
 
@@ -31,6 +28,8 @@ services:
       # Bounded write concurrency against Paperless (hard ceiling: 16).
       PAPERWRENCH_MAX_CONCURRENCY: ${PAPERWRENCH_MAX_CONCURRENCY:-4}
       PAPERWRENCH_DEFAULT_PAGE_SIZE: "100"
+      PAPERWRENCH_SESSION_TTL_SECONDS: ${PAPERWRENCH_SESSION_TTL_SECONDS:-28800}
+      PAPERWRENCH_SESSION_REVALIDATE_SECONDS: ${PAPERWRENCH_SESSION_REVALIDATE_SECONDS:-300}
     volumes:
       # Jobs, operations and history. Back this up: it is what makes a
       # rollback possible after a bulk write.

@@ -1,34 +1,45 @@
-"""Shared, app-lifecycle-scoped dependencies.
+"""Authentication-aware dependencies shared by API endpoints.
 
-Most PaperWrench endpoints (see ``api/v1/metadata.py``) deliberately build a
-short-lived :class:`~paperwrench.paperless.client.PaperlessClient` per
-request, because M2 had no consumer that needed anything longer-lived.
-
-The M3 documents API is that consumer: listing a page of documents means
-resolving every tag, correspondent, document type and custom field
-definition it references, and doing that from scratch on every request would
-refetch the same handful of reference collections for every single page a
-user turns. :func:`get_metadata_registry` and :func:`get_paperless_client`
-hand out the single instances created once in :mod:`paperwrench.main`'s
-lifespan, so the TTL cache in :class:`~paperwrench.paperless.registry.MetadataRegistry`
-actually gets to do its job.
+Each server-side login session owns one Paperless client and metadata cache.
+FastAPI caches these dependency results within a request, while the session
+store keeps them isolated across users.
 """
 
 from __future__ import annotations
 
+from fastapi import Depends
 from fastapi import Request
 
+from paperwrench.auth.service import SESSION_COOKIE
+from paperwrench.auth.service import AuthSession
 from paperwrench.paperless import MetadataRegistry
 from paperwrench.paperless import PaperlessClient
 
 
-def get_paperless_client(request: Request) -> PaperlessClient:
-    """The single, app-lifecycle ``PaperlessClient`` created at startup."""
-    client: PaperlessClient = request.app.state.paperless_client
-    return client
+async def get_auth_session(request: Request) -> AuthSession:
+    """Resolve and periodically revalidate the opaque browser session."""
+    store = request.app.state.sessions
+    record: AuthSession = await store.resolve(request.cookies.get(SESSION_COOKIE))
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        store.verify_csrf(record, request.headers.get("x-csrf-token"))
+    request.state.auth = record
+    return record
 
 
-def get_metadata_registry(request: Request) -> MetadataRegistry:
-    """The single, app-lifecycle ``MetadataRegistry`` created at startup."""
-    registry: MetadataRegistry = request.app.state.metadata_registry
-    return registry
+async def require_session(record: AuthSession = Depends(get_auth_session)) -> None:
+    """Router-level dependency used to protect the application API."""
+    _ = record
+
+
+async def get_paperless_client(
+    record: AuthSession = Depends(get_auth_session),
+) -> PaperlessClient:
+    """The current user's server-side Paperless client."""
+    return record.client
+
+
+async def get_metadata_registry(
+    record: AuthSession = Depends(get_auth_session),
+) -> MetadataRegistry:
+    """Metadata cache scoped to the authenticated Paperless account."""
+    return record.registry

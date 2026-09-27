@@ -32,6 +32,7 @@ from urllib.parse import urlsplit
 
 import httpx
 import structlog
+from pydantic import SecretStr
 
 from paperwrench.config import Settings
 from paperwrench.errors import PaperlessForbiddenError
@@ -171,6 +172,11 @@ class PaperlessClient:
         if self._client is not None and not self._external_client:
             await self._client.aclose()
             self._client = None
+
+    async def invalidate_credentials(self) -> None:
+        """Close the transport and make a revoked session credential unusable."""
+        await self.aclose()
+        object.__setattr__(self._settings, "paperless_token", SecretStr(""))
 
     # ----------------------------------------------------------------- plumbing
     async def _request(
@@ -361,6 +367,19 @@ class PaperlessClient:
             error_code=None if compatible else "PAPERLESS_INCOMPATIBLE",
             error_message=note,
         )
+
+    async def get_profile(self) -> dict[str, Any]:
+        """Return the authenticated user's Paperless profile.
+
+        Paperless documents ``/api/profile/`` as the self-service endpoint,
+        available without permission to enumerate other users. The raw shape
+        is consumed only by the authentication boundary and never proxied.
+        """
+        response = await self._request("GET", "/api/profile/")
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise PaperlessIncompatibleError("Paperless returned an invalid profile response.")
+        return payload
 
     # -------------------------------------------------------------- pagination
     async def _get_page(self, path: str, params: dict[str, Any]) -> dict[str, Any]:

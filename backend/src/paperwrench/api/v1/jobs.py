@@ -6,6 +6,8 @@ from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 
+from paperwrench.api.deps import get_metadata_registry
+from paperwrench.api.deps import get_paperless_client
 from paperwrench.api.v1.previews import get_previews
 from paperwrench.db.models import TargetStatus
 from paperwrench.jobs import store
@@ -17,6 +19,8 @@ from paperwrench.jobs.model import JobView
 from paperwrench.jobs.model import OperationView
 from paperwrench.jobs.model import TargetView
 from paperwrench.jobs.rollback import create_rollback
+from paperwrench.paperless import MetadataRegistry
+from paperwrench.paperless import PaperlessClient
 from paperwrench.previews.model import CreatedPreview
 from paperwrench.previews.service import PreviewService
 
@@ -34,9 +38,15 @@ def engine(request: Request) -> JobEngine:
 
 
 @router.post("", response_model=JobView, status_code=201)
-async def apply_preview(body: CreateJob, worker: JobEngine = Depends(engine)) -> JobView:
+async def apply_preview(
+    body: CreateJob,
+    worker: JobEngine = Depends(engine),
+    client: PaperlessClient = Depends(get_paperless_client),
+    registry: MetadataRegistry = Depends(get_metadata_registry),
+) -> JobView:
     worker.check_available()
     job_id = store.create_job(body)
+    worker.bind(job_id, client, registry)
     worker.wake.set()
     return store.job_view(job_id)
 
@@ -72,7 +82,13 @@ def operations(
 
 
 @router.post("/{job_id}/resume", response_model=JobView)
-async def resume(job_id: int, worker: JobEngine = Depends(engine)) -> JobView:
+async def resume(
+    job_id: int,
+    worker: JobEngine = Depends(engine),
+    client: PaperlessClient = Depends(get_paperless_client),
+    registry: MetadataRegistry = Depends(get_metadata_registry),
+) -> JobView:
+    worker.bind(job_id, client, registry)
     worker.resume(job_id)
     return store.job_view(job_id)
 
@@ -82,8 +98,10 @@ async def rollback_preview(
     job_id: int,
     worker: JobEngine = Depends(engine),
     previews: PreviewService = Depends(get_previews),
+    client: PaperlessClient = Depends(get_paperless_client),
+    registry: MetadataRegistry = Depends(get_metadata_registry),
 ) -> CreatedPreview:
-    return await previews.create(None, worker.client, worker.registry, rollback_of_job_id=job_id)
+    return await previews.create(None, client, registry, rollback_of_job_id=job_id)
 
 
 @router.post("/{job_id}/rollback", response_model=JobView, status_code=201)
@@ -91,8 +109,11 @@ async def rollback(
     job_id: int,
     body: CreateRollback,
     worker: JobEngine = Depends(engine),
+    client: PaperlessClient = Depends(get_paperless_client),
+    registry: MetadataRegistry = Depends(get_metadata_registry),
 ) -> JobView:
     worker.check_available()
     rollback_id = create_rollback(job_id, body)
+    worker.bind(rollback_id, client, registry)
     worker.wake.set()
     return store.job_view(rollback_id)

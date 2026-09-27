@@ -1,16 +1,20 @@
 # MVP security and accessibility review
 
-PaperWrench 0.1.0 is a single-operator tool. Anyone who can reach its API can
-exercise the configured Paperless credential and read local history. It does
-not implement login, roles, multi-tenancy or a public internet security boundary.
-For LAN installation, restrict the published HTTP port to trusted devices with
-the host firewall or a private VLAN, and use a dedicated least-privilege Paperless
-token. A domain, TLS and reverse proxy are optional for this local deployment.
-If publishing beyond the trusted LAN, protect every route with authenticated TLS
-at the reverse proxy; retain firewall restrictions.
+PaperWrench authenticates users with their own Paperless API token. The token is
+validated through Paperless `/api/profile/`, retained only in process memory,
+and replaced in the browser by an opaque `HttpOnly`, `SameSite=Strict` session
+cookie. Sessions expire after eight hours by default, are revoked on logout or
+restart, and revalidate the upstream token every five minutes. State-changing
+requests additionally require an in-memory CSRF token and pass the origin guard.
 
-Origin checks are a browser safeguard, not authentication: non-browser clients
-can omit Origin. Direct LAN requests use their actual HTTP Host (IP:port or
+For HTTP-only trusted-LAN deployments, cookies cannot use the `Secure` flag and
+the login token crosses the LAN in plaintext. Restrict the port to trusted devices.
+For any less trusted network, terminate HTTPS at a reverse proxy, forward the
+original scheme, force `PAPERWRENCH_SESSION_COOKIE_SECURE=true`, and keep the
+backend unreachable directly.
+
+Origin checks complement authentication and CSRF; non-browser clients can omit
+Origin but still need a valid session and CSRF token. Direct LAN requests use their actual HTTP Host (IP:port or
 localhost:port) for same-origin checks. A hostile Host/DNS environment requires
 proxy host allowlisting.
 
@@ -27,7 +31,9 @@ automatic mutation retry. The Paperless GET/PATCH race remains: pause external
 writers, particularly for replacement-style custom-field writes. Readback cannot
 recover overwritten external data or prove authorship after a lost response.
 
-The container runs non-root with a read-only root filesystem in Compose. Keep
+Credentials are not recoverable after restart. Durable jobs remain interrupted
+until their owner authenticates and explicitly resumes them. The container runs
+non-root with a read-only root filesystem in Compose. Keep
 `/data` and backups private; preview expiry is logical deletion, not secure erasure.
 See [deployment.md](deployment.md) for consistent SQLite snapshots and restoration.
 

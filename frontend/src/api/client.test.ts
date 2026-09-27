@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ApiError, apiFetch, NetworkError, systemApi } from './client'
+import { ApiError, apiFetch, authApi, clearBrowserSession, NetworkError, systemApi } from './client'
 
 function mockFetch(response: Response | Error) {
   const spy = vi.fn(
@@ -21,6 +21,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 afterEach(() => {
+  clearBrowserSession()
   vi.unstubAllGlobals()
 })
 
@@ -65,7 +66,7 @@ describe('apiFetch', () => {
     await expect(apiFetch('/system/health')).rejects.toBeInstanceOf(NetworkError)
   })
 
-  it('never sends credentials or a Paperless token', async () => {
+  it('sends only the opaque session cookie, never an authorization header', async () => {
     const spy = mockFetch(jsonResponse({}))
 
     await apiFetch('/system/health')
@@ -74,7 +75,24 @@ describe('apiFetch', () => {
     const headers = JSON.stringify(init?.headers ?? {}).toLowerCase()
     expect(headers).not.toContain('authorization')
     expect(headers).not.toContain('token')
-    expect(init?.credentials).toBeUndefined()
+    expect(init?.credentials).toBe('include')
+  })
+
+  it('keeps the Paperless token in the login body and uses CSRF afterwards', async () => {
+    const spy = mockFetch(jsonResponse({
+      user_id: 1, username: 'alice', display_name: 'Alice',
+      expires_at: '2030-01-01T00:00:00Z', csrf_token: 'csrf-value',
+    }))
+
+    await authApi.login('paperless-secret')
+    await apiFetch('/collections', { method: 'POST', body: '{}' })
+
+    const loginInit = spy.mock.calls[0]?.[1] as RequestInit
+    const requestInit = spy.mock.calls[1]?.[1] as RequestInit
+    expect(loginInit.body).toBe(JSON.stringify({ token: 'paperless-secret' }))
+    expect(JSON.stringify(loginInit.headers)).not.toContain('paperless-secret')
+    expect(requestInit.body).not.toContain('paperless-secret')
+    expect(requestInit.headers).toMatchObject({ 'X-CSRF-Token': 'csrf-value' })
   })
 })
 
