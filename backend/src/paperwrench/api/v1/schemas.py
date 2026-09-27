@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from paperwrench.api.deps import get_metadata_registry
+from paperwrench.api.deps import get_owner_id
 from paperwrench.api.deps import get_paperless_client
 from paperwrench.api.v1.documents import build_query_params
 from paperwrench.db.base import utcnow
@@ -39,9 +40,9 @@ def _missing() -> PaperWrenchError:
     return PaperWrenchError("Schema not found.", status_code=404, code=ErrorCode.NOT_FOUND)
 
 
-def _row(db: Session, schema_id: int) -> DocumentSchema:
+def _row(db: Session, schema_id: int, owner_id: int) -> DocumentSchema:
     row = db.get(DocumentSchema, schema_id)
-    if row is None:
+    if row is None or row.owner_id != owner_id:
         raise _missing()
     return row
 
@@ -102,8 +103,14 @@ def _save(row: DocumentSchema, schema: SchemaDefinition, db: Session) -> None:
 
 
 @router.get("", response_model=list[SchemaView])
-def list_schemas(db: Session = Depends(get_db)) -> list[SchemaView]:
-    rows = db.scalars(select(DocumentSchema).order_by(DocumentSchema.name)).all()
+def list_schemas(
+    db: Session = Depends(get_db), owner_id: int = Depends(get_owner_id)
+) -> list[SchemaView]:
+    rows = db.scalars(
+        select(DocumentSchema)
+        .where(DocumentSchema.owner_id == owner_id)
+        .order_by(DocumentSchema.name)
+    ).all()
     return [_view(row) for row in rows]
 
 
@@ -112,16 +119,21 @@ async def create_schema(
     schema: SchemaDefinition,
     registry: MetadataRegistry = Depends(get_metadata_registry),
     db: Session = Depends(get_db),
+    owner_id: int = Depends(get_owner_id),
 ) -> SchemaView:
     await _validate(schema, registry)
-    row = DocumentSchema()
+    row = DocumentSchema(owner_id=owner_id)
     _save(row, schema, db)
     return _view(row)
 
 
 @router.get("/{schema_id}", response_model=SchemaView)
-def get_schema(schema_id: int, db: Session = Depends(get_db)) -> SchemaView:
-    return _view(_row(db, schema_id))
+def get_schema(
+    schema_id: int,
+    db: Session = Depends(get_db),
+    owner_id: int = Depends(get_owner_id),
+) -> SchemaView:
+    return _view(_row(db, schema_id, owner_id))
 
 
 @router.put("/{schema_id}", response_model=SchemaView)
@@ -130,16 +142,21 @@ async def update_schema(
     schema: SchemaDefinition,
     registry: MetadataRegistry = Depends(get_metadata_registry),
     db: Session = Depends(get_db),
+    owner_id: int = Depends(get_owner_id),
 ) -> SchemaView:
-    row = _row(db, schema_id)
+    row = _row(db, schema_id, owner_id)
     await _validate(schema, registry)
     _save(row, schema, db)
     return _view(row)
 
 
 @router.delete("/{schema_id}", status_code=204)
-def delete_schema(schema_id: int, db: Session = Depends(get_db)) -> Response:
-    row = _row(db, schema_id)
+def delete_schema(
+    schema_id: int,
+    db: Session = Depends(get_db),
+    owner_id: int = Depends(get_owner_id),
+) -> Response:
+    row = _row(db, schema_id, owner_id)
     db.delete(row)
     db.commit()
     return Response(status_code=204)
@@ -153,8 +170,9 @@ async def evaluate_schema(
     db: Session = Depends(get_db),
     client: PaperlessClient = Depends(get_paperless_client),
     registry: MetadataRegistry = Depends(get_metadata_registry),
+    owner_id: int = Depends(get_owner_id),
 ) -> SchemaEvaluationPage:
-    schema = _definition(_row(db, schema_id))
+    schema = _definition(_row(db, schema_id, owner_id))
     definitions = {field.id: field for field in await registry.all_custom_fields()}
     validate_rules(schema.rules, await build_catalog(registry))
     request = DatasetPageRequest(

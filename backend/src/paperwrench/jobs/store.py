@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy import text
+from sqlalchemy import true
 from sqlalchemy.orm import Session
 
 from paperwrench.db.base import utcnow
@@ -38,6 +39,7 @@ from paperwrench.previews.service import stale
 from paperwrench.transformations.model import FieldValue
 
 ACTIVE_TARGETS = (TargetStatus.PENDING, TargetStatus.READING, TargetStatus.WRITING)
+UNSCOPED_OWNER = object()
 
 
 def encoded(value: Any) -> str:
@@ -64,7 +66,7 @@ def rollback_candidate(operation: JobOperation) -> bool:
 _field_value: TypeAdapter[FieldValue] = TypeAdapter(FieldValue)
 
 
-def create_job(request: CreateJob) -> int:
+def create_job(request: CreateJob, owner_id: int | None = None) -> int:
     spec = request.transformation
     from paperwrench.filters.model import CustomFieldRef
 
@@ -75,8 +77,9 @@ def create_job(request: CreateJob) -> int:
         raise limit("Custom writes require acknowledgement of the external-writer race.")
     with session_scope() as session:
         session.execute(text("BEGIN IMMEDIATE"))
-        summary = PreviewService().claim(session, request.preview_id, request)
+        summary = PreviewService().claim(session, request.preview_id, request, owner_id)
         job = Job(
+            owner_id=owner_id,
             type=JobType.TRANSFORM,
             title="Document transformation",
             preview_id=request.preview_id,
@@ -142,9 +145,11 @@ def create_job(request: CreateJob) -> int:
         return job.id
 
 
-def require_job(session: Session, job_id: int) -> Job:
+def require_job(
+    session: Session, job_id: int, owner_id: int | None | object = UNSCOPED_OWNER
+) -> Job:
     job = session.get(Job, job_id)
-    if job is None:
+    if job is None or (owner_id is not UNSCOPED_OWNER and job.owner_id != owner_id):
         raise NotFoundError("Job not found.")
     return job
 
@@ -217,9 +222,9 @@ def _view(session: Session, job: Job) -> JobView:
     )
 
 
-def job_view(job_id: int) -> JobView:
+def job_view(job_id: int, owner_id: int | None | object = UNSCOPED_OWNER) -> JobView:
     with session_scope() as session:
-        return _view(session, require_job(session, job_id))
+        return _view(session, require_job(session, job_id, owner_id))
 
 
 def _pagination(page: int, page_size: int, total: int) -> dict[str, int]:
@@ -233,21 +238,32 @@ def _pagination(page: int, page_size: int, total: int) -> dict[str, int]:
     }
 
 
-def job_page(page: int, page_size: int) -> HistoryPage[JobView]:
+def job_page(
+    page: int, page_size: int, owner_id: int | None | object = UNSCOPED_OWNER
+) -> HistoryPage[JobView]:
     with session_scope() as session:
-        total = session.scalar(select(func.count()).select_from(Job)) or 0
+        condition = true() if owner_id is UNSCOPED_OWNER else Job.owner_id == owner_id
+        total = session.scalar(select(func.count()).select_from(Job).where(condition)) or 0
         pagination = _pagination(page, page_size, total)
         jobs = session.scalars(
-            select(Job).order_by(Job.id.desc()).limit(page_size).offset((page - 1) * page_size)
+            select(Job)
+            .where(condition)
+            .order_by(Job.id.desc())
+            .limit(page_size)
+            .offset((page - 1) * page_size)
         )
         return HistoryPage(items=[_view(session, job) for job in jobs], **pagination)
 
 
 def target_page(
-    job_id: int, page: int, page_size: int, status: TargetStatus | None
+    job_id: int,
+    page: int,
+    page_size: int,
+    status: TargetStatus | None,
+    owner_id: int | None | object = UNSCOPED_OWNER,
 ) -> HistoryPage[TargetView]:
     with session_scope() as session:
-        require_job(session, job_id)
+        require_job(session, job_id, owner_id)
         condition = JobTarget.job_id == job_id
         if status is not None:
             condition = condition & (JobTarget.status == status)
@@ -284,10 +300,14 @@ def target_page(
 
 
 def operation_page(
-    job_id: int, page: int, page_size: int, document_id: int | None
+    job_id: int,
+    page: int,
+    page_size: int,
+    document_id: int | None,
+    owner_id: int | None | object = UNSCOPED_OWNER,
 ) -> HistoryPage[OperationView]:
     with session_scope() as session:
-        require_job(session, job_id)
+        require_job(session, job_id, owner_id)
         condition = JobOperation.job_id == job_id
         if document_id is not None:
             condition = condition & (JobOperation.document_id == document_id)

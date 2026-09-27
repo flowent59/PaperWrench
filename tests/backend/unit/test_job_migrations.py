@@ -42,6 +42,7 @@ def test_m8_upgrade_legacy_targets_and_drift(tmp_path: Path) -> None:
             )
         ) == [(7, "ambiguous"), (8, "ambiguous")]
         assert connection.scalar(text("SELECT status FROM jobs")) == "interrupted"
+        assert connection.scalar(text("SELECT owner_id FROM jobs")) is None
         assert connection.scalar(text("SELECT written_value_json FROM job_operations")) == '"new"'
         connection.execute(text("DELETE FROM jobs WHERE id=1"))
         assert connection.scalar(text("SELECT count(*) FROM job_targets")) == 0

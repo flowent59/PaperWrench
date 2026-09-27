@@ -8,6 +8,7 @@ from fastapi import Query
 from sqlalchemy.orm import Session
 
 from paperwrench.api.deps import get_metadata_registry
+from paperwrench.api.deps import get_owner_id
 from paperwrench.api.deps import get_paperless_client
 from paperwrench.api.v1.documents import build_query_params
 from paperwrench.api.v1.schemas import _definition
@@ -36,8 +37,9 @@ async def quality_page(
     db: Session = Depends(get_db),
     client: PaperlessClient = Depends(get_paperless_client),
     registry: MetadataRegistry = Depends(get_metadata_registry),
+    owner_id: int = Depends(get_owner_id),
 ) -> QualityPage:
-    schema = _definition(_row(db, schema_id))
+    schema = _definition(_row(db, schema_id, owner_id))
     catalog = await build_catalog(registry)
     validate_rules(schema.rules, catalog)
     definitions = {field.id: field for field in await registry.all_custom_fields()}

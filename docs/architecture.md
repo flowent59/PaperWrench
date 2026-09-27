@@ -137,16 +137,11 @@ M3/M4.
 
 ### The Explorer's documents API (M3, rebuilt on the Filter Engine in M4)
 
-`api/v1/documents.py` is the first real consumer of the Metadata Registry
-as an app-lifecycle singleton rather than a short-lived per-request client:
-`main.py`'s `lifespan` now constructs one `PaperlessClient` and one
-`MetadataRegistry` and stores them on `app.state` for the life of the
-process, and `api/deps.py` hands them out as FastAPI dependencies. This is
-the decision `metadata.py`'s M2 docstring explicitly deferred ("out of
-scope for M2, better justified once a real consumer needs it") — the
-Explorer's document list, which must resolve tags/correspondents/document
-types/custom fields on every page without a fresh registry warm-up per
-request, is that consumer.
+`api/v1/documents.py` consumes the authenticated session's Metadata Registry.
+Each login owns one `PaperlessClient` and one `MetadataRegistry` in the
+server-side session store; `api/deps.py` supplies that pair without sharing a
+credential or metadata cache across users. The cache still outlives individual
+requests, so Explorer pages do not repeatedly warm the same reference data.
 
 `POST /api/v1/documents/query` is a normalized read model — a list of
 `DocumentListItem` inside a `DocumentPage` envelope
@@ -339,7 +334,7 @@ shared engine supplies execution, provenance and recovery. See
 
 The interesting parts:
 
-**`Job`** — type, status, transformation operations, original DatasetQuery/source,
+**`Job`** — owner, type, status, transformation operations, original DatasetQuery/source,
 preview fingerprints, timestamps and original/rollback linkage. Explicit IDs are
 not duplicated into the transformation JSON.
 
@@ -359,15 +354,16 @@ prevent replay of ambiguous or completed sends.
 **`RuntimeLock`** — a single row (`CHECK (id = 1)`) holding the instance id and
 heartbeat that enforce single-instance execution.
 
-**`DocumentSchema`** — versioned named applicability and typed rules, with no
-cached documents. **`Collection`, `CollectionDocument`, `AppSettings`** are
-supporting state. `AppSettings` deliberately has **no token column**: the Paperless token
-comes from the environment and is never persisted.
+**`DocumentSchema`** — owner-scoped versioned named applicability and typed rules,
+with no cached documents. **`Collection`, `CollectionDocument`, `Preview`,
+`AppSettings`** are supporting state. The owning Paperless user ID is recorded on
+each local root resource. `AppSettings` deliberately has **no token column**:
+per-user tokens live only in ephemeral server sessions.
 
 M12 collections use the existing static `Collection` and `CollectionDocument`
 tables. The compound membership key makes each Paperless ID unique within a
 collection. Creation and additions accept bounded explicit ID lists and verify
-visibility with the configured Paperless credential. A member page reads at most
+visibility with the owner's Paperless credential. A member page reads at most
 100 documents from Paperless. Deleted or inaccessible members keep their ID in
 SQLite and appear as unavailable with no document metadata; users can remove
 those rows. `kind=dynamic` and `filterset_json` remain reserved scaffolding.
@@ -532,16 +528,20 @@ cleanup and the future transactional handoff are specified in
 
 ## Security posture
 
-PaperWrench has no authentication of its own and is designed for a trusted
-network. See the threat model in the README before deploying it.
+PaperWrench validates each user's Paperless API token and keeps the resulting
+credential in an expiring server-side session. See the threat model in the README
+before deploying it.
 
 The properties it does guarantee:
 
-- The token lives in the backend process only — never in the database, never in
+- Each token lives in the backend process only — never in the database, never in
   a log (redaction is a structlog processor, so an ad-hoc log call cannot leak
   it), never in a response body.
 - Same-origin by construction; CORS is empty by default and an origin guard
-  rejects cross-origin state-changing requests regardless.
+  rejects cross-origin state-changing requests. Mutations also require a
+  per-session CSRF token.
+- Local resources and their child IDs are owner-scoped. Legacy unowned rows are
+  quarantined, and workers recheck job ownership before upstream I/O.
 - Security headers (`X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`) on every response.
 - The container runs as a non-root user with a read-only root filesystem and

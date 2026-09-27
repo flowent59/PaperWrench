@@ -152,25 +152,35 @@ class JobEngine:
         self.registry = registry
         self.settings = settings
         self.instance_id = instance_id
-        self._credentials: dict[int, tuple[PaperlessClient, MetadataRegistry]] = {}
+        self._credentials: dict[int, tuple[int, PaperlessClient, MetadataRegistry]] = {}
         self.stopped = False
         self.wake = asyncio.Event()
         self.workers: list[asyncio.Task[None]] = []
 
-    def bind(self, job_id: int, client: PaperlessClient, registry: MetadataRegistry) -> None:
+    def bind(
+        self,
+        job_id: int,
+        owner_id: int,
+        client: PaperlessClient,
+        registry: MetadataRegistry,
+    ) -> None:
         """Attach an active server-side credential to a durable job.
 
         The binding is deliberately not persisted. After restart, jobs remain
         interrupted until their owner authenticates and explicitly resumes.
         """
-        self._credentials[job_id] = (client, registry)
+        with session_scope() as session:
+            require_job(session, job_id, owner_id)
+        self._credentials[job_id] = (owner_id, client, registry)
 
-    def _credential_for(self, job_id: int) -> tuple[PaperlessClient, MetadataRegistry]:
+    def _credential_for(
+        self, job_id: int
+    ) -> tuple[int | None, PaperlessClient, MetadataRegistry]:
         credential = self._credentials.get(job_id)
         if credential is not None:
             return credential
         if self.client is not None and self.registry is not None:
-            return self.client, self.registry
+            return None, self.client, self.registry
         raise PaperWrenchError(
             "The job owner must sign in before this job can run.",
             status_code=409,
@@ -219,12 +229,12 @@ class JobEngine:
                 code=ErrorCode.SINGLE_INSTANCE_VIOLATION,
             ) from exc
 
-    def resume(self, job_id: int) -> None:
+    def resume(self, job_id: int, owner_id: int | None = None) -> None:
         self.check_available()
         with session_scope() as session:
             session.execute(text("BEGIN IMMEDIATE"))
             self.ensure_owner(session)
-            job = require_job(session, job_id)
+            job = require_job(session, job_id, owner_id)
             pending = session.scalar(
                 select(JobTarget.document_id)
                 .where(JobTarget.job_id == job_id, JobTarget.status == TargetStatus.PENDING)
@@ -385,12 +395,18 @@ class JobEngine:
         sent = False
         acknowledged = False
         try:
-            client, registry = self._credential_for(job_id)
+            owner_id, client, registry = self._credential_for(job_id)
             with session_scope() as session:
                 target = session.get(JobTarget, (job_id, document_id))
                 assert target is not None and target.preview_json is not None
                 staged = PreviewRow.model_validate_json(target.preview_json)
                 job = require_job(session, job_id)
+                if job.owner_id != owner_id:
+                    raise PaperWrenchError(
+                        "Job credential ownership changed before execution.",
+                        status_code=409,
+                        code=ErrorCode.CONFLICT,
+                    )
                 rollback = job.type == JobType.ROLLBACK
                 spec = (
                     staged.rollback_spec

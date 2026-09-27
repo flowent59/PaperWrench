@@ -63,13 +63,10 @@ def session(settings: Settings) -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(settings: Settings) -> Iterator[TestClient]:
-    """A TestClient running the real lifespan (engine + runtime lock)."""
-    from paperwrench.main import create_app
-
-    app = create_app(settings)
+def auth_record(settings: Settings) -> AuthSession:
+    """Mutable authenticated identity used by API contract tests."""
     paperless = PaperlessClient(settings)
-    record = AuthSession(
+    return AuthSession(
         session_id="test-session",
         paperless_user_id=1,
         username="test-user",
@@ -80,6 +77,15 @@ def client(settings: Settings) -> Iterator[TestClient]:
         client=paperless,
         registry=MetadataRegistry(paperless),
     )
+
+
+@pytest.fixture
+def client(settings: Settings, auth_record: AuthSession) -> Iterator[TestClient]:
+    """A TestClient running the real lifespan (engine + runtime lock)."""
+    from paperwrench.main import create_app
+
+    app = create_app(settings)
+    record = auth_record
     app.dependency_overrides[get_auth_session] = lambda: record
     with TestClient(app) as test_client:
         yield test_client

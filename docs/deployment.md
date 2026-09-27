@@ -86,6 +86,13 @@ deliberate: automatically assigning the former shared token would silently give
 every visitor its privileges. After the upgrade each operator signs in with an
 individual Paperless token; process restart and logout require signing in again.
 
+The ownership migration likewise leaves all v0.1 collections, schemas, previews,
+jobs and history unowned and invisible. Back up/export anything needed before the
+upgrade, then recreate definitions under the appropriate account. Do not edit
+`owner_id` manually: a guessed assignment can expose document IDs, before/written
+values and rollback authority to the wrong person. PaperWrench has no cross-user
+administrator view by default.
+
 1. Record the old commit/image and database revision. Stop creating Jobs, wait
    for active Jobs to finish, and pause external writers during any document
    mutation. Resolve uncertain operations manually in Paperless.
@@ -99,12 +106,12 @@ individual Paperless token; process restart and logout require signing in again.
    Review interrupted Jobs; resume only unsent targets explicitly. Startup sends
    no automatic document writes. Ambiguous targets are never replayed.
 
-M12 and 0.1.0 share Alembic head `c814b207f001`; no new schema revision is needed.
-Fresh install, repeated upgrade and M12 backup restoration are tested. The
-existing pre-M8 migration preserves legacy evidence as ambiguous/manual-review
-targets; it cannot create verified provenance. Old previews may require a new
-preview. M13 corrects the Compose API-version variable spelling to
-`PAPERWRENCH_PAPERLESS_API_VERSION` (default remains 10).
+The multi-user upgrade advances Alembic head to `d2f3a401b812`. Fresh install,
+repeated upgrade and populated v0.1 backup restoration are tested. The existing
+pre-M8 migration preserves legacy evidence as ambiguous/manual-review targets;
+the ownership migration preserves it as unowned, invisible evidence. Old previews
+require a new authenticated preview. `PAPERWRENCH_PAPERLESS_API_VERSION` remains
+10 by default.
 
 ## Backup
 
