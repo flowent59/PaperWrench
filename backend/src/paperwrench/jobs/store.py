@@ -146,7 +146,7 @@ def create_job(request: CreateJob, owner_id: int | None = None) -> int:
 
 
 def require_job(
-    session: Session, job_id: int, owner_id: int | None | object = UNSCOPED_OWNER
+    session: Session, job_id: int, owner_id: int | object | None = UNSCOPED_OWNER
 ) -> Job:
     job = session.get(Job, job_id)
     if job is None or (owner_id is not UNSCOPED_OWNER and job.owner_id != owner_id):
@@ -222,7 +222,7 @@ def _view(session: Session, job: Job) -> JobView:
     )
 
 
-def job_view(job_id: int, owner_id: int | None | object = UNSCOPED_OWNER) -> JobView:
+def job_view(job_id: int, owner_id: int | object | None = UNSCOPED_OWNER) -> JobView:
     with session_scope() as session:
         return _view(session, require_job(session, job_id, owner_id))
 
@@ -239,7 +239,7 @@ def _pagination(page: int, page_size: int, total: int) -> dict[str, int]:
 
 
 def job_page(
-    page: int, page_size: int, owner_id: int | None | object = UNSCOPED_OWNER
+    page: int, page_size: int, owner_id: int | object | None = UNSCOPED_OWNER
 ) -> HistoryPage[JobView]:
     with session_scope() as session:
         condition = true() if owner_id is UNSCOPED_OWNER else Job.owner_id == owner_id
@@ -260,7 +260,7 @@ def target_page(
     page: int,
     page_size: int,
     status: TargetStatus | None,
-    owner_id: int | None | object = UNSCOPED_OWNER,
+    owner_id: int | object | None = UNSCOPED_OWNER,
 ) -> HistoryPage[TargetView]:
     with session_scope() as session:
         require_job(session, job_id, owner_id)
@@ -304,7 +304,7 @@ def operation_page(
     page: int,
     page_size: int,
     document_id: int | None,
-    owner_id: int | None | object = UNSCOPED_OWNER,
+    owner_id: int | object | None = UNSCOPED_OWNER,
 ) -> HistoryPage[OperationView]:
     with session_scope() as session:
         require_job(session, job_id, owner_id)

@@ -46,7 +46,7 @@ from paperwrench.transformations.model import TransformationIssue
 def require_original(
     session: Session,
     job_id: int,
-    owner_id: int | None | object = UNSCOPED_OWNER,
+    owner_id: int | object | None = UNSCOPED_OWNER,
 ) -> Job:
     job = require_job(session, job_id, owner_id)
     if job.type != JobType.TRANSFORM or not JobStatus(job.status).is_terminal:
