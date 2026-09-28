@@ -5,9 +5,11 @@ from __future__ import annotations
 from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
+from typing import cast
 
 import httpx
 import respx
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 PROFILE = {
@@ -84,13 +86,14 @@ def test_expired_session_is_removed(unauthenticated_client: TestClient) -> None:
         "/api/v1/auth/login", json={"token": "expired-token-secret"}
     )
     session_id = unauthenticated_client.cookies["paperwrench_session"]
-    record = unauthenticated_client.app.state.sessions._sessions[session_id]
+    app = cast(FastAPI, unauthenticated_client.app)
+    record = app.state.sessions._sessions[session_id]
     record.expires_at = datetime.now(UTC) - timedelta(seconds=1)
 
     response = unauthenticated_client.get("/api/v1/auth/me")
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "AUTH_SESSION_EXPIRED"
-    assert session_id not in unauthenticated_client.app.state.sessions._sessions
+    assert session_id not in app.state.sessions._sessions
 
 
 @respx.mock
@@ -102,14 +105,15 @@ def test_revoked_token_invalidates_session(unauthenticated_client: TestClient) -
         "/api/v1/auth/login", json={"token": "revoked-token-secret"}
     )
     session_id = unauthenticated_client.cookies["paperwrench_session"]
-    record = unauthenticated_client.app.state.sessions._sessions[session_id]
+    app = cast(FastAPI, unauthenticated_client.app)
+    record = app.state.sessions._sessions[session_id]
     record.validated_at = datetime.now(UTC) - timedelta(hours=1)
 
     response = unauthenticated_client.get("/api/v1/auth/me")
     assert route.call_count == 2
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "AUTH_SESSION_REVOKED"
-    assert session_id not in unauthenticated_client.app.state.sessions._sessions
+    assert session_id not in app.state.sessions._sessions
 
 
 def test_protected_api_requires_login(unauthenticated_client: TestClient) -> None:
