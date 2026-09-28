@@ -1,11 +1,16 @@
-# Install, upgrade, back up and restore 0.1.0
+# Install, upgrade, back up and restore v0.2.0
 
-This guide covers the first release. After the generated release PR is merged
-and its image validation succeeds, the default Compose file pulls
-`ghcr.io/flowent59/paperwrench:0.1.0` without local compilation. Paperless-ngx
-3.2.1 is the fixed verified upstream. In the recorded compatibility run,
-Paperless `latest` resolved to that same 3.2.1 image digest; it did not exercise
-a newer release. PaperWrench never reads Paperless files or database.
+This guide covers fresh multi-user installations and upgrades from PaperWrench
+v0.1.x. Use the Compose files from the release you are installing: their default
+`PAPERWRENCH_IMAGE` is updated with each published version. Paperless-ngx 3.2.1
+is the fixed compatibility baseline and CI also exercises the current Paperless
+`latest` image. PaperWrench uses only the Paperless REST API; it never reads the
+Paperless database or document files.
+
+PaperWrench has no local user database and no bootstrap administrator. Every
+person signs in with their own Paperless API token. A fresh v0.2 deployment needs
+`PAPERLESS_URL`, but must not configure `PAPERLESS_TOKEN` or
+`PAPERLESS_TOKEN_FILE`.
 
 ## LAN installation alongside an existing Paperless stack
 
@@ -27,11 +32,11 @@ a newer release. PaperWrench never reads Paperless files or database.
    ```
 
 4. Check `docker compose -f docker-compose.paperless.yml ps`, open
-   `http://IP_DU_SERVEUR:PORT`, and verify the connection status in the UI or at
-   sign in with your own Paperless token, then verify the connection status in
-   the UI or at `/api/v1/system/paperless`. The SPA and API use the same HTTP origin, so no
-   CORS allowlist is needed. A healthy `/api/v1/system/health` only proves the
-   local database is available. Test a small preview before confirming a write.
+   `http://IP_DU_SERVEUR:PORT`, sign in with your own Paperless token, then
+   verify the connection status in the UI or at `/api/v1/system/paperless`.
+   The SPA and API use the same HTTP origin, so no CORS allowlist is needed. A
+   healthy `/api/v1/system/health` only proves the local database is available.
+   Test a small preview before confirming a write.
 
 The example publishes only PaperWrench's HTTP port. Paperless is reached at
 `http://<PAPERLESS_SERVICE>:8000` through its existing Docker network, even if
@@ -66,19 +71,58 @@ The token must never be in a Vite variable or browser configuration. It is sent
 only in the login request and then retained in server memory. The Docker
 build context excludes local secrets, databases, caches and dependencies.
 
+## First sign-in and Paperless permissions
+
+Repeat these steps for every user; there is no shared or first-user credential:
+
+1. Sign in to Paperless as the account that will use PaperWrench.
+2. Open **My Profile** from the Paperless user menu. Under **API Auth Token**,
+   use the circular-arrow action to create or regenerate the token. This is the
+   token-authentication flow documented in the
+   [Paperless REST API guide](https://docs.paperless-ngx.com/api/#authorization).
+3. Copy the token directly into the PaperWrench sign-in form and submit it. Do
+   not put it in `.env`, Compose, a URL, browser storage or a password manager
+   shared with other PaperWrench users.
+4. Confirm that the displayed Paperless identity is the intended account, then
+   start with a read-only view or a small preview before applying a mutation.
+
+Regenerating a Paperless token invalidates the previous token. PaperWrench API
+tokens are tied to Paperless accounts; they are not independently scoped keys.
+PaperWrench therefore inherits that account's current global and object-level
+permissions. A user can see or edit only what Paperless returns for that user,
+and Paperless rechecks permissions during every operation. See Paperless's
+[permission model](https://docs.paperless-ngx.com/usage/#permissions). Use a
+dedicated, least-privileged Paperless account instead of an administrator
+account. Never give two people the same account or token: PaperWrench will
+correctly treat them as the same Paperless identity, so they will share
+PaperWrench-owned resources.
+
+The token is exchanged for an opaque `HttpOnly`, `SameSite=Strict` cookie. It is
+kept only in PaperWrench process memory, never in SQLite. Logout, process restart,
+absolute expiry or a revoked token detected during Paperless revalidation
+destroys the session and the user signs in again. The relevant settings are:
+
+| Setting | Default | Purpose |
+| --- | ---: | --- |
+| `PAPERWRENCH_SESSION_TTL_SECONDS` | `28800` | Absolute session lifetime (8 hours; allowed range 5 minutes to 7 days). |
+| `PAPERWRENCH_SESSION_REVALIDATE_SECONDS` | `300` | Interval before PaperWrench asks Paperless to validate the token again; `0` checks every request. |
+| `PAPERWRENCH_SESSION_COOKIE_SECURE` | `false` in Compose | Set `true` behind HTTPS when the original scheme is forwarded correctly. Direct application execution auto-detects it when unset. |
+
 ## Advanced: reverse proxy and HTTPS (optional)
 
 For remote access, put an authenticated TLS reverse proxy in front of **all**
 routes, including `/api`, assets and OpenAPI. Restrict direct access to the
 PaperWrench port. Forward the original Host and scheme; trust forwarded headers
-only from the proxy's addresses. Leave `PAPERWRENCH_CORS_ORIGINS` empty. See
+only from the proxy's addresses. Set `PAPERWRENCH_SESSION_COOKIE_SECURE=true`
+and verify login through the public HTTPS origin before enabling writes. Leave
+`PAPERWRENCH_CORS_ORIGINS` empty. See
 [security.md](security.md). Deploy at the origin root; URL subpath hosting is
 not supported. Disable proxy retries for mutations and allow at least the
 five-minute preview build window plus network overhead. A lost Apply response
 means inspect History, never automatically submit again. The original
 `docker-compose.yml` binds to loopback for this style of deployment.
 
-## Upgrade from M12 or earlier development checkouts
+## Upgrade from v0.1.0 or v0.1.1
 
 Legacy `PAPERLESS_TOKEN` and `PAPERLESS_TOKEN_FILE` values are not imported into
 user sessions and grant nobody access. Remove them before upgrading. This is
@@ -93,18 +137,25 @@ upgrade, then recreate definitions under the appropriate account. Do not edit
 values and rollback authority to the wrong person. PaperWrench has no cross-user
 administrator view by default.
 
-1. Record the old commit/image and database revision. Stop creating Jobs, wait
+1. Record the old version/image and database revision. Stop creating Jobs, wait
    for active Jobs to finish, and pause external writers during any document
    mutation. Resolve uncertain operations manually in Paperless.
 2. Back up PaperWrench and Paperless separately as described below. Do not
    upgrade without a recoverable copy of the working history.
-3. Stop the old application with `docker compose stop paperwrench`. Retain its
-   volume; **do not use `down -v`**. Pull the reviewed versioned image and run
+3. Remove `PAPERLESS_TOKEN` and `PAPERLESS_TOKEN_FILE` from `.env`, Compose,
+   Docker secrets and the service environment. Keep `PAPERLESS_URL`; verify it
+   is reachable from the PaperWrench container.
+4. Stop the old application with `docker compose stop paperwrench`. Retain its
+   volume; **do not use `down -v`**. Pull the reviewed v0.2 image and run
    `docker compose up -d` with the same project and volume. Use the local-build
    override above only when building a reviewed checkout yourself.
-4. Check health, connection, schemas, collections, History and nested routes.
-   Review interrupted Jobs; resume only unsent targets explicitly. Startup sends
-   no automatic document writes. Ambiguous targets are never replayed.
+5. Check `/api/v1/system/health`, sign in separately as each intended user, and
+   verify `/api/v1/system/paperless`. Confirm that old schemas, collections,
+   previews and History are not visible to any account. Recreate definitions
+   under their correct owners; do not copy or assign database owner IDs.
+6. Create a small preview under each representative permission set before any
+   write. Review interrupted Jobs; resume only an owned, unsent target explicitly.
+   Startup sends no automatic document writes. Ambiguous targets are never replayed.
 
 The multi-user upgrade advances Alembic head to `d2f3a401b812`. Fresh install,
 repeated upgrade and populated v0.1 backup restoration are tested. The existing
@@ -113,12 +164,30 @@ the ownership migration preserves it as unowned, invisible evidence. Old preview
 require a new authenticated preview. `PAPERWRENCH_PAPERLESS_API_VERSION` remains
 10 by default.
 
+These behaviors prevent unintended privilege escalation: the former deployment
+token creates no session, legacy rows acquire no owner, and no logged-in user or
+PaperWrench administrator can claim or inspect another user's local history.
+
+## Troubleshooting sign-in and sessions
+
+| Symptom | Meaning and action |
+| --- | --- |
+| Sign-in reports an invalid or unauthorized token | Confirm the token was copied from the intended Paperless account. Regenerate it in **My Profile**, then sign in again. Regeneration revokes the old token and all PaperWrench sessions using it fail at their next revalidation. |
+| A session returns to the sign-in page | The absolute lifetime elapsed, PaperWrench restarted, the user logged out, or Paperless rejected revalidation. This is expected because credentials are memory-only; sign in again. |
+| A document or metadata object is missing | Paperless can hide unauthorized objects as `404 Not Found`. Check the account's global and object-level view permissions in Paperless; do not use an administrator token to bypass diagnosis. |
+| Preview or apply reports a permission failure | The account lacks the required current edit permission, or it changed after preview. Correct the permission in Paperless and build a new preview; PaperWrench never falls back to a deployment token. |
+| Paperless is unavailable | From inside the PaperWrench container, verify DNS, port, network attachment and `PAPERLESS_URL`. `/api/v1/system/health` can remain healthy because it checks PaperWrench's local database, not Paperless. |
+| HTTPS login loops or the cookie is absent | Ensure the proxy forwards the original Host and HTTPS scheme, the browser uses the public HTTPS origin, and `PAPERWRENCH_SESSION_COOKIE_SECURE=true`. Do not expose the backend port as an alternate HTTP origin. |
+| Existing v0.1 resources disappeared | This is the intentional ownership quarantine, not deletion. Restore the pre-upgrade backup with the matching v0.1 image for audit/export, or recreate definitions under the correct v0.2 user. Never assign `owner_id` manually. |
+
 ## Backup
 
 PaperWrench history, before/written values, schemas and collections reside in
 `/data/paperwrench.db`. This contains sensitive metadata, even though it has no
-document files. Encrypt and restrict backups; include configuration separately,
-store credentials in a secret manager, and record image/commit plus Alembic head.
+document files. Encrypt and restrict backups; include non-secret configuration
+separately and record the image/commit plus Alembic head. User tokens are not in
+the database or deployment configuration and are intentionally absent from the
+backup.
 
 Quiesce Jobs first. The standard-library SQLite backup API copies committed WAL
 pages consistently while the process is running:
