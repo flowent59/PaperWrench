@@ -20,19 +20,25 @@ pytestmark = pytest.mark.live
 def test_compiled_mvp_journey(live_settings: Settings, tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[3]
     assert (root / "backend/src/paperwrench/static/index.html").is_file(), "Build SPA first"
-    env = os.environ.copy()
-    env.update({
+    server_env = os.environ.copy()
+    for legacy_name in ("PAPERLESS_TOKEN", "PAPERLESS_TOKEN_FILE"):
+        server_env.pop(legacy_name, None)
+    server_env.update({
         "PAPERLESS_URL": live_settings.paperless_url,
-        "PAPERLESS_TOKEN": live_settings.paperless_token.get_secret_value(),
-        "PAPERLESS_TOKEN_FILE": "",
         "PAPERWRENCH_DATABASE_URL": f"sqlite+pysqlite:///{tmp_path / 'browser.db'}",
         "PAPERWRENCH_ALLOW_LIVE_TESTS": "true",
     })
+    browser_env = {
+        **server_env,
+        # Only the disposable Playwright client receives this login secret;
+        # the PaperWrench server starts without any deployment-wide token.
+        "PAPERWRENCH_E2E_TOKEN": live_settings.paperless_token.get_secret_value(),
+    }
     log_path = tmp_path / "server.log"
     with log_path.open("w", encoding="utf-8") as log:
         server = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "paperwrench.main:app", "--host", "127.0.0.1",
-             "--port", "8020"], cwd=root, env=env, stdout=log, stderr=log,
+             "--port", "8020"], cwd=root, env=server_env, stdout=log, stderr=log,
         )
         try:
             for _ in range(100):
@@ -48,7 +54,7 @@ def test_compiled_mvp_journey(live_settings: Settings, tmp_path: Path) -> None:
                 pytest.fail("Acceptance server did not start")
             result = subprocess.run(
                 [shutil.which("node") or "node", "node_modules/@playwright/test/cli.js", "test"],
-                cwd=root / "frontend", env=env, capture_output=True, text=True,
+                cwd=root / "frontend", env=browser_env, capture_output=True, text=True,
                 encoding="utf-8", timeout=240,
             )
             output = result.stdout + result.stderr
