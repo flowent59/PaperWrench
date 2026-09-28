@@ -13,6 +13,17 @@
  */
 
 export const messages = {
+  auth: {
+    title: 'Sign in to PaperWrench',
+    description: 'Use the API token for your own Paperless-ngx account.',
+    token: 'Paperless API token',
+    storage: 'The token is sent once and kept only in server memory. It is never stored by this browser.',
+    signIn: 'Sign in',
+    signingIn: 'Signing in…',
+    signOut: 'Sign out',
+    checking: 'Checking your session…',
+    unreachable: 'Could not reach PaperWrench.',
+  },
   collections: {
     title: 'Collections', name: 'Name', description: 'Description', destination: 'Collection',
     new: 'New collection', create: 'Create collection', saveSelection: 'Save selected IDs',

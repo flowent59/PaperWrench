@@ -9,11 +9,23 @@ test('compiled SPA keeps nested routes after direct load and reload', async ({ p
       failedAssets.push(`${response.status()} ${response.url()}`)
     }
   })
-  await page.route('**/api/v1/**', route => route.fulfill({
-    status: 503,
-    contentType: 'application/json',
-    body: JSON.stringify({ error: { code: 'UNAVAILABLE', message: 'Route smoke test' } }),
-  }))
+  await page.route('**/api/v1/**', route => {
+    if (new URL(route.request().url()).pathname === '/api/v1/auth/me') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          user_id: 1, username: 'route-smoke', display_name: 'Route Smoke',
+          expires_at: '2099-01-01T00:00:00Z', csrf_token: 'route-smoke-csrf',
+        }),
+      })
+    }
+    return route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'UNAVAILABLE', message: 'Route smoke test' } }),
+    })
+  })
 
   for (const [path, heading] of [
     ['/documents/42', 'Inspector'],

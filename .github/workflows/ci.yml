@@ -302,7 +302,6 @@ jobs:
     env:
       PAPERWRENCH_DATABASE_URL: sqlite+pysqlite:///./ci-migrate.db
       PAPERLESS_URL: http://paperless.invalid
-      PAPERLESS_TOKEN: ci-placeholder
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -420,7 +419,6 @@ jobs:
           docker run -d --name pw \
             --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
             -e PAPERLESS_URL=http://paperless.invalid \
-            -e PAPERLESS_TOKEN=ci-placeholder \
             -p 8000:8000 paperwrench:ci
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8000/api/v1/system/health; then
@@ -436,34 +434,27 @@ jobs:
       - name: Installed release and nested compiled SPA routes
         run: docker exec -i pw python < scripts/smoke_release.py
 
-      - name: Probe endpoint degrades gracefully when Paperless is absent
-        # It must answer 200 with connected=false, never 5xx: the UI has to be
-        # able to render *why* it is disconnected on a fresh install.
+      - name: Paperless probe requires a per-user session
         run: |
-          body=$(curl -fsS http://127.0.0.1:8000/api/v1/system/paperless)
+          body=$(curl -sS -w '\n%{http_code}' http://127.0.0.1:8000/api/v1/system/paperless)
           echo "$body"
-          echo "$body" | grep -q '"connected":false'
+          echo "$body" | tail -1 | grep -q '^401$'
+          echo "$body" | head -n -1 | grep -q '"code":"AUTH_REQUIRED"'
 
       - name: Runs as a non-root user
         run: |
           uid=$(docker exec pw id -u)
           test "$uid" != "0" || { echo "::error::container runs as root"; exit 1; }
 
-      - name: Logs never contain the token
+      - name: Container has no deployment-wide Paperless token
         run: |
-          if docker logs pw 2>&1 | grep -q "ci-placeholder"; then
-            echo "::error::the Paperless token leaked into the logs"
-            docker logs pw
-            exit 1
-          fi
+          docker exec pw sh -c 'test -z "${PAPERLESS_TOKEN:-}" && test -z "${PAPERLESS_TOKEN_FILE:-}"'
 
-      - name: The token never reaches an HTTP response either
-        # /system/paperless is rendered in the browser; a token appearing in it
-        # would be a disclosure to every user of the UI.
+      - name: Public and unauthenticated responses contain no credentials
         run: |
           for path in /api/v1/system/paperless /api/v1/system/info /api/v1/system/health; do
-            if curl -fsS "http://127.0.0.1:8000${path}" | grep -q "ci-placeholder"; then
-              echo "::error::the Paperless token leaked into ${path}"
+            if curl -sS "http://127.0.0.1:8000${path}" | grep -Eqi 'paperless[_-]?token|ci-placeholder'; then
+              echo "::error::credential material leaked into ${path}"
               exit 1
             fi
           done

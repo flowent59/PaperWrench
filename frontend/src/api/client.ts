@@ -43,9 +43,20 @@ import type {
   CollectionDefinition,
   CollectionView,
   CollectionMemberPage,
+  AuthSession,
 } from './types'
 
 export const API_PREFIX = '/api/v1'
+let csrfToken: string | null = null
+
+function rememberSession(session: AuthSession): AuthSession {
+  csrfToken = session.csrf_token
+  return session
+}
+
+export function clearBrowserSession(): void {
+  csrfToken = null
+}
 
 export interface ApiErrorDetail {
   code: string
@@ -102,9 +113,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   try {
     response = await fetch(`${API_PREFIX}${path}`, {
       ...init,
+      credentials: 'include',
       headers: {
         Accept: 'application/json',
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(csrfToken && init?.method && !['GET', 'HEAD', 'OPTIONS'].includes(init.method)
+          ? { 'X-CSRF-Token': csrfToken }
+          : {}),
         ...init?.headers,
       },
     })
@@ -113,12 +128,27 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
 
   if (!response.ok) {
+    if (response.status === 401 && path !== '/auth/login') {
+      clearBrowserSession()
+      window.dispatchEvent(new Event('paperwrench:unauthorized'))
+    }
     throw await parseError(response)
   }
   if (response.status === 204) {
     return undefined as T
   }
   return (await response.json()) as T
+}
+
+export const authApi = {
+  me: async () => rememberSession(await apiFetch<AuthSession>('/auth/me')),
+  login: async (token: string) => rememberSession(await apiFetch<AuthSession>('/auth/login', {
+    method: 'POST', body: JSON.stringify({ token }),
+  })),
+  logout: async () => {
+    await apiFetch<void>('/auth/logout', { method: 'POST' })
+    clearBrowserSession()
+  },
 }
 
 export const systemApi = {

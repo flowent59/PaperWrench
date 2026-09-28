@@ -9,11 +9,12 @@ import pytest
 import pytest_asyncio
 from pydantic import SecretStr
 
+from paperwrench.auth import SessionStore
+from paperwrench.auth.service import SESSION_COOKIE
 from paperwrench.config import Settings
 from paperwrench.errors import PaperlessForbiddenError
 from paperwrench.errors import PaperlessUnauthorizedError
 from paperwrench.main import create_app
-from paperwrench.paperless import MetadataRegistry
 from paperwrench.paperless import PaperlessClient
 from paperwrench.paperless.errors import PaperlessConflictError
 from paperwrench.paperless.errors import PaperlessNotFoundError
@@ -87,15 +88,21 @@ async def test_core_allowlist_references_date_asn_and_null_live(
 @pytest_asyncio.fixture
 async def inspector_api(
     live_settings: Settings,
-    live_client: PaperlessClient,
 ) -> AsyncIterator[httpx.AsyncClient]:
     app = create_app(live_settings)
-    app.state.paperless_client = live_client
-    app.state.metadata_registry = MetadataRegistry(live_client)
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as api:
-        yield api
+    store = SessionStore(live_settings)
+    record = await store.create(live_settings.paperless_token.get_secret_value())
+    app.state.sessions = store
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            cookies={SESSION_COOKIE: record.session_id},
+            headers={"X-CSRF-Token": record.csrf_token},
+        ) as api:
+            yield api
+    finally:
+        await store.close()
 
 
 async def test_inspector_acceptance_normalization_and_states(

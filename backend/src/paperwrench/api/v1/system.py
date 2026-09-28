@@ -11,6 +11,9 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from paperwrench import __version__
+from paperwrench.api.deps import get_auth_session
+from paperwrench.api.deps import get_paperless_client
+from paperwrench.auth.service import AuthSession
 from paperwrench.config import SUPPORTED_PAPERLESS_API_VERSION
 from paperwrench.config import Settings
 from paperwrench.config import get_settings
@@ -65,7 +68,7 @@ def health(db: Session = Depends(get_db)) -> HealthResponse:
 def info(settings: Settings = Depends(get_settings)) -> InfoResponse:
     return InfoResponse(
         version=__version__,
-        paperless_configured=settings.paperless_configured,
+        paperless_configured=settings.paperless_login_configured,
         paperless_api_version=settings.paperless_api_version,
         supported_paperless_api_version=SUPPORTED_PAPERLESS_API_VERSION,
         default_page_size=settings.default_page_size,
@@ -78,7 +81,10 @@ def info(settings: Settings = Depends(get_settings)) -> InfoResponse:
     response_model=ConnectionStatus,
     summary="Paperless connection and API compatibility",
 )
-async def paperless_status(settings: Settings = Depends(get_settings)) -> ConnectionStatus:
+async def paperless_status(
+    client: PaperlessClient = Depends(get_paperless_client),
+    _record: AuthSession = Depends(get_auth_session),
+) -> ConnectionStatus:
     """Probe the configured Paperless instance.
 
     Always answers ``200``: an unreachable or incompatible Paperless is a
@@ -88,8 +94,7 @@ async def paperless_status(settings: Settings = Depends(get_settings)) -> Connec
     The response carries no credential - see
     :class:`~paperwrench.paperless.models.ConnectionStatus`.
     """
-    async with PaperlessClient(settings) as client:
-        status = await client.check_connection()
+    status = await client.check_connection()
 
     logger.info(
         "paperless_probe",

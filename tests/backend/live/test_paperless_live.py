@@ -1743,10 +1743,22 @@ class TestFilterEngineApiLive:
 
         app = create_app(_live_app_settings(live_settings, tmp_path))
         with TestClient(app) as client:
-            validation = client.post("/api/v1/filters/validate", json={"filters": body})
-            count = client.post("/api/v1/filters/count", json={"filters": body})
+            login = client.post(
+                "/api/v1/auth/login",
+                json={"token": live_settings.paperless_token.get_secret_value()},
+            )
+            assert login.status_code == 200, login.text
+            headers = {"X-CSRF-Token": login.json()["csrf_token"]}
+            validation = client.post(
+                "/api/v1/filters/validate", json={"filters": body}, headers=headers
+            )
+            count = client.post(
+                "/api/v1/filters/count", json={"filters": body}, headers=headers
+            )
             page = client.post(
-                "/api/v1/documents/query", json={"filters": body, "page_size": 25}
+                "/api/v1/documents/query",
+                json={"filters": body, "page_size": 25},
+                headers=headers,
             )
 
         assert validation.json()["valid"] is True
@@ -1763,6 +1775,11 @@ class TestFilterEngineApiLive:
 
         app = create_app(_live_app_settings(live_settings, tmp_path))
         with TestClient(app) as client:
+            login = client.post(
+                "/api/v1/auth/login",
+                json={"token": live_settings.paperless_token.get_secret_value()},
+            )
+            assert login.status_code == 200, login.text
             payload = client.get("/api/v1/filters/capabilities").json()
 
         labels = {field["label"] for field in payload["fields"]}

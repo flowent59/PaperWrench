@@ -24,8 +24,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi import Depends
 
-from paperwrench.config import Settings
-from paperwrench.config import get_settings
+from paperwrench.api.deps import get_paperless_client
 from paperwrench.paperless import Correspondent
 from paperwrench.paperless import CustomField
 from paperwrench.paperless import DocumentType
@@ -37,9 +36,8 @@ router = APIRouter(prefix="/metadata", tags=["metadata"])
 
 
 @router.get("/tags", response_model=list[Tag], summary="List normalized tags")
-async def list_tags(settings: Settings = Depends(get_settings)) -> list[Tag]:
-    async with PaperlessClient(settings) as client:
-        return await client.list_tags()
+async def list_tags(client: PaperlessClient = Depends(get_paperless_client)) -> list[Tag]:
+    return await client.list_tags()
 
 
 @router.get(
@@ -47,9 +45,10 @@ async def list_tags(settings: Settings = Depends(get_settings)) -> list[Tag]:
     response_model=list[Correspondent],
     summary="List normalized correspondents",
 )
-async def list_correspondents(settings: Settings = Depends(get_settings)) -> list[Correspondent]:
-    async with PaperlessClient(settings) as client:
-        return await client.list_correspondents()
+async def list_correspondents(
+    client: PaperlessClient = Depends(get_paperless_client),
+) -> list[Correspondent]:
+    return await client.list_correspondents()
 
 
 @router.get(
@@ -57,9 +56,10 @@ async def list_correspondents(settings: Settings = Depends(get_settings)) -> lis
     response_model=list[DocumentType],
     summary="List normalized document types",
 )
-async def list_document_types(settings: Settings = Depends(get_settings)) -> list[DocumentType]:
-    async with PaperlessClient(settings) as client:
-        return await client.list_document_types()
+async def list_document_types(
+    client: PaperlessClient = Depends(get_paperless_client),
+) -> list[DocumentType]:
+    return await client.list_document_types()
 
 
 @router.get(
@@ -67,9 +67,10 @@ async def list_document_types(settings: Settings = Depends(get_settings)) -> lis
     response_model=list[StoragePath],
     summary="List normalized storage paths",
 )
-async def list_storage_paths(settings: Settings = Depends(get_settings)) -> list[StoragePath]:
-    async with PaperlessClient(settings) as client:
-        return await client.list_storage_paths()
+async def list_storage_paths(
+    client: PaperlessClient = Depends(get_paperless_client),
+) -> list[StoragePath]:
+    return await client.list_storage_paths()
 
 
 @router.get(
@@ -77,6 +78,7 @@ async def list_storage_paths(settings: Settings = Depends(get_settings)) -> list
     response_model=list[CustomField],
     summary="List normalized custom field definitions",
 )
-async def list_custom_fields(settings: Settings = Depends(get_settings)) -> list[CustomField]:
-    async with PaperlessClient(settings) as client:
-        return await client.list_custom_fields()
+async def list_custom_fields(
+    client: PaperlessClient = Depends(get_paperless_client),
+) -> list[CustomField]:
+    return await client.list_custom_fields()

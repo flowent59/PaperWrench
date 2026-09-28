@@ -27,6 +27,7 @@ from starlette.responses import Response
 
 from paperwrench import __version__
 from paperwrench.api.v1 import api_router
+from paperwrench.auth import SessionStore
 from paperwrench.config import Settings
 from paperwrench.config import get_settings
 from paperwrench.db.engine import dispose_engine
@@ -47,8 +48,6 @@ from paperwrench.jobs.engine import recover
 from paperwrench.logging import configure_logging
 from paperwrench.logging import get_logger
 from paperwrench.logging import register_secret
-from paperwrench.paperless import MetadataRegistry
-from paperwrench.paperless import PaperlessClient
 from paperwrench.previews.service import PreviewService
 from paperwrench.previews.service import cleanup as cleanup_previews
 
@@ -65,11 +64,12 @@ _HTTP_ERROR_CODES = {
 }
 
 
-async def _heartbeat_loop(instance_id: str, jobs: JobEngine) -> None:
+async def _heartbeat_loop(instance_id: str, jobs: JobEngine, sessions: SessionStore) -> None:
     """Keep the runtime lock fresh so a crash is detectable."""
     while True:  # pragma: no cover - background task
         await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
         try:
+            await sessions.cleanup_expired()
             cleanup_previews()
             with session_scope() as session:
                 if not refresh_lock(session, instance_id):
@@ -94,9 +94,7 @@ class OriginGuardMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._allowed = set(allowed_origins)
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.method not in SAFE_METHODS:
             origin = request.headers.get("origin")
             if origin and origin not in self._allowed:
@@ -117,9 +115,7 @@ class OriginGuardMiddleware(BaseHTTPMiddleware):
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Conservative security headers for a self-hosted app."""
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
@@ -129,9 +125,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 def _register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(PaperWrenchError)
-    async def _handle_paperwrench_error(
-        _request: Request, exc: PaperWrenchError
-    ) -> JSONResponse:
+    async def _handle_paperwrench_error(_request: Request, exc: PaperWrenchError) -> JSONResponse:
         logger.warning("api_error", code=str(exc.code), message=exc.message)
         return JSONResponse(
             status_code=exc.status_code,
@@ -148,26 +142,28 @@ def _register_exception_handlers(app: FastAPI) -> None:
                 "Request validation failed.",
                 code=ErrorCode.VALIDATION_ERROR,
                 # Omit input/context and scrub paths too: an unknown key is user input.
-                details={"errors": [
-                    {"loc": list(error["loc"]), "type": error["type"], "msg": error["msg"]}
-                    for error in exc.errors()
-                ]},
-            ).to_response().model_dump(mode="json"),
+                details={
+                    "errors": [
+                        {"loc": list(error["loc"]), "type": error["type"], "msg": error["msg"]}
+                        for error in exc.errors()
+                    ]
+                },
+            )
+            .to_response()
+            .model_dump(mode="json"),
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def _handle_http_error(
-        _request: Request, exc: StarletteHTTPException
-    ) -> Response:
+    async def _handle_http_error(_request: Request, exc: StarletteHTTPException) -> Response:
         # Routing/method errors must use the same envelope as domain errors so
         # the frontend only ever needs one error parser.
         code = _HTTP_ERROR_CODES.get(exc.status_code, ErrorCode.INTERNAL_ERROR)
         return JSONResponse(
             status_code=exc.status_code,
             headers=getattr(exc, "headers", None),
-            content=ErrorResponse(
-                error=ErrorDetail(code=code, message=str(exc.detail))
-            ).model_dump(mode="json"),
+            content=ErrorResponse(error=ErrorDetail(code=code, message=str(exc.detail))).model_dump(
+                mode="json"
+            ),
         )
 
     @app.exception_handler(Exception)
@@ -204,8 +200,10 @@ def _mount_spa(app: FastAPI, static_dir: Path) -> None:
             raise StarletteHTTPException(status_code=404, detail="Not Found")
 
         candidate = static_dir / full_path
-        if full_path and candidate.is_file() and candidate.resolve().is_relative_to(
-            static_dir.resolve()
+        if (
+            full_path
+            and candidate.is_file()
+            and candidate.resolve().is_relative_to(static_dir.resolve())
         ):
             return FileResponse(candidate)
         if index_file.is_file():
@@ -238,26 +236,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with session_scope() as session:
             acquire_lock(session, instance_id, force=force)
 
-        # M3: one app-lifecycle PaperlessClient + MetadataRegistry pair,
-        # shared by every request that needs to resolve tags, correspondents,
-        # document types, storage paths or custom fields (e.g. the documents
-        # list). Building a fresh client and registry per request (as the M2
-        # metadata endpoints still deliberately do - see their docstring)
-        # would mean refetching every reference collection on every single
-        # documents-list call, an N+1-shaped cost the Explorer cannot afford
-        # at 100 documents per page. The TTL cache only pays for itself when
-        # it outlives a single request.
-        app.state.paperless_client = PaperlessClient(settings)
-        app.state.metadata_registry = MetadataRegistry(app.state.paperless_client)
+        # Each login owns a server-side Paperless client and metadata cache.
+        # No deployment-wide credential is constructed or required.
+        app.state.sessions = SessionStore(settings)
         cleanup_previews(startup=True)
         app.state.previews = PreviewService()
         recover()
-        app.state.jobs = JobEngine(
-            app.state.paperless_client, app.state.metadata_registry, settings, instance_id
-        )
+        app.state.jobs = JobEngine(None, None, settings, instance_id)
         app.state.jobs.start()
 
-        heartbeat = asyncio.create_task(_heartbeat_loop(instance_id, app.state.jobs))
+        heartbeat = asyncio.create_task(
+            _heartbeat_loop(instance_id, app.state.jobs, app.state.sessions)
+        )
         logger.info(
             "paperwrench_started",
             version=__version__,
@@ -271,12 +261,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             heartbeat.cancel()
             await asyncio.gather(heartbeat, return_exceptions=True)
             await app.state.jobs.close()
+            await app.state.sessions.close()
             try:
                 with session_scope() as session:
                     release_lock(session, instance_id)
             except Exception as exc:  # pragma: no cover - shutdown best effort
                 logger.warning("runtime_lock_release_failed", error=str(exc))
-            await app.state.paperless_client.aclose()
             dispose_engine()
             logger.info("paperwrench_stopped")
 
@@ -300,7 +290,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=settings.cors_origins,
-            allow_credentials=False,
+            allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
         )

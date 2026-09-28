@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Route, Routes } from 'react-router'
 
 import { AppShell } from '@/components/layout/app-shell'
+import { AuthGate } from '@/auth'
 import { ThemeProvider } from '@/components/theme-provider'
 import { DashboardPage } from '@/pages/dashboard'
 import { ExplorerPage } from '@/pages/explorer'
@@ -36,8 +37,9 @@ createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <BrowserRouter>
-          <Routes>
+        <AuthGate>
+          <BrowserRouter>
+            <Routes>
             <Route element={<AppShell />}>
               <Route index element={<DashboardPage />} />
               <Route path="documents" element={<ExplorerPage />} />
@@ -52,8 +54,9 @@ createRoot(container).render(
               <Route path="collections/:collectionId" element={<CollectionPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
-          </Routes>
-        </BrowserRouter>
+            </Routes>
+          </BrowserRouter>
+        </AuthGate>
       </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>,

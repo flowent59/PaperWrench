@@ -7,7 +7,10 @@ syntax and ``custom_field_query`` JSON never leak into frontend code.
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi import Depends
 
+from paperwrench.api.deps import require_session
+from paperwrench.api.v1 import auth
 from paperwrench.api.v1 import collections
 from paperwrench.api.v1 import documents
 from paperwrench.api.v1 import filters
@@ -21,16 +24,19 @@ from paperwrench.api.v1 import system
 from paperwrench.api.v1 import transformations
 
 api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(auth.router)
 api_router.include_router(system.router)
-api_router.include_router(metadata.router)
-api_router.include_router(documents.router)
-api_router.include_router(collections.router)
-api_router.include_router(filters.router)
-api_router.include_router(inspector.router)
-api_router.include_router(transformations.router)
-api_router.include_router(previews.router)
-api_router.include_router(jobs.router)
-api_router.include_router(schemas.router)
-api_router.include_router(quality.router)
+protected = APIRouter(dependencies=[Depends(require_session)])
+protected.include_router(metadata.router)
+protected.include_router(documents.router)
+protected.include_router(collections.router)
+protected.include_router(filters.router)
+protected.include_router(inspector.router)
+protected.include_router(transformations.router)
+protected.include_router(previews.router)
+protected.include_router(jobs.router)
+protected.include_router(schemas.router)
+protected.include_router(quality.router)
+api_router.include_router(protected)
 
 __all__ = ["api_router"]

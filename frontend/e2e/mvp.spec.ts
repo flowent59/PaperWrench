@@ -1,19 +1,43 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 
-test('compiled MVP: Explorer → Schemas/Quality → preview → Job → History → safe rollback', async ({ page, request, playwright }) => {
+test('compiled MVP: authenticated Explorer → preview → Job → rollback → logout', async ({ page, playwright }) => {
   expect(process.env.PAPERWRENCH_ALLOW_LIVE_TESTS).toBe('true')
+  const token = process.env.PAPERWRENCH_E2E_TOKEN ?? ''
+  expect(token.length).toBeGreaterThan(10)
   const target = new URL(process.env.PAPERLESS_URL ?? '')
   expect(['127.0.0.1', 'localhost']).toContain(target.hostname)
   expect(target.port).toBe('8010')
   const upstream = await playwright.request.newContext({ baseURL: target.origin,
-    extraHTTPHeaders: { Authorization: `Token ${process.env.PAPERLESS_TOKEN}`, Accept: 'application/json; version=10' } })
+    extraHTTPHeaders: { Authorization: `Token ${token}`, Accept: 'application/json; version=10' } })
   const probe = await upstream.get('/api/documents/?page_size=1')
   expect(probe.status()).toBe(200)
   expect(probe.headers()['x-version']).toBe(process.env.PAPERWRENCH_EXPECTED_PAPERLESS_VERSION ?? '3.2.1')
   expect((await probe.json()).count).toBeLessThanOrEqual(500)
-  const types = await (await request.get('/api/v1/metadata/document-types')).json()
-  const fields = await (await request.get('/api/v1/metadata/custom-fields')).json()
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Sign in to PaperWrench' })).toBeVisible()
+  await page.getByLabel('Paperless API token').fill(token)
+  const loginResponse = page.waitForResponse(response =>
+    response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  expect((await loginResponse).status()).toBe(200)
+  await expect(page.getByRole('navigation', { name: 'Dashboard' })).toBeVisible()
+  const sessionCookie = (await page.context().cookies()).find(
+    cookie => cookie.name === 'paperwrench_session',
+  )
+  expect(sessionCookie).toMatchObject({ httpOnly: true, sameSite: 'Strict' })
+  expect(sessionCookie?.value).not.toContain(token)
+  const browserStorage = await page.evaluate<string>(
+    'JSON.stringify({local: {...localStorage}, session: {...sessionStorage}})',
+  )
+  expect(browserStorage).not.toContain(token)
+  const app = page.request
+  const authenticated = await (await app.get('/api/v1/auth/me')).json()
+  expect(authenticated.username).toBeTruthy()
+  expect(JSON.stringify(authenticated)).not.toContain(token)
+  const writeHeaders = { 'X-CSRF-Token': authenticated.csrf_token }
+  const types = await (await app.get('/api/v1/metadata/document-types')).json()
+  const fields = await (await app.get('/api/v1/metadata/custom-fields')).json()
   const vacation = types.find((item: { name: string }) => item.name === 'Relevé de vacations')
   const period = fields.find((item: { name: string }) => item.name === 'Période concernée')
   const amount = fields.find((item: { name: string }) => item.name === 'Montant')
@@ -26,12 +50,21 @@ test('compiled MVP: Explorer → Schemas/Quality → preview → Job → History
   type Doc = { id: number; title: string; custom_fields: { field: number; value: unknown }[] }
   const originals: Doc[] = (await originalPage.json()).results
   expect(originals.length).toBeGreaterThan(2)
-  const schemaResponse = await request.post('/api/v1/schemas', { data: {
+  const schemaResponse = await app.post('/api/v1/schemas', { headers: writeHeaders, data: {
     name: 'M13 vacations', applies_when: scope,
     rules: [{ kind: 'required', field: { source: 'custom_field', field_id: amount.id }, field_type: 'monetary' }],
   } })
   expect(schemaResponse.ok()).toBeTruthy()
   const schema = await schemaResponse.json()
+  await page.goto(`/documents/${originals[0].id}`)
+  await expect(page.getByRole('heading', { name: 'Inspector', exact: true })).toBeVisible()
+  await page.getByRole('link', { name: 'Collections', exact: true }).click()
+  await page.getByLabel('Name').fill('M13 browser collection')
+  await page.getByRole('button', { name: 'Create collection' }).click()
+  await expect(page.getByRole('link', { name: 'M13 browser collection' })).toBeVisible()
+  const collections = await (await app.get('/api/v1/collections')).json()
+  const collection = collections.find((item: { name: string }) => item.name === 'M13 browser collection')
+  expect(collection).toBeTruthy()
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   async function accessible() {
@@ -55,7 +88,7 @@ test('compiled MVP: Explorer → Schemas/Quality → preview → Job → History
     await accessible()
     await page.getByRole('link', { name: 'Data Quality', exact: true }).click()
     await expect(page.getByRole('link', { name: 'Open exact violation condition in Explorer' })).toBeVisible()
-    const quality = await (await request.get(`/api/v1/quality/schemas/${schema.id}`)).json()
+    const quality = await (await app.get(`/api/v1/quality/schemas/${schema.id}`)).json()
     const zeros = originals.filter(doc => doc.custom_fields.some(field => field.field === amount.id && field.value === 'EUR0.00'))
     expect(zeros.length).toBeGreaterThan(0)
     expect(quality.violation_count).toBeGreaterThan(0)
@@ -93,7 +126,7 @@ test('compiled MVP: Explorer → Schemas/Quality → preview → Job → History
     await page.getByRole('button', { name: 'Inspect operations' }).first().click()
     await expect(page.getByText('Confirmed write; eligible for rollback review.')).toBeVisible()
     await accessible()
-    const targets = await (await request.get(`/api/v1/jobs/${jobId}/targets?page_size=100`)).json()
+    const targets = await (await app.get(`/api/v1/jobs/${jobId}/targets?page_size=100`)).json()
     const edited = targets.items.find((item: { status: string }) => item.status === 'succeeded').document_id
     expect((await upstream.patch(`/api/documents/${edited}/`, { data: { title: 'M13 later third-party title' } })).ok()).toBeTruthy()
     await page.getByRole('link', { name: 'History', exact: true }).first().click()
@@ -122,7 +155,22 @@ test('compiled MVP: Explorer → Schemas/Quality → preview → Job → History
     for (const doc of originals) {
       expect((await upstream.patch(`/api/documents/${doc.id}/`, { data: { title: doc.title } })).ok()).toBeTruthy()
     }
-    await request.delete(`/api/v1/schemas/${schema.id}`)
+    await app.delete(`/api/v1/schemas/${schema.id}`, { headers: writeHeaders })
+    await app.delete(`/api/v1/collections/${collection.id}`, { headers: writeHeaders })
     await upstream.dispose()
   }
+  expect(await page.evaluate<string>(
+    'JSON.stringify({local: {...localStorage}, session: {...sessionStorage}})',
+  )).not.toContain(token)
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page.getByRole('heading', { name: 'Sign in to PaperWrench' })).toBeVisible()
+  expect((await app.get('/api/v1/auth/me')).status()).toBe(401)
+
+  // A stale/expired opaque cookie must also return the browser to login; the
+  // actual server-side expiry and credential destruction are unit-tested.
+  await page.context().addCookies([{
+    name: 'paperwrench_session', value: 'expired-session', url: 'http://127.0.0.1:8020',
+  }])
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Sign in to PaperWrench' })).toBeVisible()
 })

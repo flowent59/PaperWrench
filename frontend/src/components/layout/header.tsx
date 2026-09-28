@@ -1,10 +1,11 @@
-import { Moon, Sun } from 'lucide-react'
+import { LogOut, Moon, Sun } from 'lucide-react'
 
 import { useHealth, usePaperlessStatus } from '@/api/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/components/theme-provider'
 import { messages } from '@/i18n/messages'
+import { useAuth } from '@/auth-context'
 
 function BackendStatus() {
   const health = useHealth()
@@ -52,6 +53,7 @@ function PaperlessStatus() {
 
 export function Header() {
   const { theme, toggleTheme } = useTheme()
+  const { session, logout } = useAuth()
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-background px-4">
@@ -60,6 +62,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3">
+        <span className="hidden text-sm text-muted-foreground md:inline">{session.display_name}</span>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span>{messages.system.backend}</span>
           <BackendStatus />
@@ -80,6 +83,10 @@ export function Header() {
           ) : (
             <Moon className="h-4 w-4" aria-hidden="true" />
           )}
+        </Button>
+        <Button variant="ghost" size="icon" onClick={() => void logout()}
+          aria-label={messages.auth.signOut} title={messages.auth.signOut}>
+          <LogOut className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
     </header>

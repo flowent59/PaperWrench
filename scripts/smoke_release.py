@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 
 import httpx
@@ -28,11 +27,15 @@ def main() -> None:
         assert missing.status_code == 404 and missing.json()["error"]["code"] == "NOT_FOUND"
         rejected = client.post("/api/v1/collections", json={}, headers={"Origin": "https://evil.test"})
         assert rejected.status_code == 403
-        for path in ("/api/v1/system/health", "/api/v1/system/info", "/api/v1/system/paperless"):
+        for path in ("/api/v1/system/health", "/api/v1/system/info"):
             response = client.get(path)
             assert response.status_code == 200
-            assert os.environ["PAPERLESS_TOKEN"] not in response.text
-    print("Installed wheel: migrations, nested SPA routes/assets and origin guard OK")
+            assert "paperless_token" not in response.text.lower()
+        protected = client.get("/api/v1/system/paperless")
+        assert protected.status_code == 401
+        assert protected.json()["error"]["code"] == "AUTH_REQUIRED"
+        assert "paperless_token" not in protected.text.lower()
+    print("Installed wheel: migrations, SPA assets, auth boundary and origin guard OK")
 
 
 if __name__ == "__main__":

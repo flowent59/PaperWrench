@@ -21,6 +21,7 @@ Behaviours encoded here that were VERIFIED_LIVE against Paperless-ngx 3.1.2:
 
 from __future__ import annotations
 
+import hashlib
 import json as json_module
 import types
 from collections.abc import AsyncGenerator
@@ -32,6 +33,7 @@ from urllib.parse import urlsplit
 
 import httpx
 import structlog
+from pydantic import SecretStr
 
 from paperwrench.config import Settings
 from paperwrench.errors import PaperlessForbiddenError
@@ -171,6 +173,11 @@ class PaperlessClient:
         if self._client is not None and not self._external_client:
             await self._client.aclose()
             self._client = None
+
+    async def invalidate_credentials(self) -> None:
+        """Close the transport and make a revoked session credential unusable."""
+        await self.aclose()
+        object.__setattr__(self._settings, "paperless_token", SecretStr(""))
 
     # ----------------------------------------------------------------- plumbing
     async def _request(
@@ -361,6 +368,39 @@ class PaperlessClient:
             error_code=None if compatible else "PAPERLESS_INCOMPATIBLE",
             error_message=note,
         )
+
+    async def get_profile(self) -> dict[str, Any]:
+        """Return a normalized identity for the authenticated Paperless user.
+
+        Paperless documents ``/api/profile/`` as the self-service endpoint,
+        available without permission to enumerate other users. 3.2.1 does not
+        expose a user ID or username there, so its per-user API token is
+        reduced to a signed-SQLite-safe fingerprint. The token itself and the
+        raw profile (which contains ``auth_token`` on 3.2.1) never leave this
+        boundary.
+        """
+        response = await self._request("GET", "/api/profile/")
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise PaperlessIncompatibleError("Paperless returned an invalid profile response.")
+        token = self._settings.paperless_token.get_secret_value()
+        try:
+            user_id = int(payload["id"])
+        except (KeyError, TypeError, ValueError):
+            digest = hashlib.sha256(token.encode("utf-8")).digest()
+            user_id = int.from_bytes(digest[:8], "big") & ((1 << 63) - 1)
+            user_id = user_id or 1
+        first_name = str(payload.get("first_name") or "").strip()
+        last_name = str(payload.get("last_name") or "").strip()
+        email = str(payload.get("email") or "").strip()
+        display_name = " ".join(part for part in (first_name, last_name) if part)
+        username = str(payload.get("username") or email or display_name or "Paperless user")
+        return {
+            "id": user_id,
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+        }
 
     # -------------------------------------------------------------- pagination
     async def _get_page(self, path: str, params: dict[str, Any]) -> dict[str, Any]:

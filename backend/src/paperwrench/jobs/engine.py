@@ -143,8 +143,8 @@ def recover() -> None:
 class JobEngine:
     def __init__(
         self,
-        client: PaperlessClient,
-        registry: MetadataRegistry,
+        client: PaperlessClient | None,
+        registry: MetadataRegistry | None,
         settings: Settings,
         instance_id: str,
     ) -> None:
@@ -152,9 +152,30 @@ class JobEngine:
         self.registry = registry
         self.settings = settings
         self.instance_id = instance_id
+        self._credentials: dict[int, tuple[PaperlessClient, MetadataRegistry]] = {}
         self.stopped = False
         self.wake = asyncio.Event()
         self.workers: list[asyncio.Task[None]] = []
+
+    def bind(self, job_id: int, client: PaperlessClient, registry: MetadataRegistry) -> None:
+        """Attach an active server-side credential to a durable job.
+
+        The binding is deliberately not persisted. After restart, jobs remain
+        interrupted until their owner authenticates and explicitly resumes.
+        """
+        self._credentials[job_id] = (client, registry)
+
+    def _credential_for(self, job_id: int) -> tuple[PaperlessClient, MetadataRegistry]:
+        credential = self._credentials.get(job_id)
+        if credential is not None:
+            return credential
+        if self.client is not None and self.registry is not None:
+            return self.client, self.registry
+        raise PaperWrenchError(
+            "The job owner must sign in before this job can run.",
+            status_code=409,
+            code=ErrorCode.AUTH_REQUIRED,
+        )
 
     def start(self) -> None:
         self.workers = [
@@ -223,7 +244,7 @@ class JobEngine:
         with session_scope() as session:
             session.execute(text("BEGIN IMMEDIATE"))
             self.ensure_owner(session)
-            target = session.scalar(
+            query = (
                 select(JobTarget)
                 .join(Job)
                 .where(
@@ -231,8 +252,12 @@ class JobEngine:
                     JobTarget.status == TargetStatus.PENDING,
                 )
                 .order_by(Job.id, JobTarget.position)
-                .limit(1)
             )
+            if self.client is None:
+                if not self._credentials:
+                    return None
+                query = query.where(Job.id.in_(tuple(self._credentials)))
+            target = session.scalar(query.limit(1))
             if target is None:
                 return None
             target.status = TargetStatus.READING
@@ -305,7 +330,13 @@ class JobEngine:
         self.wake.set()
 
     def _before(
-        self, job_id: int, current: Document, changes: list[ProposedChange], *, send: bool
+        self,
+        job_id: int,
+        current: Document,
+        changes: list[ProposedChange],
+        *,
+        send: bool,
+        client: PaperlessClient,
     ) -> None:
         with session_scope() as session:
             session.execute(text("BEGIN IMMEDIATE"))
@@ -319,7 +350,7 @@ class JobEngine:
             )
             job = require_job(session, job_id)
             job.paperless_api_version = self.settings.paperless_api_version
-            job.paperless_server_version = self.client.paperless_version
+            job.paperless_server_version = client.paperless_version
             if send:
                 target.status = TargetStatus.WRITING
                 target.attempts += 1
@@ -354,22 +385,27 @@ class JobEngine:
         sent = False
         acknowledged = False
         try:
+            client, registry = self._credential_for(job_id)
             with session_scope() as session:
                 target = session.get(JobTarget, (job_id, document_id))
                 assert target is not None and target.preview_json is not None
                 staged = PreviewRow.model_validate_json(target.preview_json)
                 job = require_job(session, job_id)
                 rollback = job.type == JobType.ROLLBACK
-                spec = staged.rollback_spec if rollback else Transformation.model_validate(
-                    {
-                        "targets": {"source": "ids", "document_ids": [document_id]},
-                        "operations": json.loads(job.transformation_json or "[]"),
-                    }
+                spec = (
+                    staged.rollback_spec
+                    if rollback
+                    else Transformation.model_validate(
+                        {
+                            "targets": {"source": "ids", "document_ids": [document_id]},
+                            "operations": json.loads(job.transformation_json or "[]"),
+                        }
+                    )
                 )
                 assert spec is not None
                 race_ack = job.acknowledge_external_race
-            await self.registry.refresh(MetadataKind.CUSTOM_FIELD)
-            definitions = {field.id: field for field in await self.registry.all_custom_fields()}
+            await registry.refresh(MetadataKind.CUSTOM_FIELD)
+            definitions = {field.id: field for field in await registry.all_custom_fields()}
             if catalog_revision(list(definitions.values())) != staged.catalog_revision:
                 raise PaperlessConflictError("Metadata changed since preview.")
 
@@ -386,7 +422,7 @@ class JobEngine:
                         c.model_copy(update={"intended": p.intended})
                         for c, p in zip(fresh.changes, staged.changes, strict=True)
                     ]
-                    self._before(job_id, current, observed, send=False)
+                    self._before(job_id, current, observed, send=False, client=client)
                     return None
                 if (not rollback and revision(current) != staged.observed_revision) or any(
                     c.status == ResultStatus.ERROR
@@ -414,7 +450,7 @@ class JobEngine:
 
                 def before_send() -> None:
                     nonlocal sent
-                    self._before(job_id, current, fresh.changes, send=True)
+                    self._before(job_id, current, fresh.changes, send=True, client=client)
                     sent = True
 
                 def after_response() -> None:
@@ -431,7 +467,7 @@ class JobEngine:
                     readback=True,
                 )
 
-            result = await self.client.mutate_document_with_plan(document_id, prepare)
+            result = await client.mutate_document_with_plan(document_id, prepare)
             if result is None:
                 self._finish(job_id, document_id, TargetStatus.UNCHANGED)
                 return
