@@ -102,8 +102,9 @@ See [docs/roadmap.md](docs/roadmap.md), [preview API](docs/preview-api.md) and
 
 ## Quick start
 
-Requires an existing Paperless-ngx Docker stack. Each user signs in with the
-API token from *Settings > My Profile > API Auth Token*. This local-network
+Requires an existing Paperless-ngx Docker stack. Each user opens **My Profile**
+from their Paperless user menu, creates or regenerates their **API Auth Token**,
+then signs in to PaperWrench with that individual token. This local-network
 setup needs no domain, TLS certificate or reverse proxy.
 
 ```bash
@@ -116,7 +117,8 @@ PAPERLESS_DOCKER_NETWORK=paperless_default docker compose -f docker-compose.pape
 Replace `paperless_default` with the Docker network used by your Paperless
 service. Open `http://IP_DU_SERVEUR:8000` (or set `PAPERWRENCH_HTTP_PORT`).
 For a differently named Paperless service, set `PAPERLESS_SERVICE` too.
-See the [installation guide](docs/deployment.md) for exact steps and checks.
+See the [installation and v0.1-to-v0.2 migration guide](docs/deployment.md) for
+exact steps, session settings, permission behavior and troubleshooting.
 These commands work once the versioned GHCR image is published. Until then,
 the guide gives the local-build override for a reviewed checkout.
 
