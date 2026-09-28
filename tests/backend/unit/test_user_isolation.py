@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from paperwrench.auth import AuthSession
@@ -116,11 +118,12 @@ def test_schema_job_preview_and_legacy_rows_are_hidden(
     assert client.get("/api/v1/jobs").json()["items"] == []
     assert client.get(f"/api/v1/jobs/{job_id}").status_code == 404
     assert client.get("/api/v1/previews/owned-preview").status_code == 409
+    app = cast(FastAPI, client.app)
     with pytest.raises(PaperWrenchError):
-        client.app.state.jobs.bind(
+        app.state.jobs.bind(
             job_id,
             auth_record.paperless_user_id,
             auth_record.client,
             auth_record.registry,
         )
-    assert job_id not in client.app.state.jobs._credentials
+    assert job_id not in app.state.jobs._credentials
