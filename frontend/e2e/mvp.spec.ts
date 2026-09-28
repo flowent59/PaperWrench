@@ -190,5 +190,6 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
     name: 'paperwrench_session', value: 'expired-session', url: 'http://127.0.0.1:8020',
   }])
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'Se connecter à PaperWrench' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Sign in to PaperWrench' })).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
 })
