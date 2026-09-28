@@ -140,6 +140,21 @@ class AppSettings(Base):
     )
 
 
+class UserPreference(Base):
+    """Non-secret UI preferences keyed by the stable Paperless user identity."""
+
+    __tablename__ = "user_preferences"
+    __table_args__ = (
+        CheckConstraint("locale IN ('en', 'fr')", name="locale_supported"),
+    )
+
+    owner_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    locale: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class RuntimeLock(Base):
     """Single-instance guard.
 
@@ -426,6 +441,7 @@ __all__ = [
     "JobType",
     "OperationStatus",
     "RuntimeLock",
+    "UserPreference",
 ]
 
 # Silence "imported but unused" for the re-exported Base.

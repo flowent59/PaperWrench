@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router'
 
 import { jobsApi } from '@/api/client'
-import type { HistoryPage, JobView, OperationView, TargetStatus } from '@/api/types'
+import type { HistoryPage, JobStatus, JobView, OperationView, TargetStatus } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
+import { formatDateTime, formatNumber } from '@/i18n/format'
 import { valueText } from '@/pages/transformations/value'
 
 import { RollbackReview } from './rollback'
@@ -38,9 +39,9 @@ export function HistoryPageView() {
         <th className="p-3" key={label}>{label}</th>)}</tr></thead>
       <tbody>{query.data?.items.map((job) => <tr key={job.id} className="border-t">
         <td className="p-3"><Link className="text-primary underline" to={`/jobs/${job.id}`}>{job.title} #{job.id}</Link></td>
-        <td className="p-3">{job.status.toUpperCase()}</td>
-        <td className="p-3">{job.processed} / {job.total}</td>
-        <td className="p-3">{new Date(job.created_at).toLocaleString()}</td>
+        <td className="p-3">{m.statuses[job.status]}</td>
+        <td className="p-3">{formatNumber(job.processed)} / {formatNumber(job.total)}</td>
+        <td className="p-3">{formatDateTime(job.created_at)}</td>
       </tr>)}</tbody>
     </table></div>
     <Pagination data={query.data} page={page} setPage={setPage} busy={query.isFetching} />
@@ -56,7 +57,9 @@ function OperationDetails({ jobId, documentId, polling, revision }: { jobId: num
     {query.error && <p role="alert">{query.error.message}</p>}
     {query.isLoading && <p role="status">{m.loading}</p>}
     {query.data?.items.map((operation: OperationView) => <article className="space-y-2 border-t pt-3" key={operation.id}>
-      <h3 className="font-medium">{operation.field_key} · {operation.status.toUpperCase()}</h3>
+      <h3 className="font-medium">{operation.field_key} · {m.operationStatuses[
+        operation.status as keyof typeof m.operationStatuses
+      ] ?? operation.status}</h3>
       {operation.rollback_of_operation_id != null && <p>{messages.rollback.operation} #{operation.rollback_of_operation_id}</p>}
       <dl className="grid gap-3 sm:grid-cols-3">{(['before', 'intended', 'written'] as const).map((key) =>
         <div key={key}><dt className="text-muted-foreground">{m[key]}</dt>
@@ -101,13 +104,13 @@ export function JobPage() {
     {query.error && <p role="alert">{query.error.message}</p>}
     {error && <p role="alert">{error}</p>}
     {job && <>
-      <p className="font-medium">{job.status.toUpperCase()} · {job.processed} / {job.total}</p>
+      <p className="font-medium">{m.statuses[job.status as JobStatus]} · {formatNumber(job.processed)} / {formatNumber(job.total)}</p>
       <progress className="h-3 w-full" aria-label={m.progress} value={job.processed} max={Math.max(1, job.total)} />
       <dl className="flex flex-wrap gap-5">{Object.entries(job.counts).map(([status, count]) =>
         <div key={status}><dt className="text-sm text-muted-foreground">{m.outcomes[status as TargetStatus]}</dt>
-          <dd className="text-xl">{count}</dd></div>)}</dl>
+          <dd className="text-xl">{formatNumber(count)}</dd></div>)}</dl>
       <dl className="flex flex-wrap gap-5 text-sm">{(['created', 'started', 'finished'] as const).map((key) =>
-        <div key={key}><dt>{m[key]}</dt><dd>{job[`${key}_at`] ? new Date(job[`${key}_at`]!).toLocaleString() : '—'}</dd></div>)}</dl>
+        <div key={key}><dt>{m[key]}</dt><dd>{job[`${key}_at`] ? formatDateTime(job[`${key}_at`]!) : '—'}</dd></div>)}</dl>
       {job.status === 'interrupted' && <p role="status">{m.interrupted}</p>}
       {job.counts.ambiguous > 0 && <p role="alert" className="rounded border border-amber-500 p-3">{m.ambiguous}</p>}
       {job.resumable && <Button onClick={resume} disabled={busy}>{busy ? m.resuming : m.resume}</Button>}

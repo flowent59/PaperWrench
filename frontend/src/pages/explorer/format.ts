@@ -9,6 +9,7 @@
  */
 
 import type { CustomFieldColumnValue, CustomFieldDefinition } from '@/api/types'
+import { formatCurrency, formatDateValue } from '@/i18n/format'
 import { messages } from '@/i18n/messages'
 
 /** Locale-aware monetary formatting without ever going through a JS float. */
@@ -18,18 +19,7 @@ export function formatMonetary(currency: string, amount: string): string {
   // symbol placement) only needs to be correct for the two-decimal amounts
   // Paperless actually produces, and the source of truth (the `amount`
   // string itself) is never touched or recomputed here.
-  const numeric = Number(amount)
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      currencyDisplay: 'narrowSymbol',
-    }).format(numeric)
-  } catch {
-    // Unknown/invalid ISO currency code: fall back to the raw value rather
-    // than throwing and breaking the whole row's render.
-    return `${currency} ${amount}`
-  }
+  return formatCurrency(currency, amount)
 }
 
 /** Renders one typed custom-field value as plain text for a grid cell. */
@@ -79,13 +69,5 @@ export function formatDate(value: string | null): string {
   if (value === null) {
     return messages.explorer.nullValue
   }
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return value
-  }
-  return parsed.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  return formatDateValue(value)
 }

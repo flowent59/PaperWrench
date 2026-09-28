@@ -49,6 +49,9 @@ def test_m12_backup_restore_and_idempotent_release_upgrade(tmp_path: Path) -> No
         )
         assert connection.scalar(text("SELECT owner_id FROM collections")) is None
         assert connection.scalar(text("SELECT owner_id FROM schemas")) is None
+        assert connection.scalar(
+            text("SELECT COUNT(*) FROM user_preferences")
+        ) == 0
     with sqlite3.connect(restored) as connection:
         assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []

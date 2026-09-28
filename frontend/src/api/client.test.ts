@@ -81,18 +81,32 @@ describe('apiFetch', () => {
   it('keeps the Paperless token in the login body and uses CSRF afterwards', async () => {
     const spy = mockFetch(jsonResponse({
       user_id: 1, username: 'alice', display_name: 'Alice',
-      expires_at: '2030-01-01T00:00:00Z', csrf_token: 'csrf-value',
+      expires_at: '2030-01-01T00:00:00Z', csrf_token: 'csrf-value', locale: 'fr',
     }))
 
-    await authApi.login('paperless-secret')
+    await authApi.login('paperless-secret', 'fr')
     await apiFetch('/collections', { method: 'POST', body: '{}' })
 
     const loginInit = spy.mock.calls[0]?.[1] as RequestInit
     const requestInit = spy.mock.calls[1]?.[1] as RequestInit
-    expect(loginInit.body).toBe(JSON.stringify({ token: 'paperless-secret' }))
+    expect(loginInit.body).toBe(JSON.stringify({ token: 'paperless-secret', locale: 'fr' }))
     expect(JSON.stringify(loginInit.headers)).not.toContain('paperless-secret')
     expect(requestInit.body).not.toContain('paperless-secret')
     expect(requestInit.headers).toMatchObject({ 'X-CSRF-Token': 'csrf-value' })
+  })
+
+  it('persists a locale preference with the in-memory CSRF token', async () => {
+    const spy = mockFetch(jsonResponse({
+      user_id: 1, username: 'alice', display_name: 'Alice',
+      expires_at: '2030-01-01T00:00:00Z', csrf_token: 'csrf-value', locale: 'en',
+    }))
+    await authApi.login('paperless-secret', 'en')
+    await authApi.updateLocale('fr')
+
+    const request = spy.mock.calls[1]?.[1] as RequestInit
+    expect(request.method).toBe('PATCH')
+    expect(request.body).toBe(JSON.stringify({ locale: 'fr' }))
+    expect(request.headers).toMatchObject({ 'X-CSRF-Token': 'csrf-value' })
   })
 })
 

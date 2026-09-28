@@ -6,6 +6,7 @@ import { ApiError, jobsApi, previewsApi } from '@/api/client'
 import type { CreatedPreview } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
+import { formatDateTime, formatNumber } from '@/i18n/format'
 import { valueText } from '@/pages/transformations/value'
 
 const m = messages.rollback
@@ -75,12 +76,12 @@ export function RollbackReview({ jobId }: { jobId: number }) {
     {uncertain && <p role="alert">{m.uncertain} <Link to="/history">{messages.jobs.open}</Link></p>}
     {created !== null && <Link className="text-primary underline" to={`/jobs/${created}`}>{m.linked} #{created}</Link>}
     {preview && <>
-      <p>{p.changed}: {preview.changed} · {p.unchanged}: {preview.unchanged} · {p.errors}: {preview.errors}</p>
-      <p>{p.expiresAt} {new Date(preview.expires_at).toLocaleString()}</p>
+      <p>{p.changed}: {formatNumber(preview.changed)} · {p.unchanged}: {formatNumber(preview.unchanged)} · {p.errors}: {formatNumber(preview.errors)}</p>
+      <p>{p.expiresAt} {formatDateTime(preview.expires_at)}</p>
       {!preview.changed && <p role="status">{m.none}</p>}
       {expired && <p role="alert">{p.expired}</p>}
       {rows.data?.items.map(row => <article className="space-y-2 border-t pt-2" key={row.document_id}>
-        <h3>{row.title} (#{row.document_id}) · {row.status.toUpperCase()}</h3>
+        <h3>{row.title} (#{row.document_id}) · {p.statuses[row.status]}</h3>
         {row.issue && <p>{row.issue.code}: {row.issue.message}</p>}
         {row.changes.map((change, index) => <p key={index}>
           {change.field.source === 'core' ? change.field.name : `#${change.field.field_id}`}: {' '}

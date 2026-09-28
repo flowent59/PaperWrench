@@ -67,6 +67,7 @@ import { DOCUMENT_PAGE_SIZES } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { messages } from '@/i18n/messages'
+import { localizeFilterCapabilities } from '@/i18n/filter-capabilities'
 import { cn } from '@/lib/utils'
 
 import { buildBaseColumns, buildCustomFieldColumns } from './columns'
@@ -152,6 +153,7 @@ export function ExplorerPage() {
   }, [searchInput])
 
   const capabilitiesQuery = useFilterCapabilities()
+  const localizedCapabilities = localizeFilterCapabilities(capabilitiesQuery.data)
 
   // The backend decides whether the current filter is valid and whether
   // Paperless can express it. Cheap enough to ask on every edit: it touches
@@ -318,7 +320,7 @@ export function ExplorerPage() {
           {/* The three modes are three different Paperless indexes, not one
               "search" with options. M3's single search box always meant
               title and said so nowhere. */}
-          {(capabilitiesQuery.data?.search_modes ?? []).map((mode) => (
+          {(localizedCapabilities?.search_modes ?? []).map((mode) => (
             <option key={mode.mode} value={mode.mode} title={mode.description}>
               {mode.label}
             </option>
@@ -396,8 +398,8 @@ export function ExplorerPage() {
                 <FilterBuilder
                   filters={filters}
                   onChange={onFiltersChange}
-                  fields={capabilitiesQuery.data?.fields ?? []}
-                  grouping={capabilitiesQuery.data?.grouping}
+                  fields={localizedCapabilities?.fields ?? []}
+                  grouping={localizedCapabilities?.grouping}
                   issues={filterIssues}
                   referenceOptions={referenceOptions}
                 />

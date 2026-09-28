@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useTheme } from '@/components/theme-provider'
 import { messages } from '@/i18n/messages'
 import { useAuth } from '@/auth-context'
+import type { Locale } from '@/i18n/messages'
 
 function BackendStatus() {
   const health = useHealth()
@@ -53,7 +54,7 @@ function PaperlessStatus() {
 
 export function Header() {
   const { theme, toggleTheme } = useTheme()
-  const { session, logout } = useAuth()
+  const { session, locale, changeLocale, logout } = useAuth()
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-background px-4">
@@ -63,6 +64,12 @@ export function Header() {
 
       <div className="flex items-center gap-3">
         <span className="hidden text-sm text-muted-foreground md:inline">{session.display_name}</span>
+        <select aria-label={messages.locale.language}
+          className="rounded border border-input bg-background px-2 py-1 text-xs"
+          onChange={(event) => void changeLocale(event.target.value as Locale)} value={locale}>
+          <option value="en">{messages.locale.english}</option>
+          <option value="fr">{messages.locale.french}</option>
+        </select>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span>{messages.system.backend}</span>
           <BackendStatus />

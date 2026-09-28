@@ -37,7 +37,7 @@ interface NavSection {
  * Screens delivered by later milestones are listed but disabled, so the shape
  * of the product is visible from M0 without pretending features exist.
  */
-export const navSections: NavSection[] = [
+function getNavSections(): NavSection[] { return [
   {
     title: messages.nav.sectionWorkspace,
     items: [
@@ -71,9 +71,10 @@ export const navSections: NavSection[] = [
       { to: '/settings', label: messages.nav.settings, icon: Settings, available: false },
     ],
   },
-]
+] }
 
 export function Sidebar() {
+  const navSections = getNavSections()
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card md:flex">
       <div className="flex h-14 items-center gap-2 border-b border-border px-4">

@@ -9,6 +9,7 @@ import {
 import type { EvaluationResult, FilterSet, SearchSpec, TransformationTarget } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
+import { localizeFilterCapabilities } from '@/i18n/filter-capabilities'
 import { FilterBuilder } from '@/pages/explorer/filter-builder'
 import { emptyFilterSet, isEmpty } from '@/pages/explorer/filter-builder/model'
 
@@ -44,6 +45,7 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
   const fieldsQuery = useCustomFields()
   const fields = fieldsQuery.data ?? []
   const capabilities = useFilterCapabilities()
+  const localizedCapabilities = localizeFilterCapabilities(capabilities.data)
   const tags = useTags()
   const correspondents = useCorrespondents()
   const documentTypes = useDocumentTypes()
@@ -64,8 +66,10 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
 
   const customOptions = fields.filter((field) => EDITABLE.has(field.data_type))
     .map((field) => [`custom_field:${field.id}`, field.name] as const)
-  const targets = [...TARGET_CORE, ...customOptions]
-  const sources = [...SOURCE_CORE, ...customOptions]
+  const targets = [...TARGET_CORE.map(([key, label]) =>
+    [key, m.coreField(key, label)] as const), ...customOptions]
+  const sources = [...SOURCE_CORE.map(([key, label]) =>
+    [key, m.coreField(key, label)] as const), ...customOptions]
 
   function update(index: number, patch: Partial<OperationDraft>) {
     setDrafts((current) => current.map((draft, position) =>
@@ -136,7 +140,7 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
           </select>
         </label>
         <FilterBuilder filters={filters} onChange={setFilters}
-          fields={capabilities.data?.fields ?? []} grouping={capabilities.data?.grouping}
+          fields={localizedCapabilities?.fields ?? []} grouping={localizedCapabilities?.grouping}
           issues={validation.data?.issues ?? []}
           referenceOptions={{ tag: tags.data ?? [], correspondent: correspondents.data ?? [],
             document_type: documentTypes.data ?? [], storage_path: storagePaths.data ?? [] }} />

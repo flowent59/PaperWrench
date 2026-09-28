@@ -1,14 +1,18 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
 import { ApiError, authApi } from '@/api/client'
 import type { AuthSession } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { messages } from '@/i18n/messages'
+import { getLocale, messages, setLocale as activateLocale, type Locale } from '@/i18n/messages'
 import { AuthContext, type AuthContextValue } from '@/auth-context'
 
-function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
+function LoginPage({ locale, onLocaleChange, onLogin }: {
+  locale: Locale
+  onLocaleChange: (locale: Locale) => void
+  onLogin: (session: AuthSession) => void
+}) {
   const [token, setToken] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -18,7 +22,7 @@ function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
     setSubmitting(true)
     setError(null)
     try {
-      onLogin(await authApi.login(token))
+      onLogin(await authApi.login(token, locale))
       setToken('')
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : messages.auth.unreachable)
@@ -31,6 +35,14 @@ function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
     <main className="flex min-h-screen items-center justify-center bg-background p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
+          <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            <span>{messages.locale.language}</span>
+            <select aria-label={messages.locale.language} className="rounded border border-input bg-background px-2 py-1"
+              onChange={(event) => onLocaleChange(event.target.value as Locale)} value={locale}>
+              <option value="en">{messages.locale.english}</option>
+              <option value="fr">{messages.locale.french}</option>
+            </select>
+          </label>
           <CardTitle>{messages.auth.title}</CardTitle>
           <CardDescription>{messages.auth.description}</CardDescription>
         </CardHeader>
@@ -63,11 +75,23 @@ function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null | undefined>(undefined)
+  const [locale, setLocaleState] = useState<Locale>(getLocale)
   const queryClient = useQueryClient()
+
+  function applyLocale(next: Locale) {
+    activateLocale(next)
+    setLocaleState(next)
+  }
 
   useEffect(() => {
     let active = true
-    void authApi.me().then((value) => active && setSession(value)).catch(() => active && setSession(null))
+    void authApi.me().then((value) => {
+      if (!active) return
+      const preferred = value.locale ?? getLocale()
+      activateLocale(preferred)
+      setLocaleState(preferred)
+      setSession({ ...value, locale: preferred })
+    }).catch(() => active && setSession(null))
     const unauthorized = () => {
       queryClient.clear()
       setSession(null)
@@ -81,19 +105,37 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue | null>(() => session ? ({
     session,
+    locale,
+    changeLocale: async (next) => {
+      const previous = locale
+      applyLocale(next)
+      setSession((current) => current ? { ...current, locale: next } : current)
+      try {
+        await authApi.updateLocale(next)
+      } catch {
+        applyLocale(previous)
+        setSession((current) => current ? { ...current, locale: previous } : current)
+      }
+    },
     logout: async () => {
       try { await authApi.logout() } finally {
         queryClient.clear()
         setSession(null)
       }
     },
-  }) : null, [queryClient, session])
+  }) : null, [locale, queryClient, session])
 
   if (session === undefined) {
     return <main className="flex min-h-screen items-center justify-center">{messages.auth.checking}</main>
   }
   if (!value) {
-    return <LoginPage onLogin={setSession} />
+    return <LoginPage locale={locale} onLocaleChange={applyLocale} onLogin={(next) => {
+      const preferred = next.locale ?? locale
+      applyLocale(preferred)
+      setSession({ ...next, locale: preferred })
+    }} />
   }
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={value}>
+    <Fragment key={locale}>{children}</Fragment>
+  </AuthContext.Provider>
 }
