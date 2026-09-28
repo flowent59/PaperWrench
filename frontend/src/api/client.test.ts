@@ -7,7 +7,7 @@ function mockFetch(response: Response | Error) {
     (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
       response instanceof Error
         ? Promise.reject(response)
-        : Promise.resolve(response),
+        : Promise.resolve(response.clone()),
   )
   vi.stubGlobal('fetch', spy)
   return spy

@@ -92,6 +92,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (session === undefined) {
     return <main className="flex min-h-screen items-center justify-center">{messages.auth.checking}</main>
   }
-  if (!value) return <LoginPage onLogin={setSession} />
+  if (!value) {
+    return <LoginPage onLogin={setSession} />
+  }
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
