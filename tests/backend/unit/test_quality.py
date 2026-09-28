@@ -173,6 +173,7 @@ def test_removed_metadata_blocks_evaluation_before_document_list(client: TestCli
     schema = definition()
     with get_session_factory()() as db:
         row = DocumentSchema(
+            owner_id=1,
             name=schema.name,
             description=None,
             applies_when_json=StoredScope(query=schema.applies_when).model_dump_json(),

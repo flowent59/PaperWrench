@@ -37,6 +37,13 @@ non-root with a read-only root filesystem in Compose. Keep
 `/data` and backups private; preview expiry is logical deletion, not secure erasure.
 See [deployment.md](deployment.md) for consistent SQLite snapshots and restoration.
 
+Collections, schemas, previews, jobs, history, targets and rollback links are scoped
+to the Paperless user ID established at login. Local object IDs are never sufficient
+authority. There is no administrator exception or cross-user history view. Workers
+recheck the durable owner before using the initiating user's credential and Paperless
+re-evaluates document permissions on every read/write. Revoked tokens and changed
+permissions fail the affected targets; they never fall back to a deployment token.
+
 ## Dependency review (2026-09-26)
 
 Earlier compatible lockfile updates removed the high-severity js-yaml and Redocly

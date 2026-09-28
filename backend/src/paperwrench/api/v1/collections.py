@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from paperwrench.api.deps import get_metadata_registry
+from paperwrench.api.deps import get_owner_id
 from paperwrench.api.deps import get_paperless_client
 from paperwrench.api.v1.documents import DocumentListItem
 from paperwrench.api.v1.documents import _document_to_list_item
@@ -83,9 +84,9 @@ class MemberPage(BaseModel):
     page_count: int
 
 
-def _row(db: Session, collection_id: int) -> Collection:
+def _row(db: Session, collection_id: int, owner_id: int) -> Collection:
     row = db.get(Collection, collection_id)
-    if row is None or row.kind != CollectionKind.STATIC:
+    if row is None or row.kind != CollectionKind.STATIC or row.owner_id != owner_id:
         raise PaperWrenchError("Collection not found.", status_code=404, code=ErrorCode.NOT_FOUND)
     return row
 
@@ -119,8 +120,11 @@ async def _check_visible(ids: list[int], client: PaperlessClient) -> None:
 
 
 @router.get("", response_model=list[CollectionView])
-def list_collections(db: Session = Depends(get_db)) -> list[CollectionView]:
-    rows = db.scalars(select(Collection).where(Collection.kind == CollectionKind.STATIC)
+def list_collections(
+    db: Session = Depends(get_db), owner_id: int = Depends(get_owner_id)
+) -> list[CollectionView]:
+    rows = db.scalars(select(Collection).where(
+        Collection.kind == CollectionKind.STATIC, Collection.owner_id == owner_id)
                       .order_by(Collection.name)).all()
     return [_view(db, row) for row in rows]
 
@@ -130,10 +134,14 @@ async def create_collection(
     data: CollectionCreate,
     db: Session = Depends(get_db),
     client: PaperlessClient = Depends(get_paperless_client),
+    owner_id: int = Depends(get_owner_id),
 ) -> CollectionView:
     ids = MemberIds(document_ids=data.document_ids).document_ids if data.document_ids else []
     await _check_visible(ids, client)
-    row = Collection(name=data.name, description=data.description, kind=CollectionKind.STATIC)
+    row = Collection(
+        name=data.name, description=data.description,
+        kind=CollectionKind.STATIC, owner_id=owner_id,
+    )
     db.add(row)
     try:
         db.flush()
@@ -151,14 +159,17 @@ async def create_collection(
 
 
 @router.get("/{collection_id}", response_model=CollectionView)
-def get_collection(collection_id: int, db: Session = Depends(get_db)) -> CollectionView:
-    return _view(db, _row(db, collection_id))
+def get_collection(
+    collection_id: int, db: Session = Depends(get_db), owner_id: int = Depends(get_owner_id)
+) -> CollectionView:
+    return _view(db, _row(db, collection_id, owner_id))
 
 
 @router.put("/{collection_id}", response_model=CollectionView)
 def update_collection(collection_id: int, data: CollectionInput,
-                      db: Session = Depends(get_db)) -> CollectionView:
-    row = _row(db, collection_id)
+                      db: Session = Depends(get_db),
+                      owner_id: int = Depends(get_owner_id)) -> CollectionView:
+    row = _row(db, collection_id, owner_id)
     row.name, row.description, row.updated_at = data.name, data.description, utcnow()
     _commit(db)
     db.refresh(row)
@@ -166,16 +177,18 @@ def update_collection(collection_id: int, data: CollectionInput,
 
 
 @router.delete("/{collection_id}", status_code=204)
-def delete_collection(collection_id: int, db: Session = Depends(get_db)) -> Response:
-    db.delete(_row(db, collection_id))
+def delete_collection(collection_id: int, db: Session = Depends(get_db),
+                      owner_id: int = Depends(get_owner_id)) -> Response:
+    db.delete(_row(db, collection_id, owner_id))
     db.commit()
     return Response(status_code=204)
 
 
 @router.post("/{collection_id}/documents", response_model=CollectionView)
 async def add_members(collection_id: int, data: MemberIds, db: Session = Depends(get_db),
-                      client: PaperlessClient = Depends(get_paperless_client)) -> CollectionView:
-    row = _row(db, collection_id)
+                      client: PaperlessClient = Depends(get_paperless_client),
+                      owner_id: int = Depends(get_owner_id)) -> CollectionView:
+    row = _row(db, collection_id, owner_id)
     existing = set(db.scalars(select(CollectionDocument.document_id).where(
         CollectionDocument.collection_id == collection_id,
         CollectionDocument.document_id.in_(data.document_ids))).all())
@@ -190,8 +203,9 @@ async def add_members(collection_id: int, data: MemberIds, db: Session = Depends
 
 @router.delete("/{collection_id}/documents", response_model=CollectionView)
 def remove_members(collection_id: int, data: MemberIds,
-                   db: Session = Depends(get_db)) -> CollectionView:
-    row = _row(db, collection_id)
+                   db: Session = Depends(get_db),
+                   owner_id: int = Depends(get_owner_id)) -> CollectionView:
+    row = _row(db, collection_id, owner_id)
     db.execute(delete(CollectionDocument).where(CollectionDocument.collection_id == collection_id,
                CollectionDocument.document_id.in_(data.document_ids)))
     row.updated_at = utcnow()
@@ -204,8 +218,9 @@ async def list_members(collection_id: int, page: int = Query(1, ge=1),
                        page_size: int = Query(25, ge=1, le=100),
                        db: Session = Depends(get_db),
                        client: PaperlessClient = Depends(get_paperless_client),
-                       registry: MetadataRegistry = Depends(get_metadata_registry)) -> MemberPage:
-    _row(db, collection_id)
+                       registry: MetadataRegistry = Depends(get_metadata_registry),
+                       owner_id: int = Depends(get_owner_id)) -> MemberPage:
+    _row(db, collection_id, owner_id)
     total = db.scalar(select(func.count()).select_from(CollectionDocument).where(
         CollectionDocument.collection_id == collection_id)) or 0
     ids = db.scalars(select(CollectionDocument.document_id).where(

@@ -31,6 +31,11 @@ async def require_session(record: AuthSession = Depends(get_auth_session)) -> No
     _ = record
 
 
+async def get_owner_id(record: AuthSession = Depends(get_auth_session)) -> int:
+    """Stable Paperless user ID used by every local ownership boundary."""
+    return record.paperless_user_id
+
+
 async def get_paperless_client(
     record: AuthSession = Depends(get_auth_session),
 ) -> PaperlessClient:

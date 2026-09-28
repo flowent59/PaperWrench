@@ -150,6 +150,7 @@ class PreviewService:
         client: PaperlessClient,
         registry: MetadataRegistry,
         *, rollback_of_job_id: int | None = None,
+        owner_id: int | None = None,
     ) -> CreatedPreview:
         if self._building:
             raise PaperWrenchError(
@@ -161,7 +162,9 @@ class PreviewService:
         preview_id = uuid4().hex
         try:
             async with asyncio.timeout(TIMEOUT_SECONDS):
-                return await self._build(preview_id, spec, client, registry, rollback_of_job_id)
+                return await self._build(
+                    preview_id, spec, client, registry, rollback_of_job_id, owner_id
+                )
         except BaseException as exc:
             with session_scope() as session:
                 session.execute(delete(Preview).where(Preview.id == preview_id))
@@ -180,6 +183,7 @@ class PreviewService:
         client: PaperlessClient,
         registry: MetadataRegistry,
         rollback_of_job_id: int | None = None,
+        owner_id: int | None = None,
     ) -> CreatedPreview:
         # The existing query adapter is re-used verbatim. Import after router
         # assembly to avoid the api.v1 package's eager router imports.
@@ -187,7 +191,14 @@ class PreviewService:
 
         cleanup()
         with session_scope() as session:
-            if (session.scalar(select(func.count()).select_from(Preview)) or 0) >= MAX_PREVIEWS:
+            if (
+                session.scalar(
+                    select(func.count())
+                    .select_from(Preview)
+                    .where(Preview.owner_id == owner_id)
+                )
+                or 0
+            ) >= MAX_PREVIEWS:
                 raise limit("Four previews are retained; discard one or wait for expiry.")
         if (spec is not None and spec.targets.source == "ids"
                 and len(spec.targets.document_ids) > MAX_DOCUMENTS):
@@ -199,7 +210,7 @@ class PreviewService:
             from paperwrench.jobs.rollback import require_original
 
             with session_scope() as session:
-                require_original(session, rollback_of_job_id)
+                require_original(session, rollback_of_job_id, owner_id)
             await registry.refresh(MetadataKind.CUSTOM_FIELD)
         fields = {field.id: field for field in await registry.all_custom_fields()}
         params: dict[str, Any] = {}
@@ -221,6 +232,7 @@ class PreviewService:
             session.add(
                 Preview(
                     id=preview_id,
+                    owner_id=owner_id,
                     expires_at=expiry,
                     token_hash=hashlib.sha256(token.encode()).hexdigest(),
                 )
@@ -277,7 +289,13 @@ class PreviewService:
                 if not batch_targets:
                     break
                 stage([
-                    await preview_row(rollback_of_job_id, target.document_id, client, fields)
+                    await preview_row(
+                        rollback_of_job_id,
+                        target.document_id,
+                        client,
+                        fields,
+                        owner_id,
+                    )
                     for target in batch_targets
                 ])
                 position = batch_targets[-1].position
@@ -377,10 +395,15 @@ class PreviewService:
             )
         return CreatedPreview(**summary.model_dump(), preview_token=token)
 
-    def summary(self, preview_id: str) -> PreviewSummary:
+    def summary(self, preview_id: str, owner_id: int | None = None) -> PreviewSummary:
         with session_scope() as session:
             preview = session.get(Preview, preview_id)
-            if preview is None or not preview.ready or preview.expires_at <= utcnow():
+            if (
+                preview is None
+                or preview.owner_id != owner_id
+                or not preview.ready
+                or preview.expires_at <= utcnow()
+            ):
                 raise stale()
             return PreviewSummary.model_validate_json(preview.summary_json).model_copy(
                 update={"confirmed": preview.confirmed}
@@ -392,10 +415,11 @@ class PreviewService:
         page: int,
         page_size: int,
         status: ResultStatus | None = None,
+        owner_id: int | None = None,
     ) -> PreviewPage:
         from paperwrench.api.v1.documents import validate_page_size
 
-        self.summary(preview_id)
+        self.summary(preview_id, owner_id)
         validate_page_size(page_size)
         if page < 1:
             raise limit("Page must be positive.")
@@ -422,16 +446,27 @@ class PreviewService:
                 page_count=(total + page_size - 1) // page_size,
             )
 
-    def confirm(self, preview_id: str, request: ConfirmPreview) -> PreviewSummary:
+    def confirm(
+        self, preview_id: str, request: ConfirmPreview, owner_id: int | None = None
+    ) -> PreviewSummary:
         with session_scope() as session:
-            return self.claim(session, preview_id, request)
+            return self.claim(session, preview_id, request, owner_id)
 
     def claim(
-        self, session: Session, preview_id: str, request: ConfirmPreview
+        self,
+        session: Session,
+        preview_id: str,
+        request: ConfirmPreview,
+        owner_id: int | None = None,
     ) -> PreviewSummary:
         """Consume inside the caller's transaction; never commit here."""
         preview = session.get(Preview, preview_id)
-        if preview is None or not preview.ready or preview.expires_at <= utcnow():
+        if (
+            preview is None
+            or preview.owner_id != owner_id
+            or not preview.ready
+            or preview.expires_at <= utcnow()
+        ):
             raise stale()
         summary = PreviewSummary.model_validate_json(preview.summary_json).model_copy(
             update={"confirmed": preview.confirmed}
@@ -456,6 +491,7 @@ class PreviewService:
             update(Preview)
             .where(
                 Preview.id == preview_id,
+                Preview.owner_id == owner_id,
                 Preview.confirmed.is_(False),
                 Preview.ready.is_(True),
                 Preview.expires_at > utcnow(),
@@ -468,8 +504,12 @@ class PreviewService:
             raise stale()
         return summary.model_copy(update={"confirmed": True})
 
-    def discard(self, preview_id: str) -> None:
+    def discard(self, preview_id: str, owner_id: int | None = None) -> None:
         with session_scope() as session:
             session.execute(
-                delete(Preview).where(Preview.id == preview_id, Preview.ready.is_(True))
+                delete(Preview).where(
+                    Preview.id == preview_id,
+                    Preview.owner_id == owner_id,
+                    Preview.ready.is_(True),
+                )
             )

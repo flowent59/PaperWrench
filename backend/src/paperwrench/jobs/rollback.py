@@ -25,6 +25,7 @@ from paperwrench.db.session import session_scope
 from paperwrench.errors import PaperlessForbiddenError
 from paperwrench.filters.model import CustomFieldRef
 from paperwrench.jobs.model import CreateRollback
+from paperwrench.jobs.store import UNSCOPED_OWNER
 from paperwrench.jobs.store import encoded
 from paperwrench.jobs.store import require_job
 from paperwrench.jobs.store import rollback_candidate
@@ -42,8 +43,12 @@ from paperwrench.transformations.model import Transformation
 from paperwrench.transformations.model import TransformationIssue
 
 
-def require_original(session: Session, job_id: int) -> Job:
-    job = require_job(session, job_id)
+def require_original(
+    session: Session,
+    job_id: int,
+    owner_id: int | object | None = UNSCOPED_OWNER,
+) -> Job:
+    job = require_job(session, job_id, owner_id)
     if job.type != JobType.TRANSFORM or not JobStatus(job.status).is_terminal:
         raise stale("Rollback requires a terminal transformation Job.")
     if session.scalar(select(Job.id).where(Job.rollback_of_job_id == job_id)) is not None:
@@ -52,13 +57,18 @@ def require_original(session: Session, job_id: int) -> Job:
 
 
 async def preview_row(
-    job_id: int, document_id: int, client: PaperlessClient, fields: dict[int, CustomField]
+    job_id: int,
+    document_id: int,
+    client: PaperlessClient,
+    fields: dict[int, CustomField],
+    owner_id: int | None = None,
 ) -> PreviewRow:
     operations: list[dict[str, Any]] = []
     expected: list[Any] = []
     links: list[int] = []
     excluded: dict[str, str] = {}
     with session_scope() as session:
+        require_original(session, job_id, owner_id)
         target = session.get(JobTarget, (job_id, document_id))
         assert target is not None
         original = (
@@ -151,13 +161,16 @@ async def preview_row(
     return row
 
 
-def create_rollback(job_id: int, request: CreateRollback) -> int:
+def create_rollback(
+    job_id: int, request: CreateRollback, owner_id: int | None = None
+) -> int:
     with session_scope() as session:
         session.execute(text("BEGIN IMMEDIATE"))
-        require_original(session, job_id)
+        require_original(session, job_id, owner_id)
         preview = session.get(Preview, request.preview_id)
         if (
             preview is None
+            or preview.owner_id != owner_id
             or not preview.ready
             or preview.confirmed
             or preview.expires_at <= utcnow()
@@ -177,6 +190,7 @@ def create_rollback(job_id: int, request: CreateRollback) -> int:
             raise stale("Confirmation does not match a rollback preview with eligible changes.")
         preview.confirmed = True
         job = Job(
+            owner_id=owner_id,
             type=JobType.ROLLBACK,
             title=f"Rollback of Job #{job_id}",
             rollback_of_job_id=job_id,

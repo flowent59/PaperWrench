@@ -7,6 +7,7 @@ from fastapi import Request
 from fastapi import Response
 
 from paperwrench.api.deps import get_metadata_registry
+from paperwrench.api.deps import get_owner_id
 from paperwrench.api.deps import get_paperless_client
 from paperwrench.api.v1.previews import get_previews
 from paperwrench.db.models import TargetStatus
@@ -43,22 +44,27 @@ async def apply_preview(
     worker: JobEngine = Depends(engine),
     client: PaperlessClient = Depends(get_paperless_client),
     registry: MetadataRegistry = Depends(get_metadata_registry),
+    owner_id: int = Depends(get_owner_id),
 ) -> JobView:
     worker.check_available()
-    job_id = store.create_job(body)
-    worker.bind(job_id, client, registry)
+    job_id = store.create_job(body, owner_id)
+    worker.bind(job_id, owner_id, client, registry)
     worker.wake.set()
-    return store.job_view(job_id)
+    return store.job_view(job_id, owner_id)
 
 
 @router.get("", response_model=HistoryPage[JobView])
-def jobs(page: int = Query(1, ge=1), page_size: int = 25) -> HistoryPage[JobView]:
-    return store.job_page(page, page_size)
+def jobs(
+    page: int = Query(1, ge=1),
+    page_size: int = 25,
+    owner_id: int = Depends(get_owner_id),
+) -> HistoryPage[JobView]:
+    return store.job_page(page, page_size, owner_id)
 
 
 @router.get("/{job_id}", response_model=JobView)
-def job(job_id: int) -> JobView:
-    return store.job_view(job_id)
+def job(job_id: int, owner_id: int = Depends(get_owner_id)) -> JobView:
+    return store.job_view(job_id, owner_id)
 
 
 @router.get("/{job_id}/targets", response_model=HistoryPage[TargetView])
@@ -67,8 +73,9 @@ def targets(
     page: int = Query(1, ge=1),
     page_size: int = 25,
     status: TargetStatus | None = None,
+    owner_id: int = Depends(get_owner_id),
 ) -> HistoryPage[TargetView]:
-    return store.target_page(job_id, page, page_size, status)
+    return store.target_page(job_id, page, page_size, status, owner_id)
 
 
 @router.get("/{job_id}/operations", response_model=HistoryPage[OperationView])
@@ -77,8 +84,9 @@ def operations(
     page: int = Query(1, ge=1),
     page_size: int = 25,
     document_id: int | None = Query(None, gt=0),
+    owner_id: int = Depends(get_owner_id),
 ) -> HistoryPage[OperationView]:
-    return store.operation_page(job_id, page, page_size, document_id)
+    return store.operation_page(job_id, page, page_size, document_id, owner_id)
 
 
 @router.post("/{job_id}/resume", response_model=JobView)
@@ -87,10 +95,11 @@ async def resume(
     worker: JobEngine = Depends(engine),
     client: PaperlessClient = Depends(get_paperless_client),
     registry: MetadataRegistry = Depends(get_metadata_registry),
+    owner_id: int = Depends(get_owner_id),
 ) -> JobView:
-    worker.bind(job_id, client, registry)
-    worker.resume(job_id)
-    return store.job_view(job_id)
+    worker.bind(job_id, owner_id, client, registry)
+    worker.resume(job_id, owner_id)
+    return store.job_view(job_id, owner_id)
 
 
 @router.post("/{job_id}/rollback-preview", response_model=CreatedPreview, status_code=201)
@@ -100,8 +109,15 @@ async def rollback_preview(
     previews: PreviewService = Depends(get_previews),
     client: PaperlessClient = Depends(get_paperless_client),
     registry: MetadataRegistry = Depends(get_metadata_registry),
+    owner_id: int = Depends(get_owner_id),
 ) -> CreatedPreview:
-    return await previews.create(None, client, registry, rollback_of_job_id=job_id)
+    return await previews.create(
+        None,
+        client,
+        registry,
+        rollback_of_job_id=job_id,
+        owner_id=owner_id,
+    )
 
 
 @router.post("/{job_id}/rollback", response_model=JobView, status_code=201)
@@ -111,9 +127,10 @@ async def rollback(
     worker: JobEngine = Depends(engine),
     client: PaperlessClient = Depends(get_paperless_client),
     registry: MetadataRegistry = Depends(get_metadata_registry),
+    owner_id: int = Depends(get_owner_id),
 ) -> JobView:
     worker.check_available()
-    rollback_id = create_rollback(job_id, body)
-    worker.bind(rollback_id, client, registry)
+    rollback_id = create_rollback(job_id, body, owner_id)
+    worker.bind(rollback_id, owner_id, client, registry)
     worker.wake.set()
-    return store.job_view(rollback_id)
+    return store.job_view(rollback_id, owner_id)

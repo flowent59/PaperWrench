@@ -169,9 +169,12 @@ class Job(Base):
     __table_args__ = (
         Index("ix_jobs_status", "status"),
         Index("ix_jobs_created_at", "created_at"),
+        Index("ix_jobs_owner_created", "owner_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    #: Null only for quarantined v0.1 history. Never exposed to a user.
+    owner_id: Mapped[int | None] = mapped_column(Integer, index=True)
     type: Mapped[JobType] = mapped_column(String(32), nullable=False)
     status: Mapped[JobStatus] = mapped_column(
         String(32), default=JobStatus.PENDING, nullable=False
@@ -342,9 +345,14 @@ class DocumentSchema(Base):
     """
 
     __tablename__ = "schemas"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "name", name="schema_owner_name"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    #: Null marks legacy data that is deliberately not assigned on upgrade.
+    owner_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     applies_when_json: Mapped[str] = mapped_column(Text, nullable=False)
     rules_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
@@ -363,9 +371,14 @@ class Collection(Base):
     """A lightweight, user-curated set of documents."""
 
     __tablename__ = "collections"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "name", name="collection_owner_name"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    #: Null marks legacy data that is deliberately not assigned on upgrade.
+    owner_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     kind: Mapped[CollectionKind] = mapped_column(
         String(16), default=CollectionKind.STATIC, nullable=False
@@ -424,6 +437,8 @@ class Preview(Base):
 
     __tablename__ = "previews"
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    #: Null only for legacy/abandoned staging; authenticated APIs never expose it.
+    owner_id: Mapped[int | None] = mapped_column(Integer, index=True)
     expires_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, index=True)
     ready: Mapped[bool] = mapped_column(default=False, nullable=False)
     confirmed: Mapped[bool] = mapped_column(default=False, nullable=False)
