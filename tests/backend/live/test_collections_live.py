@@ -42,16 +42,22 @@ async def test_static_vacation_ids_survive_reload_and_missing_member(
     )
     ids = [first.results[0].id, second.results[0].id]
     assert ids[0] != ids[1]
+    owner_id = int((await live_client.get_profile())["id"])
     created = await create_collection(
-        CollectionCreate(name="Live vacations", document_ids=ids), session, live_client
+        CollectionCreate(name="Live vacations", document_ids=ids),
+        session,
+        live_client,
+        owner_id,
     )
     assert created.member_count == 2
-    page = await list_members(created.id, 1, 25, session, live_client, registry)
+    page = await list_members(created.id, 1, 25, session, live_client, registry, owner_id)
     assert {item.document_id for item in page.items} == set(ids)
     assert all(item.available for item in page.items)
     session.add(CollectionDocument(collection_id=created.id, document_id=999999999))
     session.commit()
-    reloaded = await list_members(created.id, 1, 25, session, live_client, registry)
+    reloaded = await list_members(
+        created.id, 1, 25, session, live_client, registry, owner_id
+    )
     missing = next(item for item in reloaded.items if item.document_id == 999999999)
     assert not missing.available and missing.document is None
     assert set(methods) == {"GET"}
