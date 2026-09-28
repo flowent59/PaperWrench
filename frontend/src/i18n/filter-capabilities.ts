@@ -45,7 +45,9 @@ export function localizeFilterCapabilities(
   if (capabilities === undefined) return undefined
   return {
     ...capabilities,
-    fields: capabilities.fields.map(localizeFieldCapability),
-    search_modes: capabilities.search_modes.map(localizeSearchMode),
+    // Some older saved/mock payloads can omit one of these collections.
+    // Treat them as empty just as the consuming screens did before i18n.
+    fields: (capabilities.fields ?? []).map(localizeFieldCapability),
+    search_modes: (capabilities.search_modes ?? []).map(localizeSearchMode),
   }
 }
