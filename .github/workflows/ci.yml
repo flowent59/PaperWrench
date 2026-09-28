@@ -117,6 +117,32 @@ jobs:
       - name: Client tests against respx (NOT a real Paperless)
         run: pytest tests/backend/integration_mocked -s
 
+  # Explicit required check for authentication/isolation invariants.  These
+  # tests also run in their broader suites, but this named job makes a branch
+  # protection rule able to require the security boundary directly.
+  backend-multi-user-security:
+    name: Security / multi-user regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Session, IDOR, revocation and permission-race regressions
+        run: |
+          pytest \
+            tests/backend/integration_mocked/test_multi_user_security.py \
+            tests/backend/unit/test_auth.py \
+            tests/backend/unit/test_user_isolation.py \
+            tests/backend/unit/test_jobs.py::test_fresh_preconditions_and_already_at_target
+
   # --------------------------------------------- live against real Paperless
   # These jobs can add version-scoped VERIFIED_LIVE evidence. They write and
   # deletes, which is exactly why it runs against a throwaway container and

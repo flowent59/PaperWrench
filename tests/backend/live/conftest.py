@@ -257,6 +257,123 @@ async def restricted_user(
         await raw_live.delete(f"/api/users/{user_id}/")
 
 
+@pytest_asyncio.fixture
+async def multi_user_library(
+    raw_live: httpx.AsyncClient,
+    live_url: str,
+    golden_custom_field_ids: dict[str, int],
+) -> AsyncIterator[list[dict[str, object]]]:
+    """Two regular users with disjoint owned documents in the live sandbox.
+
+    Both identities can inspect and change documents, while only the first can
+    delete them.  Their representative documents carry a real custom field and
+    are owned by different users, so Paperless enforces the object boundary.
+    """
+    import asyncio
+    import uuid
+
+    common_permissions = [
+        "view_document",
+        "add_document",
+        "change_document",
+        "view_customfield",
+        "view_correspondent",
+        "view_documenttype",
+        "view_storagepath",
+        "view_tag",
+    ]
+    users: list[dict[str, object]] = []
+    user_ids: list[int] = []
+    document_ids: list[int] = []
+    amount_id = golden_custom_field_ids["Montant"]
+
+    try:
+        for position, label in enumerate(("alpha", "bravo"), start=1):
+            marker = uuid.uuid4().hex[:8]
+            username = f"pw-live-{label}-{marker}"
+            password = f"pw-{uuid.uuid4().hex}"
+            permissions = [*common_permissions]
+            if position == 1:
+                permissions.append("delete_document")
+            created = await raw_live.post(
+                "/api/users/",
+                json={
+                    "username": username,
+                    "password": password,
+                    "is_active": True,
+                    "is_staff": False,
+                    "is_superuser": False,
+                    "user_permissions": permissions,
+                },
+            )
+            created.raise_for_status()
+            user_id = int(created.json()["id"])
+            user_ids.append(user_id)
+            async with httpx.AsyncClient(base_url=live_url, timeout=10.0) as anonymous:
+                token_response = await anonymous.post(
+                    "/api/token/", data={"username": username, "password": password}
+                )
+            token_response.raise_for_status()
+            token = str(token_response.json()["token"])
+
+            title = f"PaperWrench {label} private {marker}"
+            upload = await raw_live.post(
+                "/api/documents/post_document/",
+                files={
+                    "document": (
+                        f"{marker}.txt",
+                        f"Private live test for {label} {marker}".encode(),
+                        "text/plain",
+                    )
+                },
+                data={"title": title},
+            )
+            upload.raise_for_status()
+            document_id: int | None = None
+            for _ in range(60):
+                listing = await raw_live.get(
+                    "/api/documents/", params={"title__icontains": marker}
+                )
+                listing.raise_for_status()
+                results = listing.json().get("results", [])
+                if results:
+                    document_id = int(results[0]["id"])
+                    break
+                await asyncio.sleep(2)
+            if document_id is None:
+                pytest.fail(f"Paperless did not consume {label}'s document in time")
+            configured = await raw_live.patch(
+                f"/api/documents/{document_id}/",
+                json={
+                    "owner": user_id,
+                    "custom_fields": [{"field": amount_id, "value": f"EUR{position}.00"}],
+                },
+            )
+            configured.raise_for_status()
+            document_ids.append(document_id)
+            users.append(
+                {
+                    "id": user_id,
+                    "username": username,
+                    "token": token,
+                    "document_id": document_id,
+                    "title": title,
+                    "can_delete": position == 1,
+                }
+            )
+
+        yield users
+    finally:
+        for document_id in document_ids:
+            response = await raw_live.delete(f"/api/documents/{document_id}/")
+            if response.status_code not in {204, 404}:
+                response.raise_for_status()
+        for user_id in user_ids:
+            response = await raw_live.delete(f"/api/users/{user_id}/")
+            if response.status_code not in {204, 404}:
+                response.raise_for_status()
+
+
 @pytest_asyncio.fixture(scope="session")
 async def golden_custom_field_ids(live_settings: Settings) -> dict[str, int]:
     """Name -> id for the Golden Dataset's custom fields, resolved live.
