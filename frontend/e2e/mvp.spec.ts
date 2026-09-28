@@ -123,7 +123,7 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
     await expect(confirm).toBeFocused()
     await page.keyboard.press('Enter')
     await page.getByRole('link', { name: 'Open History' }).click()
-    await expect(page.getByText(/^COMPLETED ·/)).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText(/^Completed ·/)).toBeVisible({ timeout: 30_000 })
     const jobId = Number(new URL(page.url()).pathname.split('/').pop())
     // Direct nested navigation/reload must load actual compiled assets.
     await page.reload()
@@ -141,7 +141,7 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
     await page.getByRole('checkbox', { name: 'I have reviewed the restorations, exclusions and conflicts.' }).check()
     await page.getByRole('button', { name: 'Create rollback Job' }).click()
     await page.getByRole('link', { name: /Rollback Job #/ }).click()
-    await expect(page.getByText(/^PARTIAL ·/)).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText(/^Partial ·/)).toBeVisible({ timeout: 30_000 })
     for (const before of originals) {
       const current: Doc = await (await upstream.get(`/api/documents/${before.id}/`)).json()
       expect(current.title).toBe(before.id === edited ? 'M13 later third-party title' : before.title)
