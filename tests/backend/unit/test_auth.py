@@ -42,6 +42,35 @@ def test_login_sets_http_only_cookie_and_never_returns_token(
 
 
 @respx.mock
+def test_login_normalizes_the_real_paperless_321_profile_without_disclosure(
+    unauthenticated_client: TestClient,
+) -> None:
+    token = "paperless-321-profile-token-secret"
+    respx.get("http://paperless.test/api/profile/").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "email": "alice@example.test",
+                "first_name": "Alice",
+                "last_name": "Example",
+                "auth_token": token,
+                "has_usable_password": True,
+            },
+        )
+    )
+
+    first = unauthenticated_client.post("/api/v1/auth/login", json={"token": token})
+    second = unauthenticated_client.post("/api/v1/auth/login", json={"token": token})
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["user_id"] == second.json()["user_id"]
+    assert first.json()["user_id"] > 0
+    assert first.json()["username"] == "alice@example.test"
+    assert first.json()["display_name"] == "Alice Example"
+    assert token not in first.text
+
+
+@respx.mock
 def test_invalid_token_is_rejected_without_a_session(
     unauthenticated_client: TestClient,
 ) -> None:
