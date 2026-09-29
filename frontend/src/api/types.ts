@@ -143,8 +143,15 @@ export interface DocumentPage {
 export interface ExplicitIdsPage extends DocumentPage { unavailable_count: number }
 
 export interface CollectionDefinition { name: string; description: string | null }
+export interface StaticCollectionCreate extends CollectionDefinition {
+  kind?: 'static'; document_ids: number[]
+}
+export interface DynamicCollectionCreate extends CollectionDefinition {
+  kind: 'dynamic'; filters: FilterSet
+}
 export interface CollectionView extends CollectionDefinition {
-  id: number; member_count: number; created_at: string; updated_at: string
+  id: number; kind: 'static' | 'dynamic'; filters: FilterSet | null
+  member_count: number; created_at: string; updated_at: string
 }
 export interface CollectionMember { document_id: number; document: DocumentListItem | null; available: boolean }
 export interface CollectionMemberPage {

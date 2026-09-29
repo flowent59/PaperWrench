@@ -231,10 +231,14 @@ export const filtersApi = {
 
 export const collectionsApi = {
   list: () => apiFetch<CollectionView[]>('/collections'),
-  create: (data: CollectionDefinition & { document_ids: number[] }) =>
+  create: (data: import('./types').StaticCollectionCreate | import('./types').DynamicCollectionCreate) =>
     apiFetch<CollectionView>('/collections', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id: number, data: CollectionDefinition) =>
+  update: (id: number, data: CollectionDefinition & { filters?: FilterSet }) =>
     apiFetch<CollectionView>(`/collections/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  preview: (filters: FilterSet, page = 1) =>
+    apiFetch<CollectionMemberPage>('/collections/preview', {
+      method: 'POST', body: JSON.stringify({ filters, page, page_size: 25 }),
+    }),
   remove: (id: number) => apiFetch<void>(`/collections/${id}`, { method: 'DELETE' }),
   members: (id: number, page: number) =>
     apiFetch<CollectionMemberPage>(`/collections/${id}/documents?page=${page}&page_size=25`),

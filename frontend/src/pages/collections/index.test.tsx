@@ -41,6 +41,53 @@ it('shows a collection list error', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Collection request failed.')
 })
 
+it('previews a dynamic collection before saving its filters', async () => {
+  const posts: Array<{ path: string; body: unknown }> = []
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input)
+    if (path === '/api/v1/collections' && init?.method !== 'POST') {
+      return Promise.resolve(Response.json([]))
+    }
+    if (path === '/api/v1/filters/capabilities') {
+      return Promise.resolve(Response.json({ fields: [], grouping: {
+        and_supported: true, or_custom_fields_supported: false,
+        or_core_fields_supported: false, or_mixed_supported: false,
+        not_supported: true, max_conditions: 20, max_depth: 2,
+        custom_field_max_depth: 1, custom_field_max_conditions: 10,
+      }, search_modes: [], operator_semantics: {} }))
+    }
+    if (path.startsWith('/api/v1/metadata/')) return Promise.resolve(Response.json([]))
+    if (path === '/api/v1/collections/preview') {
+      posts.push({ path, body: JSON.parse(String(init?.body)) })
+      return Promise.resolve(Response.json({ page: 1, page_size: 25, page_count: 1,
+        total: 1, items: [{ document_id: 8, available: true,
+          document: { id: 8, title: 'Invoice 8' } }] }))
+    }
+    if (path === '/api/v1/collections' && init?.method === 'POST') {
+      posts.push({ path, body: JSON.parse(String(init.body)) })
+      return Promise.resolve(Response.json({ id: 1, name: 'Invoices', description: null,
+        kind: 'dynamic', filters: { root: { kind: 'group', operator: 'and', children: [] } },
+        member_count: 1, created_at: '', updated_at: '' }, { status: 201 }))
+    }
+    throw new Error(`Unexpected ${path}`)
+  }))
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(<QueryClientProvider client={client}><MemoryRouter><CollectionsPage /></MemoryRouter></QueryClientProvider>)
+  await screen.findByText('No collections yet.')
+  const user = userEvent.setup()
+  await user.type(screen.getByLabelText('Name'), 'Invoices')
+  await user.selectOptions(screen.getByLabelText('Collection type'), 'dynamic')
+  const save = screen.getByRole('button', { name: 'Create collection' })
+  expect(save).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: 'Preview matches' }))
+  expect(await screen.findByText('#8 · Invoice 8')).toBeInTheDocument()
+  expect(save).toBeEnabled()
+  await user.click(save)
+  await waitFor(() => expect(posts).toHaveLength(2))
+  expect(posts[1]?.body).toMatchObject({ name: 'Invoices', kind: 'dynamic',
+    filters: { root: { children: [] } } })
+})
+
 it('reloads exact membership, hides unavailable metadata and removes a member', async () => {
   const removed: number[] = []
   const spy = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {

@@ -111,8 +111,7 @@ class TargetStatus(StrEnum):
 
 class CollectionKind(StrEnum):
     STATIC = "static"
-    #: Reserved. Dynamic (FilterSet-backed) collections are post-MVP; the
-    #: column exists so they are a purely additive change.
+    #: Membership is resolved from ``filterset_json`` against Paperless on access.
     DYNAMIC = "dynamic"
 
 
@@ -383,7 +382,7 @@ class DocumentSchema(Base):
 
 
 class Collection(Base):
-    """A lightweight, user-curated set of documents."""
+    """A user-owned static set or a saved dynamic Paperless filter."""
 
     __tablename__ = "collections"
     __table_args__ = (
@@ -398,7 +397,7 @@ class Collection(Base):
     kind: Mapped[CollectionKind] = mapped_column(
         String(16), default=CollectionKind.STATIC, nullable=False
     )
-    #: Unused in MVP; present so dynamic collections need no migration.
+    #: Present only for dynamic collections; document rows are never materialized locally.
     filterset_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
