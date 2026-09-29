@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0](https://github.com/flowent59/PaperWrench/compare/v0.1.1...v0.2.0) (2026-09-29)
+
+
+### Features
+
+* **auth:** add per-user Paperless sessions ([0f3bdb0](https://github.com/flowent59/PaperWrench/commit/0f3bdb0fa7d4627ff02e66c0664d3cc82f4a567b))
+* **auth:** authenticate users with their own Paperless token ([3757da5](https://github.com/flowent59/PaperWrench/commit/3757da5d5b0481c29370b681b936ffffcdc5b366))
+* **auth:** enforce per-user resource isolation ([8ea1477](https://github.com/flowent59/PaperWrench/commit/8ea147764ac20c29c3e124d58e4c6b535c77cec6))
+* **auth:** enforce per-user resource isolation ([9a5b162](https://github.com/flowent59/PaperWrench/commit/9a5b16221e3071a7a68245b598cb4576e358ff1a))
+* **i18n:** add French and English interface ([1b389d0](https://github.com/flowent59/PaperWrench/commit/1b389d0a168b9eb6ec108cda1b36e6afa9564022))
+* **i18n:** add French and English UI ([320e372](https://github.com/flowent59/PaperWrench/commit/320e372532856839c663678582ff8fe19c029aa4))
+
+
+### Bug Fixes
+
+* **auth:** normalize Paperless profile identity ([25ba43b](https://github.com/flowent59/PaperWrench/commit/25ba43b5f3432465e30460f2e204bc3f1d427eb1))
+
 ## [0.1.1](https://github.com/flowent59/PaperWrench/compare/v0.1.0...v0.1.1) (2026-09-26)
 
 
