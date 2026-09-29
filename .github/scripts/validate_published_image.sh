@@ -40,9 +40,20 @@ for attempt in $(seq 1 90); do
   if [ "$attempt" = 90 ]; then echo 'Paperless did not start' >&2; exit 1; fi
   sleep 5
 done
-curl -fsS -X POST http://127.0.0.1:8010/api/token/ \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"admin"}' | jq -er .token > "$workdir/paperless_token"
+# The login page can answer before Paperless finishes creating the configured
+# admin account. Wait for token authentication itself so a fresh stack cannot
+# fail the release gate during that short readiness gap.
+for attempt in $(seq 1 60); do
+  if curl -fsS -X POST http://127.0.0.1:8010/api/token/ \
+       -H 'Content-Type: application/json' \
+       -d '{"username":"admin","password":"admin"}' 2>/dev/null |
+       jq -er .token > "$workdir/paperless_token" 2>/dev/null; then
+    break
+  fi
+  rm -f "$workdir/paperless_token"
+  if [ "$attempt" = 60 ]; then echo 'Paperless admin token did not become ready' >&2; exit 1; fi
+  sleep 2
+done
 test -s "$workdir/paperless_token"
 chmod 0444 "$workdir/paperless_token"
 token=$(cat "$workdir/paperless_token")
