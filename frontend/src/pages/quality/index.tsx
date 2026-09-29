@@ -8,6 +8,7 @@ import type { QualityFinding, SchemaRuleResult } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { messages } from '@/i18n/messages'
+import { formatNumber } from '@/i18n/format'
 
 import { exactIdsHref, exactQueryHref } from './navigation'
 import { expected, observed } from './format'
@@ -53,9 +54,9 @@ export function QualityPageView() {
     {result.isPending && selected !== null && <p>{m.evaluating}</p>}
     {data && <>
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card><CardContent className="p-4"><strong>{data.evaluated_count}</strong><p className="text-sm">{m.evaluatedCount}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><strong>{data.violation_count}</strong><p className="text-sm">{m.violationCount}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><strong>{data.dataset_total}</strong><p className="text-sm">{m.datasetTotal}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><strong>{formatNumber(data.evaluated_count)}</strong><p className="text-sm">{m.evaluatedCount}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><strong>{formatNumber(data.violation_count)}</strong><p className="text-sm">{m.violationCount}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><strong>{formatNumber(data.dataset_total)}</strong><p className="text-sm">{m.datasetTotal}</p></CardContent></Card>
       </div>
       <Card><CardContent className="space-y-3 p-4">
         <h2 className="font-semibold">{m.rules}</h2>

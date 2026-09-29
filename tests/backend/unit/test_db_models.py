@@ -17,6 +17,7 @@ from paperwrench.db.models import JobOperation
 from paperwrench.db.models import JobStatus
 from paperwrench.db.models import JobType
 from paperwrench.db.models import OperationStatus
+from paperwrench.db.models import UserPreference
 
 
 def _job(session: Session, **kwargs: object) -> Job:
@@ -168,3 +169,20 @@ def test_utc_datetime_roundtrips_timezone_aware(session: Session) -> None:
     session.expire_all()
     reloaded = session.execute(select(Job)).scalar_one()
     assert reloaded.created_at.tzinfo is not None
+
+
+def test_user_locale_is_per_owner_and_rejects_unsupported_values(session: Session) -> None:
+    session.add_all(
+        [
+            UserPreference(owner_id=1, locale="en"),
+            UserPreference(owner_id=2, locale="fr"),
+        ]
+    )
+    session.commit()
+    assert session.get(UserPreference, 1).locale == "en"  # type: ignore[union-attr]
+    assert session.get(UserPreference, 2).locale == "fr"  # type: ignore[union-attr]
+
+    session.add(UserPreference(owner_id=3, locale="de"))
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()

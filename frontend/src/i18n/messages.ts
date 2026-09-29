@@ -1,18 +1,8 @@
-/**
- * Centralised UI strings.
- *
- * Deliberately NOT a full i18n framework for the MVP: no plural rules, no
- * lazy-loaded catalogues, no context providers. The single rule enforced from
- * M0 is that no component contains a hardcoded user-facing string. Adding a
- * locale later means adding one object here and a language switch, without
- * touching any component.
- *
- * Note the distinction between *UI language* (English for the MVP) and *data
- * language*: document titles, custom field names such as "Periode concernee"
- * and monetary values in euros are user data and must round-trip untouched.
- */
+import { frenchMessages } from './fr'
 
-export const messages = {
+/** Typed FR/EN message catalogues and the active-locale accessor. */
+
+export const englishMessages = {
   auth: {
     title: 'Sign in to PaperWrench',
     description: 'Use the API token for your own Paperless-ngx account.',
@@ -125,6 +115,17 @@ export const messages = {
     intended: 'Intended',
     unavailable: 'Unavailable',
     emptyString: '(empty string)',
+    coreField: (key: string, fallback: string) => ({
+      'core:title': 'Title',
+      'core:correspondent': 'Correspondent ID',
+      'core:document_type': 'Document type ID',
+      'core:storage_path': 'Storage path ID',
+      'core:tags': 'Tag IDs',
+      'core:created': 'Created date',
+      'core:added': 'Added date',
+      'core:modified': 'Modified date',
+      'core:archive_serial_number': 'Archive serial number',
+    } as Record<string, string>)[key] ?? fallback,
   },
   preview: {
     title: 'Dry Run', description: 'Review the proposed changes across your selection. Paperless documents remain unchanged.',
@@ -146,6 +147,7 @@ export const messages = {
     apply: 'Apply', applyUnavailable: 'Review a fresh preview before applying.',
     selected: 'Transform selected documents', dataset: 'Transform all matching documents',
     ordering: 'Dataset ordering', defaultOrdering: 'Default ordering',
+    statuses: { change: 'Would change', unchanged: 'Unchanged', error: 'Error' },
   },
   rollback: {
     preview: 'Preview rollback', confirm: 'Create rollback Job', title: 'Rollback review',
@@ -174,6 +176,11 @@ export const messages = {
     outcomes: { pending: 'Pending', reading: 'Reading', writing: 'Writing', succeeded: 'Succeeded',
       unchanged: 'Unchanged', conflict: 'Conflicts', permission: 'Permission denied', missing: 'Missing or invisible',
       failed: 'Errors', ambiguous: 'Ambiguous' },
+    statuses: { pending: 'Pending', running: 'Running', completed: 'Completed', partial: 'Partial',
+      failed: 'Failed', interrupted: 'Interrupted', cancelled: 'Cancelled' },
+    operationStatuses: { pending: 'Pending', ambiguous: 'Ambiguous', succeeded: 'Succeeded',
+      failed: 'Failed', skipped_unchanged: 'Unchanged', skipped_conflict: 'Conflict',
+      skipped_permission: 'Permission denied', skipped_missing: 'Missing or invisible' },
   },
   inspector: {
     title: 'Inspector',
@@ -267,7 +274,7 @@ export const messages = {
     subtitle: 'Overview of your Paperless-ngx library and PaperWrench activity.',
     notConfiguredTitle: 'Paperless-ngx is not configured',
     notConfiguredBody:
-      'Set PAPERLESS_URL and PAPERLESS_TOKEN, then restart PaperWrench. The token is read from the environment and is never stored in the database nor sent to the browser.',
+      'Set PAPERLESS_URL, restart PaperWrench, then sign in with your own Paperless API token.',
     unreachableTitle: 'Paperless-ngx cannot be reached',
     incompatibleTitle: 'Paperless-ngx API version is not supported',
   },
@@ -275,14 +282,7 @@ export const messages = {
     comingSoon: 'Coming soon',
     milestone: 'This screen is delivered in a later milestone.',
   },
-  /**
-   * Filter Builder strings.
-   *
-   * Note what is NOT here: operator labels, field labels and the caveats
-   * shown beside an operator all come from `GET /filters/capabilities`.
-   * They describe the backend compiler's behaviour, so the backend words
-   * them - duplicating them here would create a second copy to drift.
-   */
+  /** Filter Builder strings. Stable API identifiers select translated UI copy. */
   filters: {
     title: 'Filters',
     show: 'Filters',
@@ -319,6 +319,11 @@ export const messages = {
     compiledQuery: 'Query sent to Paperless',
     showCompiled: 'Show query',
     hideCompiled: 'Hide query',
+    coreField: (_key: string, fallback: string) => fallback,
+    operatorLabel: (_operator: string, fallback: string) => fallback,
+    operatorNote: (_fieldType: string, _operator: string, fallback: string) => fallback,
+    searchModeLabel: (_mode: string, fallback: string) => fallback,
+    searchModeDescription: (_mode: string, fallback: string) => fallback,
   },
   explorer: {
     title: 'Explorer',
@@ -371,6 +376,11 @@ export const messages = {
     dryRunDefault: 'Dry Run is the default. Nothing is written without an explicit confirmation.',
     readOnlyNow: 'PaperWrench has not written anything to Paperless-ngx yet.',
   },
+  locale: {
+    language: 'Language',
+    english: 'English',
+    french: 'French',
+  },
   theme: {
     toggle: 'Toggle theme',
     light: 'Light',
@@ -384,7 +394,60 @@ export const messages = {
   },
 } as const
 
-export type Messages = typeof messages
+type Widen<T> = T extends (...args: infer Args) => string
+  ? (...args: Args) => string
+  : T extends string
+    ? string
+    : T extends object
+      ? { readonly [Key in keyof T]: Widen<T[Key]> }
+      : T
+
+export type Messages = Widen<typeof englishMessages>
+export type Locale = 'en' | 'fr'
+
+const catalogs: Record<Locale, Messages> = {
+  en: englishMessages,
+  fr: frenchMessages,
+}
+
+export function normalizeLocale(value: string | null | undefined): Locale {
+  return value?.trim().toLowerCase().split(/[-_]/, 1)[0] === 'fr' ? 'fr' : 'en'
+}
+
+let activeLocale: Locale = normalizeLocale(
+  typeof navigator === 'undefined' ? undefined : navigator.language,
+)
+
+export function getLocale(): Locale {
+  return activeLocale
+}
+
+export function setLocale(locale: Locale): void {
+  activeLocale = locale
+  if (typeof document !== 'undefined') document.documentElement.lang = locale
+}
+
+setLocale(activeLocale)
+
+const domains = new Map<PropertyKey, object>()
+
+/**
+ * Stable proxy used by existing components. Domain proxies resolve every key
+ * against the active catalogue, so a locale change plus the keyed app remount
+ * updates module-level aliases such as `const m = messages.jobs` safely.
+ */
+export const messages = new Proxy({} as Messages, {
+  get(_target, domain: keyof Messages) {
+    if (!domains.has(domain)) {
+      domains.set(domain, new Proxy({}, {
+        get(_domainTarget, key: PropertyKey) {
+          return Reflect.get(catalogs[activeLocale][domain], key)
+        },
+      }))
+    }
+    return domains.get(domain)
+  },
+})
 
 /** The single accessor components are allowed to use. */
 export function t(): Messages {

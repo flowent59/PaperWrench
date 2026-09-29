@@ -28,6 +28,7 @@ export interface AuthSession {
   display_name: string
   expires_at: string
   csrf_token: string
+  locale: 'en' | 'fr' | null
 }
 
 /**

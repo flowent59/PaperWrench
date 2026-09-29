@@ -142,9 +142,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
 export const authApi = {
   me: async () => rememberSession(await apiFetch<AuthSession>('/auth/me')),
-  login: async (token: string) => rememberSession(await apiFetch<AuthSession>('/auth/login', {
-    method: 'POST', body: JSON.stringify({ token }),
+  login: async (token: string, locale: 'en' | 'fr') => rememberSession(await apiFetch<AuthSession>('/auth/login', {
+    method: 'POST', body: JSON.stringify({ token, locale }),
   })),
+  updateLocale: (locale: 'en' | 'fr') => apiFetch<{ locale: 'en' | 'fr' }>('/auth/preferences', {
+    method: 'PATCH', body: JSON.stringify({ locale }),
+  }),
   logout: async () => {
     await apiFetch<void>('/auth/logout', { method: 'POST' })
     clearBrowserSession()

@@ -1,9 +1,12 @@
 import { createContext, useContext } from 'react'
 
 import type { AuthSession } from '@/api/types'
+import type { Locale } from '@/i18n/messages'
 
 export interface AuthContextValue {
   session: AuthSession
+  locale: Locale
+  changeLocale: (locale: Locale) => Promise<void>
   logout: () => Promise<void>
 }
 

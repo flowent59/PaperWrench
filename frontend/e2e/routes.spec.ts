@@ -16,7 +16,7 @@ test('compiled SPA keeps nested routes after direct load and reload', async ({ p
         contentType: 'application/json',
         body: JSON.stringify({
           user_id: 1, username: 'route-smoke', display_name: 'Route Smoke',
-          expires_at: '2099-01-01T00:00:00Z', csrf_token: 'route-smoke-csrf',
+          expires_at: '2099-01-01T00:00:00Z', csrf_token: 'route-smoke-csrf', locale: 'en',
         }),
       })
     }

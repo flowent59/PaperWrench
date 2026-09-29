@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CreatedPreview, PreviewPage, Transformation } from '@/api/types'
 import { messages } from '@/i18n/messages'
+import { formatNumber } from '@/i18n/format'
 
 import { DryRun } from './dry-run'
 import { valueText } from './value'
@@ -78,8 +79,8 @@ describe('M7 Dry Run', () => {
     expect(screen.queryByRole('button', { name: m.confirm })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: m.create }))
     await screen.findByText('Ancien → Été')
-    expect(screen.getByText(m.changed, { selector: 'dt' }).parentElement).toHaveTextContent('9000')
-    expect(screen.getByText(m.unchanged, { selector: 'dt' }).parentElement).toHaveTextContent('1000')
+    expect(screen.getByText(m.changed, { selector: 'dt' }).parentElement).toHaveTextContent(formatNumber(9000))
+    expect(screen.getByText(m.unchanged, { selector: 'dt' }).parentElement).toHaveTextContent(formatNumber(1000))
     expect(screen.getByRole('button', { name: m.confirm })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: m.next }))
     await screen.findByText('Document 2 (#2)')

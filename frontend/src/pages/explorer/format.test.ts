@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import type { CustomFieldColumnValue, CustomFieldDefinition } from '@/api/types'
+import { setLocale } from '@/i18n/messages'
 
 import { formatCustomFieldValue, formatDate, formatMonetary, formatUnknownReference } from './format'
+
+afterEach(() => setLocale('en'))
 
 function value(overrides: Partial<CustomFieldColumnValue>): CustomFieldColumnValue {
   return {
@@ -32,6 +35,15 @@ describe('formatMonetary', () => {
   it('falls back to a plain string for an unrecognised currency code', () => {
     const result = formatMonetary('NOTACODE', '10.00')
     expect(result).toBe('NOTACODE 10.00')
+  })
+
+  it('uses French presentation without changing the Paperless decimal source', () => {
+    setLocale('fr')
+    const source = '1234.56'
+    const result = formatMonetary('EUR', source)
+    expect(result).toContain('1')
+    expect(result).toContain('234')
+    expect(source).toBe('1234.56')
   })
 })
 
@@ -100,6 +112,11 @@ describe('formatCustomFieldValue', () => {
 describe('formatUnknownReference', () => {
   it('renders "Unknown (#id)"', () => {
     expect(formatUnknownReference(42)).toBe('Unknown (#42)')
+  })
+
+  it('renders the French unresolved-reference label', () => {
+    setLocale('fr')
+    expect(formatUnknownReference(42)).toBe('Inconnu (nº 42)')
   })
 })
 

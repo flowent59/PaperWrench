@@ -29,6 +29,7 @@ import { emptyFilterSet, isEmpty } from '@/pages/explorer/filter-builder/model'
 import { ValueInput } from '@/pages/explorer/filter-builder/value-input'
 import type { ReferenceOption } from '@/pages/explorer/filter-builder/value-input'
 import { messages } from '@/i18n/messages'
+import { localizeFilterCapabilities } from '@/i18n/filter-capabilities'
 
 const inputClass = 'h-9 rounded-md border border-input bg-background px-2 text-sm'
 const m = messages.schemas
@@ -93,7 +94,8 @@ export function SchemasPage() {
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState('')
 
-  const fields = capabilities.data?.fields ?? []
+  const localizedCapabilities = localizeFilterCapabilities(capabilities.data)
+  const fields = localizedCapabilities?.fields ?? []
   const persisted = listing.data?.find(schema => schema.id === selected)
   const dirty = selected !== null && persisted !== undefined &&
     JSON.stringify({ name: persisted.name, description: persisted.description,
@@ -211,12 +213,12 @@ export function SchemasPage() {
                 search: event.target.value ? { mode: 'title', text: event.target.value } : null,
               } }))} />
           </label>
-          {capabilities.data && <FilterBuilder
+          {localizedCapabilities && <FilterBuilder
             filters={filters}
             onChange={(next: FilterSet) => setDraft(current => ({
               ...current, applies_when: { ...current.applies_when, filters: next },
             }))}
-            fields={fields} grouping={capabilities.data.grouping}
+            fields={fields} grouping={localizedCapabilities.grouping}
             issues={validation.data?.issues ?? []} referenceOptions={referenceOptions}
           />}
           {capabilities.isError && <p role="alert">{errorText(capabilities.error)}</p>}

@@ -1,9 +1,12 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import { messages } from './messages'
+import { englishMessages, messages, normalizeLocale, setLocale } from './messages'
+import { frenchMessages } from './fr'
+
+afterEach(() => setLocale('en'))
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -36,6 +39,28 @@ describe('centralised UI strings', () => {
 
   it('states the non-affiliation with Paperless-ngx', () => {
     expect(messages.app.disclaimer.toLowerCase()).toContain('not affiliated')
+  })
+
+  it('switches every domain through the stable message proxy', () => {
+    const jobs = messages.jobs
+    setLocale('fr')
+    expect(messages.auth.title).toBe('Se connecter à PaperWrench')
+    expect(jobs.title).toBe('Historique')
+    expect(document.documentElement.lang).toBe('fr')
+  })
+
+  it('keeps the French catalogue structurally aligned with English', () => {
+    expect(Object.keys(frenchMessages)).toEqual(Object.keys(englishMessages))
+    for (const domain of Object.keys(englishMessages) as (keyof typeof englishMessages)[]) {
+      expect(Object.keys(frenchMessages[domain])).toEqual(Object.keys(englishMessages[domain]))
+    }
+  })
+
+  it('detects French variants and falls back unsupported locales to English', () => {
+    expect(normalizeLocale('fr-CA')).toBe('fr')
+    expect(normalizeLocale('FR_fr')).toBe('fr')
+    expect(normalizeLocale('de-DE')).toBe('en')
+    expect(normalizeLocale(undefined)).toBe('en')
   })
 
   it('keeps components free of hardcoded JSX text', () => {

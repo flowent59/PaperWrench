@@ -25,6 +25,7 @@ edited: a new record supersedes it, and the old one is marked accordingly.
 | [0013](0013-expiring-preview-staging-and-confirmation.md) | Expiring preview staging and workflow confirmation | Accepted (M7) |
 | [0014](0014-durable-jobs-and-write-provenance.md) | Durable Jobs, target snapshot, provenance and recovery | Accepted (M8); qualifies 0003/0005/0006/0012/0013 |
 | [0015](0015-safe-rollback-jobs.md) | Safe linked rollback Jobs, review and grouped conflicts | Accepted (M9) |
+| [0018](0018-per-user-interface-locale.md) | Interface locale is a per-user presentation preference | Accepted |
 
 ## Format
 

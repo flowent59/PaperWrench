@@ -16,6 +16,11 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
   expect((await probe.json()).count).toBeLessThanOrEqual(500)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Sign in to PaperWrench' })).toBeVisible()
+  await page.getByLabel('Language').selectOption('fr')
+  await expect(page.getByRole('heading', { name: 'Se connecter à PaperWrench' })).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+  await page.getByLabel('Langue').selectOption('en')
+  await expect(page.getByRole('heading', { name: 'Sign in to PaperWrench' })).toBeVisible()
   await page.getByLabel('Paperless API token').fill(token)
   const loginResponse = page.waitForResponse(response =>
     response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST')
@@ -118,7 +123,7 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
     await expect(confirm).toBeFocused()
     await page.keyboard.press('Enter')
     await page.getByRole('link', { name: 'Open History' }).click()
-    await expect(page.getByText(/^COMPLETED ·/)).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText(/^Completed ·/)).toBeVisible({ timeout: 30_000 })
     const jobId = Number(new URL(page.url()).pathname.split('/').pop())
     // Direct nested navigation/reload must load actual compiled assets.
     await page.reload()
@@ -136,7 +141,7 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
     await page.getByRole('checkbox', { name: 'I have reviewed the restorations, exclusions and conflicts.' }).check()
     await page.getByRole('button', { name: 'Create rollback Job' }).click()
     await page.getByRole('link', { name: /Rollback Job #/ }).click()
-    await expect(page.getByText(/^PARTIAL ·/)).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText(/^Partial ·/)).toBeVisible({ timeout: 30_000 })
     for (const before of originals) {
       const current: Doc = await (await upstream.get(`/api/documents/${before.id}/`)).json()
       expect(current.title).toBe(before.id === edited ? 'M13 later third-party title' : before.title)
@@ -162,9 +167,22 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
   expect(await page.evaluate<string>(
     'JSON.stringify({local: {...localStorage}, session: {...sessionStorage}})',
   )).not.toContain(token)
-  await page.getByRole('button', { name: 'Sign out' }).click()
-  await expect(page.getByRole('heading', { name: 'Sign in to PaperWrench' })).toBeVisible()
+  await page.getByLabel('Language').selectOption('fr')
+  await expect(page.getByRole('navigation', { name: 'Tableau de bord' })).toBeVisible()
+  await expect.poll(async () => (await (await app.get('/api/v1/auth/me')).json()).locale).toBe('fr')
+  await page.getByRole('button', { name: 'Se déconnecter' }).click()
+  await expect(page.getByRole('heading', { name: 'Se connecter à PaperWrench' })).toBeVisible()
   expect((await app.get('/api/v1/auth/me')).status()).toBe(401)
+
+  // The pre-login choice is only a browser fallback. The authenticated
+  // Paperless user's persisted preference wins on the next session.
+  await page.getByLabel('Langue').selectOption('en')
+  await page.getByLabel('Paperless API token').fill(token)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await expect(page.getByRole('navigation', { name: 'Tableau de bord' })).toBeVisible()
+  expect((await (await app.get('/api/v1/auth/me')).json()).locale).toBe('fr')
+  await page.getByRole('button', { name: 'Se déconnecter' }).click()
+  await expect(page.getByRole('heading', { name: 'Se connecter à PaperWrench' })).toBeVisible()
 
   // A stale/expired opaque cookie must also return the browser to login; the
   // actual server-side expiry and credential destruction are unit-tested.
@@ -173,4 +191,5 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
   }])
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Sign in to PaperWrench' })).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
 })

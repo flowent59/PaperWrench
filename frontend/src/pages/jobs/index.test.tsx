@@ -71,7 +71,7 @@ describe('durable History', () => {
     first.view.unmount()
     const second = setup('/jobs/1', { ...job, status: 'interrupted', resumable: true, processed: 1 })
     fireEvent.click(await screen.findByRole('button', { name: m.resume }))
-    await screen.findByText(/RUNNING/)
+    await screen.findByText(new RegExp(m.statuses.running, 'i'))
     expect(second.fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/resume'))).toHaveLength(1)
   })
 

@@ -5,6 +5,7 @@ import { ApiError, jobsApi, previewsApi } from '@/api/client'
 import type { CreatedPreview, Transformation } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
+import { formatDateTime, formatNumber } from '@/i18n/format'
 
 import { valueText } from './value'
 
@@ -108,10 +109,10 @@ export function DryRun({ build }: { build: () => Transformation }) {
       <dl className="flex flex-wrap gap-6">
         {(['matched', 'evaluated', 'changed', 'unchanged', 'errors'] as const).map((name) =>
           <div key={name}><dt className="text-sm text-muted-foreground">{m[name]}</dt>
-            <dd className="text-xl font-semibold">{preview[name]}</dd></div>)}
+            <dd className="text-xl font-semibold">{formatNumber(preview[name])}</dd></div>)}
       </dl>
-      <p className="text-sm">{m.observedAt} {new Date(preview.created_at).toLocaleString()}</p>
-      <p className="text-sm">{m.expiresAt} {new Date(preview.expires_at).toLocaleString()}</p>
+      <p className="text-sm">{m.observedAt} {formatDateTime(preview.created_at)}</p>
+      <p className="text-sm">{m.expiresAt} {formatDateTime(preview.expires_at)}</p>
       <p className="text-sm text-muted-foreground">{m.staleness}</p>
       {stale ? <p role="alert">{m.expired}</p> : <>
         <label className="text-sm">{m.show}<select className="ml-2 rounded border p-1"
@@ -134,10 +135,10 @@ export function DryRun({ build }: { build: () => Transformation }) {
                   <strong>{change.field.source === 'core' ? change.field.name
                     : `${change.field.display_name ?? m.unknownField} (#${change.field.field_id})`}</strong>
                   <p className="whitespace-pre-wrap">{valueText(change.before)} → {valueText(change.intended)}</p>
-                  <p>{change.status.toUpperCase()}{change.issue &&
+                  <p>{m.statuses[change.status]}{change.issue &&
                     ` · ${change.issue.code}: ${change.issue.message}`}</p>
                 </div>)}</div></td>
-              <td className="p-2">{row.status.toUpperCase()}</td>
+              <td className="p-2">{m.statuses[row.status]}</td>
             </tr>)}</tbody>
           </table></div>
           <div className="flex items-center gap-3">
