@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { messages } from '@/i18n/messages'
+import { errorCodeMessage } from '@/i18n/errors'
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -38,14 +39,16 @@ export function DashboardPage() {
         : !probe.connected
           ? {
               title: messages.dashboard.unreachableTitle,
-              // The backend already scrubs secrets out of this message before
-              // it is serialised, so it is safe to render verbatim.
-              body: probe.error_message ?? messages.errors.generic,
+              body: probe.error_code
+                ? errorCodeMessage(probe.error_code)
+                : messages.errors.generic,
             }
           : !probe.compatible
             ? {
                 title: messages.dashboard.incompatibleTitle,
-                body: probe.error_message ?? messages.errors.generic,
+                body: probe.error_code
+                  ? errorCodeMessage(probe.error_code)
+                  : messages.errors.generic,
               }
             : null
 

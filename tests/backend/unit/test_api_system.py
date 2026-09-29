@@ -72,6 +72,7 @@ def test_origin_guard_compares_the_complete_origin(client: TestClient, origin: s
     response = client.post("/api/v1/collections", json={"name": "blocked", "document_ids": []},
                            headers={"Origin": origin})
     assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN_ORIGIN"
     assert client.get("/api/v1/collections").json() == []
 
 
@@ -101,3 +102,4 @@ def test_lan_http_cross_origin_mutation_is_rejected(client: TestClient, origin: 
         headers={"Host": "192.168.1.42:8787", "Origin": origin},
     )
     assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN_ORIGIN"

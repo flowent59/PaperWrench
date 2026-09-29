@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useLocation } from 'react-router'
 
-import { transformationsApi } from '@/api/client'
+import { ApiError, NetworkError, transformationsApi } from '@/api/client'
 import {
   useCorrespondents, useCustomFields, useDocumentTypes, useFilterCapabilities,
   useFilterValidation, useStoragePaths, useTags,
@@ -9,6 +9,7 @@ import {
 import type { EvaluationResult, FilterSet, SearchSpec, TransformationTarget } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
+import { errorMessage, issueMessage } from '@/i18n/errors'
 import { localizeFilterCapabilities } from '@/i18n/filter-capabilities'
 import { FilterBuilder } from '@/pages/explorer/filter-builder'
 import { emptyFilterSet, isEmpty } from '@/pages/explorer/filter-builder/model'
@@ -93,14 +94,15 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
       setBusy(true)
       const validationResult = await transformationsApi.validate(transformation)
       if (!validationResult.valid) {
-        throw new Error(validationResult.issues.map((issue) =>
-          `${issue.code}: ${issue.message}`).join('; '))
+        throw new Error(validationResult.issues.map((issue) => issueMessage(issue)).join('; '))
       }
       const id = Number(documentId || (source === 'ids' ? ids.split(',')[0] : ''))
       if (!Number.isSafeInteger(id) || id <= 0) throw new Error(m.documentIdRequired)
       setResult(await transformationsApi.evaluate(id, transformation))
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : m.unknownError)
+      setError(cause instanceof Error && !(cause instanceof ApiError) && !(cause instanceof NetworkError)
+        ? cause.message
+        : errorMessage(cause, m.unknownError))
     } finally {
       setBusy(false)
     }
@@ -228,7 +230,7 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
         {result.changes.map((change, index) => <div key={index} className="rounded border p-3 text-sm">
           <strong>{change.field.source === 'core' ? change.field.name : change.field.display_name}</strong>
           <span className="ml-2">{change.status.toUpperCase()}</span>
-          {change.issue ? <p role="alert">{change.issue.code}: {change.issue.message}</p>
+          {change.issue ? <p role="alert">{issueMessage(change.issue)}</p>
             : <p>{m.before}: {valueText(change.before)} → {m.intended}: {valueText(change.intended)}</p>}
         </div>)}
       </div>}

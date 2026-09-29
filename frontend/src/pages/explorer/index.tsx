@@ -68,6 +68,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { messages } from '@/i18n/messages'
 import { localizeFilterCapabilities } from '@/i18n/filter-capabilities'
+import { errorMessage } from '@/i18n/errors'
 import { cn } from '@/lib/utils'
 
 import { buildBaseColumns, buildCustomFieldColumns } from './columns'
@@ -125,7 +126,7 @@ export function ExplorerPage() {
       await queryClient.invalidateQueries({ queryKey: ['collections'] })
       selection.clear()
     } catch (error) {
-      setCollectionError(error instanceof Error ? error.message : messages.collections.error)
+      setCollectionError(errorMessage(error, messages.collections.error))
     } finally {
       setCollectionBusy(false)
     }
@@ -527,9 +528,7 @@ export function ExplorerPage() {
               <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
               <p className="font-medium">{messages.explorer.errorTitle}</p>
               <p className="text-sm text-muted-foreground">
-                {documentsQuery.error instanceof Error
-                  ? documentsQuery.error.message
-                  : messages.errors.generic}
+                {errorMessage(documentsQuery.error)}
               </p>
               <Button variant="outline" size="sm" onClick={() => documentsQuery.refetch()}>
                 {messages.explorer.retry}

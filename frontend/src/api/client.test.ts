@@ -38,7 +38,8 @@ describe('apiFetch', () => {
   it('parses the uniform error envelope into an ApiError', async () => {
     mockFetch(
       jsonResponse(
-        { error: { code: 'PAPERLESS_UNAUTHORIZED', message: 'Bad token' } },
+        { error: { code: 'PAPERLESS_UNAUTHORIZED', message: 'Bad token',
+          params: { upstream_status: 401 } } },
         401,
       ),
     )
@@ -47,7 +48,9 @@ describe('apiFetch', () => {
       name: 'ApiError',
       code: 'PAPERLESS_UNAUTHORIZED',
       status: 401,
-      message: 'Bad token',
+      message: 'PAPERLESS_UNAUTHORIZED',
+      diagnosticMessage: 'Bad token',
+      params: { upstream_status: 401 },
     })
   })
 

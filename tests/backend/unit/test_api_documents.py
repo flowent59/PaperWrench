@@ -199,6 +199,8 @@ def test_invalid_page_size_is_rejected_with_422_and_never_forwarded(client: Test
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["params"]["page_size"] == 13
+    assert body["error"]["params"]["allowed"] == [25, 50, 100, 250]
     assert body["error"]["details"]["page_size"] == 13
     assert body["error"]["details"]["allowed"] == [25, 50, 100, 250]
     assert not route.called  # never reached Paperless
@@ -366,6 +368,7 @@ def test_invalid_ordering_is_rejected_and_never_forwarded_to_paperless(
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["params"]["ordering"] == "not_a_real_field"
     assert body["error"]["details"]["ordering"] == "not_a_real_field"
     assert not route.called  # the whole point: never forwarded
 

@@ -33,6 +33,7 @@ import type {
 } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
+import { issueMessage } from '@/i18n/errors'
 import { cn } from '@/lib/utils'
 
 import {
@@ -168,7 +169,7 @@ function ConditionRow({
 
       {rowIssues.map((issue) => (
         <p key={`${issue.code}-${issue.path}`} className="pl-1 text-xs text-destructive">
-          {issue.message}
+          {issueMessage(issue)}
         </p>
       ))}
     </div>
@@ -337,7 +338,7 @@ export function FilterBuilder({
             )}
           >
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            {issue.message}
+            {issueMessage(issue)}
           </p>
         ))}
     </div>

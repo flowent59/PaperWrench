@@ -110,7 +110,7 @@ describe('M7 Dry Run', () => {
     fetchMock.mockImplementation(async (url) => new Response(JSON.stringify(String(url).includes('/documents?')
       ? errorPage : preview({ errors: 1 }))))
     fireEvent.click(screen.getByRole('button', { name: m.create }))
-    await screen.findByText(/TEMPLATE_UNRESOLVED/u)
+    await screen.findByText(/A template value could not be resolved\./u)
     expect(screen.getByText(m.fixErrors)).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: m.acknowledge })).toBeDisabled()
     expect(screen.getByRole('button', { name: m.confirm })).toBeDisabled()

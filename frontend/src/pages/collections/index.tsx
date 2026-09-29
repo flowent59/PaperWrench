@@ -6,6 +6,7 @@ import { collectionsApi } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { messages } from '@/i18n/messages'
+import { errorMessage } from '@/i18n/errors'
 
 const m = messages.collections
 
@@ -22,7 +23,7 @@ export function CollectionsPage() {
       await collectionsApi.create({ name, description: null, document_ids: [] })
       setName('')
       await queryClient.invalidateQueries({ queryKey: ['collections'] })
-    } catch (cause) { setError(cause instanceof Error ? cause.message : m.error) }
+    } catch (cause) { setError(errorMessage(cause, m.error)) }
     finally { setBusy(false) }
   }
 
@@ -64,7 +65,7 @@ export function CollectionPage() {
     try {
       await operation()
       await queryClient.invalidateQueries({ queryKey: ['collections'] })
-    } catch (cause) { setError(cause instanceof Error ? cause.message : m.error) }
+    } catch (cause) { setError(errorMessage(cause, m.error)) }
     finally { setBusy(false) }
   }
 

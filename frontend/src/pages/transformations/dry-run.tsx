@@ -6,6 +6,7 @@ import type { CreatedPreview, Transformation } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
 import { formatDateTime, formatNumber } from '@/i18n/format'
+import { errorMessage, issueMessage } from '@/i18n/errors'
 
 import { valueText } from './value'
 
@@ -75,7 +76,7 @@ export function DryRun({ build }: { build: () => Transformation }) {
       setStatus('')
       setPreview(result)
     } catch (cause) {
-      if (alive.current) setError(cause instanceof Error ? cause.message : m.failure)
+      if (alive.current) setError(errorMessage(cause, m.failure))
     } finally { if (alive.current) setBusy(false) }
   }
 
@@ -91,7 +92,7 @@ export function DryRun({ build }: { build: () => Transformation }) {
       }
     } catch (cause) {
       if (alive.current) {
-        setError(cause instanceof Error ? cause.message : m.failure)
+        setError(errorMessage(cause, m.failure))
         if (cause instanceof ApiError && cause.code === 'PREVIEW_STALE') setExpired(true)
         if (!(cause instanceof ApiError) || cause.status >= 500) setUncertainApply(true)
       }
@@ -104,7 +105,7 @@ export function DryRun({ build }: { build: () => Transformation }) {
     <p className="text-sm text-muted-foreground">{m.limits}</p>
     <Button disabled={busy} onClick={create}>{busy ? m.building : m.create}</Button>
     {error && <p role="alert" className="text-destructive">{error}</p>}
-    {pageQuery.isError && !stale && <p role="alert">{pageQuery.error.message}</p>}
+    {pageQuery.isError && !stale && <p role="alert">{errorMessage(pageQuery.error)}</p>}
     {preview && <>
       <dl className="flex flex-wrap gap-6">
         {(['matched', 'evaluated', 'changed', 'unchanged', 'errors'] as const).map((name) =>
@@ -128,7 +129,7 @@ export function DryRun({ build }: { build: () => Transformation }) {
               <th className="p-2" key={label}>{label}</th>)}</tr></thead>
             <tbody>{rows.items.map((row) => <tr className="border-t align-top" key={row.document_id}>
               <td className="p-2">{row.title ?? m.unavailable} (#{row.document_id})
-                {row.issue && <p className="text-destructive">{row.issue.code}: {row.issue.message}</p>}
+                {row.issue && <p className="text-destructive">{issueMessage(row.issue)}</p>}
               </td>
               <td className="p-2"><div className="space-y-2">
                 {row.changes.map((change, index) => <div key={index}>
@@ -136,7 +137,7 @@ export function DryRun({ build }: { build: () => Transformation }) {
                     : `${change.field.display_name ?? m.unknownField} (#${change.field.field_id})`}</strong>
                   <p className="whitespace-pre-wrap">{valueText(change.before)} → {valueText(change.intended)}</p>
                   <p>{m.statuses[change.status]}{change.issue &&
-                    ` · ${change.issue.code}: ${change.issue.message}`}</p>
+                    ` · ${issueMessage(change.issue)}`}</p>
                 </div>)}</div></td>
               <td className="p-2">{m.statuses[row.status]}</td>
             </tr>)}</tbody>
