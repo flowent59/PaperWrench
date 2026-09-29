@@ -64,9 +64,7 @@ docker run -d --name "$container" \
   --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
   -p 127.0.0.1:18080:8000 \
   -v "${volume}:/data" \
-  -v "$workdir/paperless_token:/run/secrets/paperless_token:ro" \
   -e PAPERLESS_URL=http://paperless:8000 \
-  -e PAPERLESS_TOKEN_FILE=/run/secrets/paperless_token \
   "${repository}@${RELEASE_DIGEST}" >/dev/null
 
 base=http://127.0.0.1:18080
@@ -79,7 +77,21 @@ for attempt in $(seq 1 60); do
   sleep 2
 done
 
-# Fresh volume migration, real network connection, direct HTTP and SPA routes.
+# Authenticate exactly as a v0.2 user does. The Paperless token remains in this
+# private temporary directory; PaperWrench receives it only for the login call
+# and returns an opaque cookie plus a non-credential CSRF token.
+login() {
+  rm -f "$workdir/cookies" "$workdir/session.json"
+  jq -n --arg token "$token" '{token: $token, locale: "en"}' > "$workdir/login.json"
+  curl -fsS -c "$workdir/cookies" -X POST "$base/api/v1/auth/login" \
+    -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:18080' \
+    --data-binary @"$workdir/login.json" -o "$workdir/session.json"
+  csrf=$(jq -er .csrf_token "$workdir/session.json")
+}
+login
+
+# Fresh volume migration, authenticated real network connection, direct HTTP
+# and SPA routes.
 docker exec -i "$container" python - <<'PY'
 import sqlite3
 
@@ -91,7 +103,7 @@ head = ScriptDirectory.from_config(build_alembic_config(database_url)).get_curre
 database = sqlite3.connect("/data/paperwrench.db")
 assert head and database.execute("select version_num from alembic_version").fetchone() == (head,)
 PY
-curl -fsS "$base/api/v1/system/paperless" -o "$workdir/paperless.json"
+curl -fsS -b "$workdir/cookies" "$base/api/v1/system/paperless" -o "$workdir/paperless.json"
 jq -e '.connected == true and .compatible == true and .paperless_version == "3.2.1"' "$workdir/paperless.json" >/dev/null
 for route in / /documents/42 /jobs/42 /history /schemas /quality; do
   curl -fsS "$base$route" -o "$workdir/page.html"
@@ -107,10 +119,11 @@ done
 
 # A database write proves the named volume survives a container restart.
 curl -fsS -X POST "$base/api/v1/collections" \
+  -b "$workdir/cookies" -H "X-CSRF-Token: $csrf" \
   -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:18080' \
   -d '{"name":"GHCR release smoke","document_ids":[]}' -o "$workdir/collection.json"
 jq -e '.name == "GHCR release smoke" and .id > 0' "$workdir/collection.json" >/dev/null
-cat "$workdir/health.json" "$workdir/paperless.json" "$workdir/collection.json" >> "$workdir/responses"
+cat "$workdir/health.json" "$workdir/session.json" "$workdir/paperless.json" "$workdir/collection.json" >> "$workdir/responses"
 docker restart "$container" >/dev/null
 for attempt in $(seq 1 30); do
   if curl -fsS "$base/api/v1/system/health" -o "$workdir/health-after.json" 2>/dev/null &&
@@ -118,11 +131,13 @@ for attempt in $(seq 1 30); do
   if [ "$attempt" = 30 ]; then echo 'PaperWrench did not recover after restart' >&2; exit 1; fi
   sleep 2
 done
-curl -fsS "$base/api/v1/collections" -o "$workdir/collections-after.json"
+# Sessions are deliberately process-local, so a restart requires a fresh login.
+login
+curl -fsS -b "$workdir/cookies" "$base/api/v1/collections" -o "$workdir/collections-after.json"
 jq -e 'any(.[]; .name == "GHCR release smoke")' "$workdir/collections-after.json" >/dev/null
-curl -fsS "$base/api/v1/system/paperless" -o "$workdir/paperless-after.json"
+curl -fsS -b "$workdir/cookies" "$base/api/v1/system/paperless" -o "$workdir/paperless-after.json"
 jq -e '.connected == true and .compatible == true' "$workdir/paperless-after.json" >/dev/null
-cat "$workdir/health-after.json" "$workdir/collections-after.json" "$workdir/paperless-after.json" >> "$workdir/responses"
+cat "$workdir/health-after.json" "$workdir/session.json" "$workdir/collections-after.json" "$workdir/paperless-after.json" >> "$workdir/responses"
 docker logs "$container" > "$workdir/app-logs" 2>&1
 if grep -Fq -- "$token" "$workdir/responses" "$workdir/app-logs"; then
   echo 'Paperless token appeared in an HTTP response or application log' >&2
