@@ -205,7 +205,7 @@ describe('ExplorerPage', () => {
     })
     renderWithProviders(<ExplorerPage />, '/documents?quality_ids=1,999')
     expect(await screen.findByText('Invoice #1')).toBeInTheDocument()
-    expect(screen.getByText(/1 document\(s\) are unavailable/)).toBeInTheDocument()
+    expect(screen.getByText('1 document is unavailable.')).toBeInTheDocument()
     expect(bodiesFor(spy, '/api/v1/documents/by-ids')).toEqual([{ document_ids: [1, 999] }])
     expect(bodiesFor(spy, '/api/v1/documents/query')).toEqual([])
   })

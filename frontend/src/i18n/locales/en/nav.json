@@ -1,0 +1,19 @@
+{
+  "dashboard": "Dashboard",
+  "documents": "Documents",
+  "filters": "Filter Sets",
+  "transformations": "Transformations",
+  "quality": "Data Quality",
+  "duplicates": "Duplicates",
+  "extraction": "Extraction",
+  "schemas": "Schemas",
+  "collections": "Collections",
+  "analytics": "Analytics",
+  "jobs": "Jobs",
+  "history": "History",
+  "settings": "Settings",
+  "sectionWorkspace": "Workspace",
+  "sectionTools": "Tools",
+  "sectionOperations": "Operations",
+  "sectionSystem": "System"
+}

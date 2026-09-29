@@ -1,0 +1,110 @@
+{
+  "title": "Filtres",
+  "show": "Filtres",
+  "hide": "Masquer les filtres",
+  "where": "Où",
+  "and": "Et",
+  "or": "Ou",
+  "field": "Champ",
+  "operator": "Condition",
+  "addCondition": "Ajouter une condition",
+  "addOrGroup": "Ajouter un groupe « au moins une »",
+  "addAlternative": "Ajouter une alternative",
+  "removeCondition": "Supprimer la condition",
+  "clearAll": "Effacer les filtres",
+  "anyOfTheFollowing": "Au moins une des conditions suivantes :",
+  "orGroupCustomFieldsOnly": "Un groupe « au moins une » peut uniquement combiner des champs personnalisés : Paperless ne permet pas le OU entre des champs principaux.",
+  "unsupportedNode": "Ce filtre contient une condition que cette version ne peut ni afficher ni exécuter.",
+  "chooseValue": "Choisir…",
+  "valueListPlaceholder": "Valeurs séparées par des virgules",
+  "amountPlaceholder": "p. ex. 0,00",
+  "booleanTrue": "Oui",
+  "booleanFalse": "Non",
+  "matching": "{count} documents correspondent",
+  "matchingUnknown": "Nombre de résultats indisponible",
+  "counting": "Comptage…",
+  "valid": "Le filtre est valide",
+  "notCompilable": "Paperless ne peut pas exécuter ce filtre",
+  "notCompilableBody": "Le filtre est valide, mais Paperless ne permet pas d'exprimer cette question exacte. PaperWrench n'en exécutera pas une approximation.",
+  "invalid": "Le filtre n'est pas valide",
+  "noFilters": "Aucun filtre. Tous les documents correspondent.",
+  "searchMode": "Rechercher dans",
+  "compiledQuery": "Requête envoyée à Paperless",
+  "showCompiled": "Afficher la requête",
+  "hideCompiled": "Masquer la requête",
+  "coreField": {
+    "_type": "lookup",
+    "values": {
+      "core:title": "Titre",
+      "core:correspondent": "Correspondant",
+      "core:document_type": "Type de document",
+      "core:storage_path": "Chemin de stockage",
+      "core:tags": "Étiquettes",
+      "core:created": "Créé",
+      "core:added": "Ajouté",
+      "core:modified": "Modifié",
+      "core:archive_serial_number": "Numéro d'archive"
+    }
+  },
+  "operatorLabel": {
+    "_type": "lookup",
+    "values": {
+      "equals": "est",
+      "not_equals": "n'est pas",
+      "in": "est parmi",
+      "contains": "contient",
+      "starts_with": "commence par",
+      "ends_with": "se termine par",
+      "greater_than": "est supérieur à",
+      "greater_or_equal": "est supérieur ou égal à",
+      "less_than": "est inférieur à",
+      "less_or_equal": "est inférieur ou égal à",
+      "has_all_of": "contient toutes",
+      "has_any_of": "contient au moins une",
+      "has_none_of": "n'en contient aucune",
+      "is_missing": "est absent",
+      "is_present": "est présent",
+      "is_null": "est nul",
+      "has_value": "a une valeur",
+      "is_empty": "est vide"
+    }
+  },
+  "operatorNote": {
+    "_type": "lookup",
+    "values": {
+      "text:equals": "Insensible à la casse : Paperless ne propose pas d’égalité exacte sensible à la casse pour le texte.",
+      "long_text:equals": "Insensible à la casse : Paperless ne propose pas d’égalité exacte sensible à la casse pour le texte.",
+      "url:equals": "Insensible à la casse : Paperless ne propose pas d’égalité exacte sensible à la casse pour le texte.",
+      "text:contains": "Recherche de sous-chaîne insensible à la casse.",
+      "long_text:contains": "Recherche de sous-chaîne insensible à la casse.",
+      "url:contains": "Recherche de sous-chaîne insensible à la casse.",
+      "monetary:equals": "Comparé comme un nombre sans tenir compte de la devise : EUR10.00 et USD10.00 sont égaux pour cette condition.",
+      "monetary:greater_than": "Comparé comme un nombre sans tenir compte de la devise.",
+      "datetime:equals": "Comparé à la journée civile entière, pas à un horodatage exact.",
+      "reference:not_equals": "Les documents sans valeur correspondent aussi, puisqu’ils ne contiennent pas la valeur exclue.",
+      "tag_set:has_all_of": "Le document porte toutes les étiquettes indiquées.",
+      "tag_set:has_any_of": "Le document porte au moins une des étiquettes indiquées.",
+      "tag_set:has_none_of": "Le document ne porte aucune des étiquettes indiquées.",
+      "tag_set:is_missing": "Le document n’a aucune étiquette.",
+      "tag_set:is_present": "Le document porte au moins une étiquette.",
+      "reference:is_missing": "Aucune valeur n’est définie sur le document.",
+      "reference:is_present": "Une valeur est définie sur le document."
+    }
+  },
+  "searchModeLabel": {
+    "_type": "lookup",
+    "values": {
+      "title": "Titre",
+      "content": "Contenu",
+      "advanced": "Requête avancée"
+    }
+  },
+  "searchModeDescription": {
+    "_type": "lookup",
+    "values": {
+      "title": "Recherche plein texte limitée au titre du document.",
+      "content": "Recherche plein texte dans le contenu extrait du document.",
+      "advanced": "Syntaxe de requête Paperless brute, transmise sans modification ni validation par PaperWrench."
+    }
+  }
+}

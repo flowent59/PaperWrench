@@ -1,0 +1,8 @@
+{
+  "title": "Tableau de bord",
+  "subtitle": "Vue générale de votre bibliothèque Paperless-ngx et de l’activité PaperWrench.",
+  "notConfiguredTitle": "Paperless-ngx n'est pas configuré",
+  "notConfiguredBody": "Définissez PAPERLESS_URL, redémarrez PaperWrench, puis connectez-vous avec votre propre jeton API Paperless.",
+  "unreachableTitle": "Paperless-ngx est injoignable",
+  "incompatibleTitle": "La version de l'API Paperless-ngx n'est pas prise en charge"
+}
