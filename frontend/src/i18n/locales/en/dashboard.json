@@ -1,0 +1,8 @@
+{
+  "title": "Dashboard",
+  "subtitle": "Overview of your Paperless-ngx library and PaperWrench activity.",
+  "notConfiguredTitle": "Paperless-ngx is not configured",
+  "notConfiguredBody": "Set PAPERLESS_URL, restart PaperWrench, then sign in with your own Paperless API token.",
+  "unreachableTitle": "Paperless-ngx cannot be reached",
+  "incompatibleTitle": "Paperless-ngx API version is not supported"
+}

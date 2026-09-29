@@ -1,0 +1,19 @@
+{
+  "dashboard": "Tableau de bord",
+  "documents": "Documents",
+  "filters": "Jeux de filtres",
+  "transformations": "Transformations",
+  "quality": "Qualité des données",
+  "duplicates": "Doublons",
+  "extraction": "Extraction",
+  "schemas": "Schémas",
+  "collections": "Collections",
+  "analytics": "Analyses",
+  "jobs": "Tâches",
+  "history": "Historique",
+  "settings": "Paramètres",
+  "sectionWorkspace": "Espace de travail",
+  "sectionTools": "Outils",
+  "sectionOperations": "Opérations",
+  "sectionSystem": "Système"
+}

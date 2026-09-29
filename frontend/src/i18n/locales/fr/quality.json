@@ -1,0 +1,51 @@
+{
+  "title": "Qualité des données",
+  "subtitle": "Violations de schéma en lecture seule. Les totaux décrivent la page évaluée.",
+  "schema": "Schéma",
+  "schemaError": "Impossible de charger les schémas.",
+  "noSchemas": "Aucun schéma.",
+  "createSchema": "Créer un schéma",
+  "evaluationError": "La qualité n'a pas pu être évaluée.",
+  "evaluating": "Évaluation des documents…",
+  "evaluatedCount": "Documents évalués sur cette page",
+  "violationCount": "Violations sur cette page",
+  "datasetTotal": "Total exact du jeu de données dans Paperless",
+  "rules": "Règles sur cette page",
+  "ruleCount": {
+    "_type": "plural",
+    "one": "Règle {index} : {count} violation",
+    "other": "Règle {index} : {count} violations"
+  },
+  "exactCondition": "Ouvrir la condition exacte de violation dans l'Explorateur",
+  "exactIds": "Ouvrir les ID exacts de cette page dans l'Explorateur",
+  "noDrilldown": "Aucun accès détaillé sur cette page : la condition ne peut pas être compilée.",
+  "document": "Document",
+  "field": "Champ",
+  "observed": "Observé",
+  "expected": "Attendu",
+  "explorer": "Explorateur",
+  "openDocument": "Ouvrir le document",
+  "noViolations": "Aucune violation parmi les documents évalués sur cette page.",
+  "previous": "Précédent",
+  "next": "Suivant",
+  "page": "Page du jeu de données {page} sur {pages}",
+  "requiredExpected": "Valeur présente et non vide",
+  "customField": "Champ personnalisé nº {id}",
+  "absent": "ABSENT",
+  "null": "NUL",
+  "exactIdsSelection": {
+    "_type": "plural",
+    "one": "Sélection exacte de Qualité ({count} demandé).",
+    "other": "Sélection exacte de Qualité ({count} demandés)."
+  },
+  "unavailable": {
+    "_type": "plural",
+    "one": "{count} document indisponible.",
+    "other": "{count} documents indisponibles."
+  },
+  "clearSelection": "Effacer la sélection",
+  "exactQuerySelection": "Condition exacte de Qualité dans la requête actuelle.",
+  "clearDrilldown": "Quitter l'accès détaillé",
+  "invalidDrilldown": "Accès détaillé de Qualité invalide. Aucun document n'a été chargé.",
+  "invalidDrilldownGrid": "Accès détaillé de Qualité invalide ; aucun document chargé."
+}

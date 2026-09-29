@@ -1,0 +1,12 @@
+{
+  "preview": "Preview rollback",
+  "confirm": "Create rollback Job",
+  "title": "Rollback review",
+  "description": "Restore only proven writes that still match their recorded result. A conflict blocks every candidate field of that document. Other documents can still be restored.",
+  "acknowledge": "I have reviewed the restorations, exclusions and conflicts.",
+  "none": "No eligible restoration. Unknown outcomes require manual review; unchanged operations have no write to undo.",
+  "uncertain": "Confirmation outcome is unknown. Check the original Job in History before proceeding.",
+  "original": "Original Job",
+  "linked": "Rollback Job",
+  "operation": "Original operation"
+}

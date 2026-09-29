@@ -1,0 +1,16 @@
+{
+  "title": "System status",
+  "backend": "Backend",
+  "database": "Database",
+  "paperless": "Paperless-ngx",
+  "version": "Version",
+  "apiVersion": "API version",
+  "concurrency": "Max concurrency",
+  "pageSize": "Default page size",
+  "healthy": "Healthy",
+  "unreachable": "Unreachable",
+  "paperlessVersion": "Paperless version",
+  "documents": "Documents",
+  "maxApiVersion": "Highest API version",
+  "url": "URL"
+}

@@ -1,0 +1,9 @@
+{
+  "connected": "Connecté",
+  "disconnected": "Déconnecté",
+  "notConfigured": "Non configuré",
+  "checking": "Vérification…",
+  "degraded": "Dégradé",
+  "unknown": "Inconnu",
+  "incompatible": "Incompatible"
+}
