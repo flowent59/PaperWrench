@@ -7,6 +7,7 @@ import type { HistoryPage, JobStatus, JobView, OperationView, TargetStatus } fro
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
 import { formatDateTime, formatNumber } from '@/i18n/format'
+import { errorMessage, issueMessage } from '@/i18n/errors'
 import { valueText } from '@/pages/transformations/value'
 
 import { RollbackReview } from './rollback'
@@ -32,7 +33,7 @@ export function HistoryPageView() {
   return <section className="space-y-5">
     <h1 className="text-2xl font-semibold">{m.title}</h1>
     {query.isLoading && <p role="status">{m.loading}</p>}
-    {query.error && <p role="alert">{query.error.message}</p>}
+    {query.error && <p role="alert">{errorMessage(query.error)}</p>}
     {query.data?.items.length === 0 && <p>{m.empty}</p>}
     <div className="overflow-x-auto"><table className="w-full text-left text-sm">
       <thead><tr>{[m.detail, m.status, m.progress, m.created].map((label) =>
@@ -54,7 +55,7 @@ function OperationDetails({ jobId, documentId, polling, revision }: { jobId: num
     queryFn: () => jobsApi.operations(jobId, documentId, page), refetchInterval: polling ? 2000 : false })
   return <section className="space-y-3 rounded border p-4" aria-label={m.operations}>
     <h2 className="font-semibold">{m.operations} · #{documentId}</h2>
-    {query.error && <p role="alert">{query.error.message}</p>}
+    {query.error && <p role="alert">{errorMessage(query.error)}</p>}
     {query.isLoading && <p role="status">{m.loading}</p>}
     {query.data?.items.map((operation: OperationView) => <article className="space-y-2 border-t pt-3" key={operation.id}>
       <h3 className="font-medium">{operation.field_key} · {m.operationStatuses[
@@ -65,7 +66,7 @@ function OperationDetails({ jobId, documentId, polling, revision }: { jobId: num
         <div key={key}><dt className="text-muted-foreground">{m[key]}</dt>
           <dd className="whitespace-pre-wrap break-words">{valueText(operation[key])}</dd></div>)}</dl>
       <p className="text-sm text-muted-foreground">{operation.rollback_candidate ? m.provenance : m.noProvenance}</p>
-      {operation.error && <p role="alert">{operation.error} {operation.http_status ?? ''}</p>}
+      {operation.error && <p role="alert">{issueMessage(operation.error, operation.http_status)}</p>}
     </article>)}
     <Pagination data={query.data} page={page} setPage={setPage} busy={query.isFetching} />
   </section>
@@ -93,7 +94,7 @@ export function JobPage() {
       await jobsApi.resume(jobId)
       await query.refetch()
       await targets.refetch()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : messages.errors.generic) }
+    } catch (cause) { setError(errorMessage(cause)) }
     finally { setBusy(false) }
   }
 
@@ -101,7 +102,7 @@ export function JobPage() {
     <Link className="text-primary underline" to="/history">{m.title}</Link>
     <h1 className="text-2xl font-semibold">{m.detail} #{jobId}</h1>
     {query.isLoading && <p role="status">{m.loading}</p>}
-    {query.error && <p role="alert">{query.error.message}</p>}
+    {query.error && <p role="alert">{errorMessage(query.error)}</p>}
     {error && <p role="alert">{error}</p>}
     {job && <>
       <p className="font-medium">{m.statuses[job.status as JobStatus]} · {formatNumber(job.processed)} / {formatNumber(job.total)}</p>
@@ -127,12 +128,12 @@ export function JobPage() {
         <option value="">{m.all}</option>
         {Object.entries(m.outcomes).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
       </select></label>
-      {targets.error && <p role="alert">{targets.error.message}</p>}
+      {targets.error && <p role="alert">{errorMessage(targets.error)}</p>}
       <div className="overflow-x-auto"><table className="w-full text-left text-sm"><tbody>
         {targets.data?.items.map((target) => <tr className="border-t" key={target.document_id}>
           <td className="p-3">{target.title} (#{target.document_id})</td>
-          <td className="p-3">{m.outcomes[target.status]}{target.error && <p>{target.error} {target.http_status ?? ''}</p>}
-            {Object.entries(target.excluded_operations ?? {}).map(([field, reason]) => <p key={field}>{field}: {reason}</p>)}
+          <td className="p-3">{m.outcomes[target.status]}{target.error && <p>{issueMessage(target.error, target.http_status)}</p>}
+            {Object.entries(target.excluded_operations ?? {}).map(([field, reason]) => <p key={field}>{field}: {issueMessage(reason)}</p>)}
           </td>
           <td className="p-3"><Button variant="outline" onClick={() => setDocumentId(target.document_id)}>{m.inspect}</Button></td>
         </tr>)}

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { messages } from '@/i18n/messages'
 import { formatNumber } from '@/i18n/format'
+import { errorMessage } from '@/i18n/errors'
 
 import { exactIdsHref, exactQueryHref } from './navigation'
 import { expected, observed } from './format'
@@ -50,7 +51,7 @@ export function QualityPageView() {
         {schemas.data.map(schema => <option key={schema.id} value={schema.id}>{schema.name}</option>)}
       </select>
     </label>}
-    {result.isError && <p role="alert">{result.error instanceof Error ? result.error.message : m.evaluationError}</p>}
+    {result.isError && <p role="alert">{errorMessage(result.error, m.evaluationError)}</p>}
     {result.isPending && selected !== null && <p>{m.evaluating}</p>}
     {data && <>
       <div className="grid gap-3 sm:grid-cols-3">

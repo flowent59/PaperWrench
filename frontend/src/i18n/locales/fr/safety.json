@@ -1,0 +1,4 @@
+{
+  "dryRunDefault": "La simulation est activée par défaut. Rien n'est écrit sans confirmation explicite.",
+  "readOnlyNow": "PaperWrench n'a encore rien écrit dans Paperless-ngx."
+}

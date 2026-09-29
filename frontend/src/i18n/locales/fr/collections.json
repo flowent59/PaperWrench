@@ -1,0 +1,28 @@
+{
+  "title": "Collections",
+  "name": "Nom",
+  "description": "Description",
+  "destination": "Collection",
+  "new": "Nouvelle collection",
+  "create": "Créer la collection",
+  "saveSelection": "Enregistrer les ID sélectionnés",
+  "save": "Enregistrer",
+  "delete": "Supprimer la collection",
+  "remove": "Retirer le membre",
+  "members": "Membres",
+  "back": "Toutes les collections",
+  "loading": "Chargement des collections…",
+  "error": "La requête de collection a échoué.",
+  "empty": "Aucune collection.",
+  "emptyMembers": "Aucun membre.",
+  "notFound": "Collection introuvable.",
+  "unavailable": "Document indisponible",
+  "previous": "Précédent",
+  "next": "Suivant",
+  "count": {
+    "_type": "plural",
+    "one": "{count} membre",
+    "other": "{count} membres"
+  },
+  "page": "Page {page} sur {total}"
+}

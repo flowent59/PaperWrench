@@ -1,0 +1,4 @@
+{
+  "dryRunDefault": "Dry Run is the default. Nothing is written without an explicit confirmation.",
+  "readOnlyNow": "PaperWrench has not written anything to Paperless-ngx yet."
+}

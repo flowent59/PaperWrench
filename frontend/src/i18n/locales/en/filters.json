@@ -1,0 +1,110 @@
+{
+  "title": "Filters",
+  "show": "Filters",
+  "hide": "Hide filters",
+  "where": "Where",
+  "and": "And",
+  "or": "Or",
+  "field": "Field",
+  "operator": "Condition",
+  "addCondition": "Add condition",
+  "addOrGroup": "Add \"any of\" group",
+  "addAlternative": "Add alternative",
+  "removeCondition": "Remove condition",
+  "clearAll": "Clear filters",
+  "anyOfTheFollowing": "Any of the following:",
+  "orGroupCustomFieldsOnly": "An \"any of\" group can only combine custom fields - Paperless has no way to express OR across core document fields.",
+  "unsupportedNode": "This filter contains a condition this version cannot display or run.",
+  "chooseValue": "Choose...",
+  "valueListPlaceholder": "Comma-separated values",
+  "amountPlaceholder": "e.g. 0.00",
+  "booleanTrue": "Yes",
+  "booleanFalse": "No",
+  "matching": "{count} documents match",
+  "matchingUnknown": "Match count unavailable",
+  "counting": "Counting...",
+  "valid": "Filter is valid",
+  "notCompilable": "Paperless cannot run this filter",
+  "notCompilableBody": "The filter itself is fine - Paperless has no way to express this exact question, so PaperWrench will not run an approximation of it.",
+  "invalid": "Filter is not valid",
+  "noFilters": "No filters. Every document matches.",
+  "searchMode": "Search in",
+  "compiledQuery": "Query sent to Paperless",
+  "showCompiled": "Show query",
+  "hideCompiled": "Hide query",
+  "coreField": {
+    "_type": "lookup",
+    "values": {
+      "core:title": "Title",
+      "core:correspondent": "Correspondent",
+      "core:document_type": "Document type",
+      "core:storage_path": "Storage path",
+      "core:tags": "Tags",
+      "core:created": "Created",
+      "core:added": "Added",
+      "core:modified": "Modified",
+      "core:archive_serial_number": "Archive serial number"
+    }
+  },
+  "operatorLabel": {
+    "_type": "lookup",
+    "values": {
+      "equals": "is",
+      "not_equals": "is not",
+      "in": "is one of",
+      "contains": "contains",
+      "starts_with": "starts with",
+      "ends_with": "ends with",
+      "greater_than": "is greater than",
+      "greater_or_equal": "is greater than or equal to",
+      "less_than": "is less than",
+      "less_or_equal": "is less than or equal to",
+      "has_all_of": "has all of",
+      "has_any_of": "has any of",
+      "has_none_of": "has none of",
+      "is_missing": "is missing",
+      "is_present": "is present",
+      "is_null": "is null",
+      "has_value": "has a value",
+      "is_empty": "is empty"
+    }
+  },
+  "operatorNote": {
+    "_type": "lookup",
+    "values": {
+      "text:equals": "Case-insensitive: Paperless does not expose exact case-sensitive equality for text.",
+      "long_text:equals": "Case-insensitive: Paperless does not expose exact case-sensitive equality for text.",
+      "url:equals": "Case-insensitive: Paperless does not expose exact case-sensitive equality for text.",
+      "text:contains": "Case-insensitive substring match.",
+      "long_text:contains": "Case-insensitive substring match.",
+      "url:contains": "Case-insensitive substring match.",
+      "monetary:equals": "Compared as a number without currency: EUR10.00 and USD10.00 are equal for this condition.",
+      "monetary:greater_than": "Compared as a number without currency.",
+      "datetime:equals": "Compared as the whole calendar day, not an exact timestamp.",
+      "reference:not_equals": "Documents without a value also match because they do not contain the excluded value.",
+      "tag_set:has_all_of": "The document has every listed tag.",
+      "tag_set:has_any_of": "The document has at least one listed tag.",
+      "tag_set:has_none_of": "The document has none of the listed tags.",
+      "tag_set:is_missing": "The document has no tags.",
+      "tag_set:is_present": "The document has at least one tag.",
+      "reference:is_missing": "No value is set on the document.",
+      "reference:is_present": "A value is set on the document."
+    }
+  },
+  "searchModeLabel": {
+    "_type": "lookup",
+    "values": {
+      "title": "Title",
+      "content": "Content",
+      "advanced": "Advanced query"
+    }
+  },
+  "searchModeDescription": {
+    "_type": "lookup",
+    "values": {
+      "title": "Full-text search limited to the document title.",
+      "content": "Full-text search in extracted document content.",
+      "advanced": "Raw Paperless query syntax, passed through without modification or validation by PaperWrench."
+    }
+  }
+}

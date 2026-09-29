@@ -19,6 +19,7 @@ import type {
 } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
+import { errorMessage } from '@/i18n/errors'
 
 const m = messages.inspector
 const inputClass =
@@ -40,8 +41,8 @@ function inspectorError(error: unknown): string {
     if (error.code === 'CONFLICT') return m.conflict
     if (error.code === 'PAPERLESS_UNAUTHORIZED') return m.unauthorized
     if (error.code === 'PAPERLESS_FORBIDDEN') return m.forbidden
-    if (error.status === 404) return m.notFound
-    if (error.status === 422) return error.message
+    if (error.code === 'NOT_FOUND') return m.notFound
+    if (error.code === 'VALIDATION_ERROR') return errorMessage(error)
   }
   return m.uncertain
 }

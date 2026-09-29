@@ -263,10 +263,13 @@ Application *data* is whatever the user's library contains, which for the
 reference dataset is French — accents, spaces in custom field names, euro
 amounts. Both must work perfectly.
 
-UI strings live in `frontend/src/i18n/messages.ts`. No component contains a
-hardcoded user-facing string; a test enforces it. This is not a full i18n
-framework and does not try to be — it is the minimum discipline that lets a
-language be added later without restructuring the frontend.
+UI strings live in domain-organized JSON catalogues under
+`frontend/src/i18n/locales/<locale>/`; components use the typed accessor in
+`frontend/src/i18n/messages.ts`. No component contains a hardcoded user-facing
+string. Every UI feature must add complete EN/FR entries in the same pull
+request. CI recursively rejects missing or extra keys, malformed or mismatched
+placeholders, and incomplete plural forms. See [the translation contribution
+guide](i18n.md).
 
 Commits follow Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`,
 `test:`, `chore:`).

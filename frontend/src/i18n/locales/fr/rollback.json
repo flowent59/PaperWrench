@@ -1,0 +1,12 @@
+{
+  "preview": "Prévisualiser la restauration",
+  "confirm": "Créer la tâche de restauration",
+  "title": "Vérification de la restauration",
+  "description": "Restaure uniquement les écritures prouvées qui correspondent encore au résultat enregistré. Un conflit bloque tous les champs candidats du document. Les autres documents peuvent toujours être restaurés.",
+  "acknowledge": "J'ai vérifié les restaurations, exclusions et conflits.",
+  "none": "Aucune restauration possible. Les résultats incertains exigent une vérification manuelle ; les opérations inchangées n'ont aucune écriture à annuler.",
+  "uncertain": "Le résultat de la confirmation est inconnu. Vérifiez la tâche d'origine dans l'Historique avant de continuer.",
+  "original": "Tâche d'origine",
+  "linked": "Tâche de restauration",
+  "operation": "Opération d'origine"
+}

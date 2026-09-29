@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -205,7 +205,7 @@ describe('ExplorerPage', () => {
     })
     renderWithProviders(<ExplorerPage />, '/documents?quality_ids=1,999')
     expect(await screen.findByText('Invoice #1')).toBeInTheDocument()
-    expect(screen.getByText(/1 document\(s\) are unavailable/)).toBeInTheDocument()
+    expect(screen.getByText('1 document is unavailable.')).toBeInTheDocument()
     expect(bodiesFor(spy, '/api/v1/documents/by-ids')).toEqual([{ document_ids: [1, 999] }])
     expect(bodiesFor(spy, '/api/v1/documents/query')).toEqual([])
   })
@@ -390,8 +390,10 @@ describe('ExplorerPage', () => {
     const user = userEvent.setup()
     await user.click(screen.getAllByLabelText('Select row', { selector: 'input' })[0]!)
     await user.click(screen.getByLabelText('Next page'))
-    await screen.findByText('Vacation 3')
-    await user.click(screen.getAllByLabelText('Select row', { selector: 'input' })[1]!)
+    const secondPageTitle = await screen.findByText('Vacation 4', {}, { timeout: 5000 })
+    const secondPageRow = secondPageTitle.closest('tr')
+    if (secondPageRow === null) throw new Error('expected the second-page document row')
+    await user.click(within(secondPageRow).getByLabelText('Select row', { selector: 'input' }))
     expect(screen.getByText('2 selected')).toBeInTheDocument()
     await user.type(screen.getByLabelText('Name'), 'Vacations')
     await user.click(screen.getByRole('button', { name: 'Save selected IDs' }))
@@ -659,7 +661,7 @@ describe('ExplorerPage - Filter Builder (M4)', () => {
     ).toHaveLength(2)
     expect(
       screen.getByText(
-        'Paperless cannot express OR between a core field and a custom field.',
+        'Paperless-ngx cannot combine these core and custom fields with OR.',
       ),
     ).toBeInTheDocument()
     expect(screen.queryByText('Filter is not valid')).not.toBeInTheDocument()
@@ -728,7 +730,7 @@ describe('ExplorerPage - Filter Builder (M4)', () => {
     const user = await openFilters()
     await user.click(screen.getByRole('button', { name: 'Add condition' }))
 
-    expect(await screen.findByText("'contains' requires a value.")).toBeInTheDocument()
+    expect(await screen.findByText('Enter a value for this condition.')).toBeInTheDocument()
     expect(screen.getByText('Filter is not valid')).toBeInTheDocument()
   })
 

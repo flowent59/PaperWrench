@@ -187,6 +187,9 @@ service. There is no telemetry.
 
 Issues and pull requests are welcome. Please run `make check` before opening a
 pull request; CI additionally runs guarded live/browser, migration and Docker gates.
+UI changes must update the complete English and French catalogues. See the
+[translation contribution guide](docs/i18n.md) for the JSON layout, placeholders,
+plural forms, adding a locale, and the community review workflow.
 
 Given what this tool does, changes to the write path are held to a higher
 standard: a pull request that can modify documents must come with tests

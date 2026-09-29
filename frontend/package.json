@@ -10,8 +10,10 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "npm run i18n:check && npm run test:i18n-validator && vitest run",
     "test:watch": "vitest",
+    "test:i18n-validator": "node --test scripts/validate-i18n.test.mjs",
+    "i18n:check": "node scripts/validate-i18n.mjs",
     "generate:api": "openapi-typescript http://localhost:8000/api/openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
