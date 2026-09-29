@@ -36,7 +36,7 @@ describe('M6 authoring page', () => {
     expect(screen.getByLabelText(messages.preview.ordering)).toHaveValue('-created')
     fireEvent.change(screen.getByLabelText('{Période concernée}'), { target: { value: 'custom_field:7' } })
     fireEvent.click(screen.getByRole('button', { name: messages.preview.create }))
-    await screen.findByText('Captured selection')
+    await screen.findByText('The submitted data is invalid.')
     const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/previews'))
     expect(JSON.parse(String(call?.[1]?.body)).targets).toEqual(targets)
   })
@@ -113,7 +113,9 @@ describe('M6 authoring page', () => {
       target: { value: 'custom_field:7' },
     })
     fireEvent.click(screen.getByRole('button', { name: m.evaluate }))
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('UNKNOWN_FIELD'))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(
+      'This field is no longer available.',
+    ))
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/documents/'))).toBe(false)
   })
 })

@@ -242,7 +242,10 @@ class TestErrorNormalisation:
                 await client.get_document(1)
 
         exc = excinfo.value
-        rendered = f"{exc!r} {exc} {getattr(exc, 'details', None)!r}"
+        rendered = (
+            f"{exc!r} {exc} {getattr(exc, 'params', None)!r} "
+            f"{getattr(exc, 'details', None)!r}"
+        )
         # The upstream body is echoed back, so a server that reflects the
         # token would leak it. That is exactly what we assert against.
         assert TOKEN not in rendered

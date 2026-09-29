@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import * as React from 'react'
 import { Link } from 'react-router'
 
-import { ApiError, schemasApi } from '@/api/client'
+import { schemasApi } from '@/api/client'
 import {
   useCorrespondents,
   useDocumentTypes,
@@ -30,6 +30,7 @@ import { ValueInput } from '@/pages/explorer/filter-builder/value-input'
 import type { ReferenceOption } from '@/pages/explorer/filter-builder/value-input'
 import { messages } from '@/i18n/messages'
 import { localizeFilterCapabilities } from '@/i18n/filter-capabilities'
+import { errorMessage } from '@/i18n/errors'
 
 const inputClass = 'h-9 rounded-md border border-input bg-background px-2 text-sm'
 const m = messages.schemas
@@ -67,17 +68,7 @@ function newRule(field: FieldCapability, kind: 'required' | 'equals'): SchemaRul
 }
 
 function errorText(error: unknown): string {
-  if (error instanceof ApiError) {
-    const issues = error.details?.issues
-    if (Array.isArray(issues)) {
-      return issues.map((item) =>
-        typeof item === 'object' && item !== null && 'message' in item
-          ? String(item.message) : error.message,
-      ).join(' · ')
-    }
-    return error.message
-  }
-  return error instanceof Error ? error.message : m.requestFailed
+  return errorMessage(error, m.requestFailed)
 }
 
 export function SchemasPage() {

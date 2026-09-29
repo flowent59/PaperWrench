@@ -60,21 +60,29 @@ export function clearBrowserSession(): void {
 
 export interface ApiErrorDetail {
   code: string
-  message: string
+  /** Diagnostic server text. UI code must translate `code` instead. */
+  message?: string
+  params?: Record<string, unknown> | null
   details?: Record<string, unknown> | null
 }
 
 export class ApiError extends Error {
   readonly code: string
   readonly status: number
+  readonly params: Record<string, unknown> | null
   readonly details: Record<string, unknown> | null
+  readonly diagnosticMessage: string | null
 
   constructor(status: number, detail: ApiErrorDetail) {
-    super(detail.message)
+    // Keep Error.message machine-readable so accidentally rendering it can
+    // never reintroduce a dependency on backend English.
+    super(detail.code)
     this.name = 'ApiError'
     this.status = status
     this.code = detail.code
+    this.params = detail.params ?? detail.details ?? null
     this.details = detail.details ?? null
+    this.diagnosticMessage = detail.message ?? null
   }
 }
 
@@ -98,7 +106,8 @@ async function parseError(response: Response): Promise<ApiError> {
       typeof body === 'object' &&
       body !== null &&
       'error' in body &&
-      typeof (body as { error: unknown }).error === 'object'
+      typeof (body as { error: unknown }).error === 'object' &&
+      typeof (body as { error: { code?: unknown } }).error?.code === 'string'
     ) {
       detail = (body as { error: ApiErrorDetail }).error
     }

@@ -53,6 +53,9 @@ class ErrorDetail(BaseModel):
     """Body of an error response."""
 
     code: ErrorCode
+    # Stable values that a client may interpolate in its own translated copy.
+    # ``message`` is diagnostic English for logs/old clients, never a UI contract.
+    params: dict[str, Any] | None = None
     message: str
     details: dict[str, Any] | None = None
     retryable: bool = False
@@ -88,6 +91,7 @@ class PaperWrenchError(Exception):
         self,
         message: str,
         *,
+        params: dict[str, Any] | None = None,
         details: dict[str, Any] | None = None,
         status_code: int | None = None,
         code: ErrorCode | None = None,
@@ -101,11 +105,17 @@ class PaperWrenchError(Exception):
         from paperwrench.logging import scrub_secrets
 
         message = scrub_secrets(message)
+        if params is not None:
+            params = _scrub_details(params)
         if details is not None:
             details = _scrub_details(details)
 
         super().__init__(message)
         self.message = message
+        # Existing call sites used ``details`` for both translation inputs and
+        # diagnostics. Mirror it into params by default so the wire contract is
+        # immediately useful without breaking diagnostic consumers.
+        self.params = params if params is not None else details
         self.details = details
         if status_code is not None:
             self.status_code = status_code
@@ -118,6 +128,7 @@ class PaperWrenchError(Exception):
         return ErrorResponse(
             error=ErrorDetail(
                 code=self.code,
+                params=self.params,
                 message=self.message,
                 details=self.details,
                 retryable=self.retryable,
@@ -214,6 +225,7 @@ class InvalidOrderingError(PaperWrenchError):
     def __init__(self, ordering: str) -> None:
         super().__init__(
             f"{ordering!r} is not a supported ordering value.",
+            params={"ordering": ordering},
             details={"ordering": ordering},
         )
 
@@ -232,5 +244,6 @@ class InvalidPageSizeError(PaperWrenchError):
     def __init__(self, page_size: int, allowed: tuple[int, ...]) -> None:
         super().__init__(
             f"page_size must be one of {allowed}, got {page_size}.",
+            params={"page_size": page_size, "allowed": list(allowed)},
             details={"page_size": page_size, "allowed": list(allowed)},
         )

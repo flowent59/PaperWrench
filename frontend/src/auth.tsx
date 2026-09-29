@@ -1,11 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
-import { ApiError, authApi } from '@/api/client'
+import { authApi } from '@/api/client'
 import type { AuthSession } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { getLocale, messages, setLocale as activateLocale, type Locale } from '@/i18n/messages'
+import { errorMessage } from '@/i18n/errors'
 import { AuthContext, type AuthContextValue } from '@/auth-context'
 
 function LoginPage({ locale, onLocaleChange, onLogin }: {
@@ -25,7 +26,7 @@ function LoginPage({ locale, onLocaleChange, onLogin }: {
       onLogin(await authApi.login(token, locale))
       setToken('')
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : messages.auth.unreachable)
+      setError(errorMessage(cause, messages.auth.unreachable))
     } finally {
       setSubmitting(false)
     }

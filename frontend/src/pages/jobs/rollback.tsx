@@ -7,6 +7,7 @@ import type { CreatedPreview } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
 import { formatDateTime, formatNumber } from '@/i18n/format'
+import { errorMessage, issueMessage } from '@/i18n/errors'
 import { valueText } from '@/pages/transformations/value'
 
 const m = messages.rollback
@@ -51,7 +52,7 @@ export function RollbackReview({ jobId }: { jobId: number }) {
       if (!alive.current) { await previewsApi.discard(result.id); return }
       retained.current = result.id
       setPreview(result); setPage(1)
-    } catch (cause) { if (alive.current) setError(cause instanceof Error ? cause.message : p.failure) }
+    } catch (cause) { if (alive.current) setError(errorMessage(cause, p.failure)) }
     finally { if (alive.current) setBusy(false) }
   }
   async function confirm() {
@@ -62,7 +63,7 @@ export function RollbackReview({ jobId }: { jobId: number }) {
       if (alive.current) { setCreated(result.id); setPreview({ ...preview, preview_token: '', confirmed: true }) }
     } catch (cause) {
       if (alive.current) {
-        setError(cause instanceof Error ? cause.message : p.failure)
+        setError(errorMessage(cause, p.failure))
         if (cause instanceof ApiError && cause.code === 'PREVIEW_STALE') setExpired(true)
         if (!(cause instanceof ApiError) || cause.status >= 500) setUncertain(true)
       }
@@ -72,7 +73,7 @@ export function RollbackReview({ jobId }: { jobId: number }) {
     <h2 className="font-semibold">{m.title}</h2><p>{m.description}</p>
     <Button disabled={busy || created !== null || uncertain} onClick={build}>{m.preview}</Button>
     {error && <p role="alert">{error}</p>}
-    {rows.error && <p role="alert">{rows.error.message}</p>}
+    {rows.error && <p role="alert">{errorMessage(rows.error)}</p>}
     {uncertain && <p role="alert">{m.uncertain} <Link to="/history">{messages.jobs.open}</Link></p>}
     {created !== null && <Link className="text-primary underline" to={`/jobs/${created}`}>{m.linked} #{created}</Link>}
     {preview && <>
@@ -82,13 +83,13 @@ export function RollbackReview({ jobId }: { jobId: number }) {
       {expired && <p role="alert">{p.expired}</p>}
       {rows.data?.items.map(row => <article className="space-y-2 border-t pt-2" key={row.document_id}>
         <h3>{row.title} (#{row.document_id}) · {p.statuses[row.status]}</h3>
-        {row.issue && <p>{row.issue.code}: {row.issue.message}</p>}
+        {row.issue && <p>{issueMessage(row.issue)}</p>}
         {row.changes.map((change, index) => <p key={index}>
           {change.field.source === 'core' ? change.field.name : `#${change.field.field_id}`}: {' '}
           {valueText(change.before)} → {valueText(change.intended)}
-          {change.issue && ` · ${change.issue.code}: ${change.issue.message}`}
+          {change.issue && ` · ${issueMessage(change.issue)}`}
         </p>)}
-        {Object.entries(row.excluded_operations ?? {}).map(([field, reason]) => <p key={field}>{field}: {reason}</p>)}
+        {Object.entries(row.excluded_operations ?? {}).map(([field, reason]) => <p key={field}>{field}: {issueMessage(reason)}</p>)}
       </article>)}
       <div className="flex items-center gap-3">
         <Button variant="outline" disabled={rows.isFetching || page <= 1} onClick={() => setPage(page - 1)}>{p.previous}</Button>

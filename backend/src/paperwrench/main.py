@@ -104,7 +104,7 @@ class OriginGuardMiddleware(BaseHTTPMiddleware):
                         status_code=403,
                         content=ErrorResponse(
                             error=ErrorDetail(
-                                code=ErrorCode.VALIDATION_ERROR,
+                                code=ErrorCode.FORBIDDEN_ORIGIN,
                                 message="Cross-origin state-changing request rejected.",
                             )
                         ).model_dump(mode="json"),
