@@ -137,7 +137,7 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
     await page.getByRole('link', { name: 'History', exact: true }).first().click()
     await page.locator(`a[href="/jobs/${jobId}"]`).click()
     await page.getByRole('button', { name: 'Preview rollback' }).click()
-    await expect(page.getByText(/ROLLBACK_CONFLICT/)).toBeVisible()
+    await expect(page.getByText(/The document changed after the original write/)).toBeVisible()
     await page.getByRole('checkbox', { name: 'I have reviewed the restorations, exclusions and conflicts.' }).check()
     await page.getByRole('button', { name: 'Create rollback Job' }).click()
     await page.getByRole('link', { name: /Rollback Job #/ }).click()
