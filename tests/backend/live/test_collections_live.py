@@ -47,6 +47,7 @@ async def test_static_vacation_ids_survive_reload_and_missing_member(
         CollectionCreate(name="Live vacations", document_ids=ids),
         session,
         live_client,
+        registry,
         owner_id,
     )
     assert created.member_count == 2

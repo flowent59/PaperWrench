@@ -11,6 +11,7 @@ from httpx import Request
 from httpx import Response
 from sqlalchemy import text
 
+from paperwrench.auth import AuthSession
 from paperwrench.db.engine import create_db_engine
 from paperwrench.db.engine import get_session_factory
 from paperwrench.db.migrate import build_alembic_config
@@ -84,6 +85,81 @@ def test_invisible_id_rejected_without_metadata_or_write(client: TestClient) -> 
     assert response.status_code == 422
     assert "secret" not in response.text
     assert client.get("/api/v1/collections").json() == []
+
+
+@respx.mock
+def test_dynamic_collection_previews_and_refreshes_without_storing_members(
+    client: TestClient, auth_record: AuthSession,
+) -> None:
+    matching = [document(1), document(2)]
+
+    def list_matching(request: Request) -> Response:
+        assert request.url.params["document_type__id"] == "3"
+        page_size = int(request.url.params["page_size"])
+        return Response(
+            200,
+            json={
+                "count": len(matching),
+                "next": None,
+                "previous": None,
+                "results": matching[:page_size],
+            },
+            headers=HEADERS,
+        )
+
+    respx.get(f"{BASE}/api/documents/").mock(side_effect=list_matching)
+    respx.get(f"{BASE}/api/custom_fields/").mock(
+        return_value=Response(
+            200,
+            json={"count": 0, "next": None, "previous": None, "results": []},
+            headers=HEADERS,
+        )
+    )
+    respx.get(f"{BASE}/api/document_types/3/").mock(
+        return_value=Response(200, json={"id": 3, "name": "Invoice"}, headers=HEADERS)
+    )
+    filters = {
+        "root": {
+            "kind": "group",
+            "operator": "and",
+            "children": [
+                {
+                    "kind": "condition",
+                    "field": {"source": "core", "name": "document_type"},
+                    "operator": "equals",
+                    "value": 3,
+                }
+            ],
+        }
+    }
+
+    preview = client.post("/api/v1/collections/preview", json={"filters": filters})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["total"] == 2
+    assert [item["document_id"] for item in preview.json()["items"]] == [1, 2]
+
+    created = client.post(
+        "/api/v1/collections",
+        json={"name": "Invoices", "kind": "dynamic", "filters": filters},
+    )
+    assert created.status_code == 201, created.text
+    collection_id = created.json()["id"]
+    assert created.json()["kind"] == "dynamic"
+    assert created.json()["member_count"] == 2
+    with get_session_factory()() as db:
+        assert db.query(CollectionDocument).count() == 0
+
+    matching.append(document(4))
+    members = client.get(f"/api/v1/collections/{collection_id}/documents")
+    assert members.status_code == 200, members.text
+    assert members.json()["total"] == 3
+    assert [item["document_id"] for item in members.json()["items"]] == [1, 2, 4]
+    assert client.get(f"/api/v1/collections/{collection_id}").json()["member_count"] == 3
+    assert client.post(
+        f"/api/v1/collections/{collection_id}/documents", json={"document_ids": [9]}
+    ).status_code == 409
+    auth_record.paperless_user_id = 2
+    assert client.get(f"/api/v1/collections/{collection_id}").status_code == 404
 
 
 def test_collection_migration_persists_membership(tmp_path: Path) -> None:
