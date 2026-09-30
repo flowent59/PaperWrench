@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { ApiError, jobsApi, previewsApi, rulesApi } from '@/api/client'
+import { ApiError, jobsApi, previewsApi, rulesApi, schedulesApi } from '@/api/client'
 import type { CreatedPreview, RuleCreatedPreview, Transformation } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
@@ -9,12 +9,15 @@ import { formatDateTime, formatNumber } from '@/i18n/format'
 import { errorMessage, issueMessage } from '@/i18n/errors'
 
 import { valueText } from './value'
+import { ScheduleApproval } from './schedules'
+import type { ScheduleRecurrence } from '@/api/types'
 
 /** The parent remounts this panel on any spec edit, invalidating the old confirmation. */
 type DryRunProps = { build: () => Transformation; ruleId?: never; onPreviewCreated?: () => void }
   | { ruleId: number; build?: never; onPreviewCreated?: () => void }
 
 export function DryRun({ build, onPreviewCreated, ruleId }: DryRunProps) {
+  const cache = useQueryClient()
   const m = messages.preview
   const [preview, setPreview] = useState<CreatedPreview | null>(null)
   const [spec, setSpec] = useState<Transformation | null>(null)
@@ -27,6 +30,7 @@ export function DryRun({ build, onPreviewCreated, ruleId }: DryRunProps) {
   const [raceAcknowledged, setRaceAcknowledged] = useState(false)
   const [clearAcknowledged, setClearAcknowledged] = useState(false)
   const [jobId, setJobId] = useState<number | null>(null)
+  const [scheduleApproved, setScheduleApproved] = useState(false)
   const [uncertainApply, setUncertainApply] = useState(false)
   const customWrite = spec?.operations.some((operation) => operation.field.source === 'custom_field') ?? false
   const clearsValues = spec?.operations.some((operation) => operation.operation === 'clear') ?? false
@@ -67,6 +71,7 @@ export function DryRun({ build, onPreviewCreated, ruleId }: DryRunProps) {
     setRaceAcknowledged(false)
     setClearAcknowledged(false)
     setJobId(null)
+    setScheduleApproved(false)
     setUncertainApply(false)
     setExpired(false)
     try {
@@ -111,6 +116,25 @@ export function DryRun({ build, onPreviewCreated, ruleId }: DryRunProps) {
     } catch (cause) {
       if (alive.current) {
         setError(errorMessage(cause, m.failure))
+        if (cause instanceof ApiError && cause.code === 'PREVIEW_STALE') setExpired(true)
+        if (!(cause instanceof ApiError) || cause.status >= 500) setUncertainApply(true)
+      }
+    } finally { if (alive.current) setBusy(false) }
+  }
+
+  async function approveSchedule(recurrence: ScheduleRecurrence) {
+    if (ruleId === undefined || !preview || !spec) return
+    setBusy(true); setError('')
+    try {
+      await schedulesApi.approve(ruleId, recurrence, preview, spec, raceAcknowledged)
+      if (alive.current) {
+        setPreview({ ...preview, confirmed: true, preview_token: '' })
+        setScheduleApproved(true)
+      }
+      await cache.invalidateQueries({ queryKey: ['schedules'] })
+    } catch (cause) {
+      if (alive.current) {
+        setError(errorMessage(cause))
         if (cause instanceof ApiError && cause.code === 'PREVIEW_STALE') setExpired(true)
         if (!(cause instanceof ApiError) || cause.status >= 500) setUncertainApply(true)
       }
@@ -185,7 +209,7 @@ export function DryRun({ build, onPreviewCreated, ruleId }: DryRunProps) {
           {m.confirmScope.replace('{count}', formatNumber(preview.changed))}
         </p>}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox"
-          checked={acknowledged} disabled={preview.confirmed || preview.errors > 0 || !preview.changed}
+          checked={acknowledged} disabled={preview.confirmed || preview.errors > 0 || (!preview.changed && ruleId === undefined)}
           onChange={(event) => setAcknowledged(event.target.checked)} />{m.acknowledge}</label>
         {clearsValues && <label className="flex items-center gap-2 rounded-md border border-amber-600 p-3 text-sm"><input
           type="checkbox" checked={clearAcknowledged} disabled={preview.confirmed || busy}
@@ -199,7 +223,10 @@ export function DryRun({ build, onPreviewCreated, ruleId }: DryRunProps) {
         <Button variant="outline" onClick={confirm} disabled={busy || loading || !rows || !acknowledged ||
           (clearsValues && !clearAcknowledged) ||
           uncertainApply || (customWrite && !raceAcknowledged) || preview.confirmed || preview.errors > 0 || !preview.changed}>{m.confirm}</Button>
-        {preview.confirmed && <p role="status">{m.confirmed}</p>}
+        {preview.confirmed && <p role="status">{scheduleApproved ? messages.schedules.approved : m.confirmed}</p>}
+        {ruleId !== undefined && <ScheduleApproval key={preview.id} approve={approveSchedule}
+          disabled={busy || loading || !rows || !acknowledged || (clearsValues && !clearAcknowledged) ||
+            uncertainApply || (customWrite && !raceAcknowledged) || preview.confirmed || preview.errors > 0} />}
       </>}
     </>}
     {jobId !== null && <a className="text-primary underline" href={`/jobs/${jobId}`}>{messages.jobs.open}</a>}

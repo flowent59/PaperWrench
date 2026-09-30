@@ -50,6 +50,7 @@ from paperwrench.logging import get_logger
 from paperwrench.logging import register_secret
 from paperwrench.previews.service import PreviewService
 from paperwrench.previews.service import cleanup as cleanup_previews
+from paperwrench.schedules.engine import ScheduleEngine
 
 logger = get_logger(__name__)
 
@@ -244,6 +245,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         recover()
         app.state.jobs = JobEngine(None, None, settings, instance_id)
         app.state.jobs.start()
+        app.state.schedules = ScheduleEngine(app.state.jobs, app.state.sessions, app.state.previews)
+        app.state.schedules.start()
 
         heartbeat = asyncio.create_task(
             _heartbeat_loop(instance_id, app.state.jobs, app.state.sessions)
@@ -260,6 +263,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             heartbeat.cancel()
             await asyncio.gather(heartbeat, return_exceptions=True)
+            await app.state.schedules.close()
             await app.state.jobs.close()
             await app.state.sessions.close()
             try:

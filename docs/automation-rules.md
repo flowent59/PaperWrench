@@ -31,5 +31,6 @@ existing fresh document, permission, and metadata checks before each write.
 Jobs retain the rule ID, revision and name plus the existing complete operation
 audit. Rollback uses the same preview and rollback engine as manual jobs.
 
-There is no scheduler or unattended execution in this iteration. Repeating a
-rule after a finished job requires a new preview and explicit confirmation.
+Manual repetition requires a new preview and explicit confirmation. Issue #51
+adds opt-in [scheduled execution](automation-schedules.md), with approval tied
+to the rule revision and the approving user's active session.

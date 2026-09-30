@@ -23,7 +23,9 @@ from paperwrench.db.models import JobType
 from paperwrench.db.models import OperationStatus
 from paperwrench.db.models import Preview
 from paperwrench.db.models import PreviewDocument
+from paperwrench.db.models import RuleSchedule
 from paperwrench.db.models import SavedRule
+from paperwrench.db.models import ScheduleRun
 from paperwrench.db.models import TargetStatus
 from paperwrench.db.session import session_scope
 from paperwrench.errors import ErrorCode
@@ -71,7 +73,8 @@ _field_value: TypeAdapter[FieldValue] = TypeAdapter(FieldValue)
 
 
 def create_job(
-    request: CreateJob, owner_id: int | None = None, rule_id: int | None = None
+    request: CreateJob, owner_id: int | None = None, rule_id: int | None = None,
+    *, schedule_run_id: int | None = None,
 ) -> int:
     spec = request.transformation
     from paperwrench.filters.model import CustomFieldRef
@@ -83,6 +86,21 @@ def create_job(
         raise limit("Custom writes require acknowledgement of the external-writer race.")
     with session_scope() as session:
         session.execute(text("BEGIN IMMEDIATE"))
+        occurrence = None
+        if schedule_run_id is not None:
+            occurrence = session.get(ScheduleRun, schedule_run_id)
+            if occurrence is None or occurrence.owner_id != owner_id:
+                raise stale("Schedule occurrence not found.")
+            if occurrence.job_id is not None:
+                return occurrence.job_id
+            schedule = session.get(RuleSchedule, occurrence.schedule_id)
+            if (
+                schedule is None or not schedule.enabled or schedule.rule_id != rule_id
+                or occurrence.status != "preparing"
+                or occurrence.approval_preview_id != schedule.approval_preview_id
+                or schedule.approved_spec_json != spec.model_dump_json()
+            ):
+                raise stale("Schedule approval changed during preparation.")
         preview = session.get(Preview, request.preview_id)
         if preview is None or preview.rule_id != rule_id:
             raise stale("Preview source does not match this execution.")
@@ -95,6 +113,18 @@ def create_job(
                 or preview.rule_spec_json != spec.model_dump_json()
             ):
                 raise stale("Rule changed since preview; review a new preview.")
+            if schedule_run_id is not None:
+                if occurrence is None or occurrence.rule_revision != rule.revision:
+                    raise stale("Rule revision changed during scheduled preparation.")
+                from paperwrench.api.v1.rules import RuleDefinition
+                from paperwrench.api.v1.rules import _spec
+
+                assert owner_id is not None
+                current_spec = _spec(
+                    session, RuleDefinition.model_validate_json(rule.definition_json), owner_id,
+                )
+                if current_spec != spec:
+                    raise stale("Collection changed during scheduled preparation.")
         # BEGIN IMMEDIATE serializes all local apply requests. A target still
         # present in any unfinished job cannot be claimed by another job.
         overlap_query = (
@@ -135,6 +165,9 @@ def create_job(
         )
         session.add(job)
         session.flush()
+        if occurrence is not None:
+            occurrence.job_id = job.id
+            occurrence.status = "running"
         position = -1
         copied = 0
         while True:

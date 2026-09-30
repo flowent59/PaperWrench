@@ -535,3 +535,38 @@ class PreviewDocument(Base):
     document_id: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     result_json: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class RuleSchedule(Base):
+    __tablename__ = "rule_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    rule_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    rule_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    approved_spec_json: Mapped[str] = mapped_column(Text, nullable=False)
+    approval_preview_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    approved_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, nullable=False)
+    recurrence_json: Mapped[str] = mapped_column(Text, nullable=False)
+    enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    next_run_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, index=True)
+    acknowledge_external_race: Mapped[bool] = mapped_column(default=False, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="disabled", nullable=False)
+    notification: Mapped[str | None] = mapped_column(String(80))
+
+
+class ScheduleRun(Base):
+    __tablename__ = "schedule_runs"
+    __table_args__ = (UniqueConstraint("schedule_id", "scheduled_for", name="schedule_occurrence"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    schedule_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    owner_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    scheduled_for: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    rule_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    approval_preview_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="preparing", nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    job_id: Mapped[int | None] = mapped_column(Integer, unique=True)

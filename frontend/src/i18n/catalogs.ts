@@ -15,6 +15,7 @@ import enPreview from './locales/en/preview.json'
 import enQuality from './locales/en/quality.json'
 import enRollback from './locales/en/rollback.json'
 import enRules from './locales/en/rules.json'
+import enSchedules from './locales/en/schedules.json'
 import enSafety from './locales/en/safety.json'
 import enSchemas from './locales/en/schemas.json'
 import enStatus from './locales/en/status.json'
@@ -38,6 +39,7 @@ import frPreview from './locales/fr/preview.json'
 import frQuality from './locales/fr/quality.json'
 import frRollback from './locales/fr/rollback.json'
 import frRules from './locales/fr/rules.json'
+import frSchedules from './locales/fr/schedules.json'
 import frSafety from './locales/fr/safety.json'
 import frSchemas from './locales/fr/schemas.json'
 import frStatus from './locales/fr/status.json'
@@ -47,6 +49,7 @@ import frTransformations from './locales/fr/transformations.json'
 
 export const rawCatalogs = {
   en: {
+    schedules: enSchedules,
     auth: enAuth, analytics: enAnalytics, collections: enCollections, quality: enQuality, schemas: enSchemas,
     transformations: enTransformations, preview: enPreview, rollback: enRollback, rules: enRules,
     jobs: enJobs, inspector: enInspector, app: enApp, nav: enNav, status: enStatus,
@@ -54,6 +57,7 @@ export const rawCatalogs = {
     explorer: enExplorer, safety: enSafety, locale: enLocale, theme: enTheme, errors: enErrors,
   },
   fr: {
+    schedules: frSchedules,
     auth: frAuth, analytics: frAnalytics, collections: frCollections, quality: frQuality, schemas: frSchemas,
     transformations: frTransformations, preview: frPreview, rollback: frRollback, rules: frRules,
     jobs: frJobs, inspector: frInspector, app: frApp, nav: frNav, status: frStatus,

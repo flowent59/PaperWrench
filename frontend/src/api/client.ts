@@ -400,3 +400,18 @@ export const jobsApi = {
       `/jobs/${id}/operations?document_id=${document}&page=${page}&page_size=25`),
   resume: (id: number) => apiFetch<import('./types').JobView>(`/jobs/${id}/resume`, { method: 'POST' }),
 }
+export const schedulesApi = {
+  list: () => apiFetch<import('./types').RuleSchedule[]>('/schedules'),
+  approve: (ruleId: number, recurrence: import('./types').ScheduleRecurrence,
+    preview: CreatedPreview, transformation: Transformation, race: boolean) =>
+    apiFetch<import('./types').RuleSchedule>('/schedules', { method: 'POST', body: JSON.stringify({
+      rule_id: ruleId, recurrence, acknowledge_unattended: true,
+      preview: { preview_id: preview.id, preview_token: preview.preview_token, transformation,
+        target_fingerprint: preview.target_fingerprint, result_fingerprint: preview.result_fingerprint,
+        version: preview.version, acknowledge: true, acknowledge_external_race: race },
+    }) }),
+  disable: (id: number) => apiFetch<import('./types').RuleSchedule>(`/schedules/${id}/disable`, { method: 'POST' }),
+  acknowledge: (id: number) => apiFetch<import('./types').RuleSchedule>(`/schedules/${id}/acknowledge`, { method: 'POST' }),
+  runs: (id: number, before?: number) => apiFetch<import('./types').ScheduleRun[]>(
+    `/schedules/${id}/runs${before ? `?before=${before}` : ''}`),
+}

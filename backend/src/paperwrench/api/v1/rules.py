@@ -317,13 +317,19 @@ async def preview_rule(
     registry: MetadataRegistry = Depends(get_metadata_registry),
     owner_id: int = Depends(get_owner_id),
 ) -> RuleCreatedPreview:
+    return await build_rule_preview(rule_id, request.app.state.previews, client, registry, owner_id)
+
+
+async def build_rule_preview(
+    rule_id: int, service: PreviewService, client: PaperlessClient,
+    registry: MetadataRegistry, owner_id: int,
+) -> RuleCreatedPreview:
     with session_scope() as db:
         row = _row(db, rule_id, owner_id)
         revision = row.revision
         definition = RuleDefinition.model_validate_json(row.definition_json)
         spec = _spec(db, definition, owner_id)
     await _validate_spec(spec, registry)
-    service: PreviewService = request.app.state.previews
     result = await service.create(spec, client, registry, owner_id=owner_id)
     with session_scope() as db:
         row = _row(db, rule_id, owner_id)
