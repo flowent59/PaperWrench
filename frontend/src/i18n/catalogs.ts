@@ -1,4 +1,5 @@
 import enApp from './locales/en/app.json'
+import enAnalytics from './locales/en/analytics.json'
 import enAuth from './locales/en/auth.json'
 import enCollections from './locales/en/collections.json'
 import enDashboard from './locales/en/dashboard.json'
@@ -20,6 +21,7 @@ import enSystem from './locales/en/system.json'
 import enTheme from './locales/en/theme.json'
 import enTransformations from './locales/en/transformations.json'
 import frApp from './locales/fr/app.json'
+import frAnalytics from './locales/fr/analytics.json'
 import frAuth from './locales/fr/auth.json'
 import frCollections from './locales/fr/collections.json'
 import frDashboard from './locales/fr/dashboard.json'
@@ -43,14 +45,14 @@ import frTransformations from './locales/fr/transformations.json'
 
 export const rawCatalogs = {
   en: {
-    auth: enAuth, collections: enCollections, quality: enQuality, schemas: enSchemas,
+    auth: enAuth, analytics: enAnalytics, collections: enCollections, quality: enQuality, schemas: enSchemas,
     transformations: enTransformations, preview: enPreview, rollback: enRollback,
     jobs: enJobs, inspector: enInspector, app: enApp, nav: enNav, status: enStatus,
     system: enSystem, dashboard: enDashboard, placeholder: enPlaceholder, filters: enFilters,
     explorer: enExplorer, safety: enSafety, locale: enLocale, theme: enTheme, errors: enErrors,
   },
   fr: {
-    auth: frAuth, collections: frCollections, quality: frQuality, schemas: frSchemas,
+    auth: frAuth, analytics: frAnalytics, collections: frCollections, quality: frQuality, schemas: frSchemas,
     transformations: frTransformations, preview: frPreview, rollback: frRollback,
     jobs: frJobs, inspector: frInspector, app: frApp, nav: frNav, status: frStatus,
     system: frSystem, dashboard: frDashboard, placeholder: frPlaceholder, filters: frFilters,

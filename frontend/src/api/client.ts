@@ -48,6 +48,8 @@ import type {
   SavedExplorerViewDefinition,
   DashboardRange,
   DashboardSnapshot,
+  CustomFieldReport,
+  CustomFieldReportRequest,
 } from './types'
 
 export const API_PREFIX = '/api/v1'
@@ -153,6 +155,26 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return (await response.json()) as T
 }
 
+async function apiDownload(path: string, init: RequestInit): Promise<Blob> {
+  let response: Response
+  try {
+    response = await fetch(`${API_PREFIX}${path}`, {
+      ...init,
+      credentials: 'include',
+      headers: {
+        Accept: 'text/csv',
+        'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...init.headers,
+      },
+    })
+  } catch (cause) {
+    throw new NetworkError(cause)
+  }
+  if (!response.ok) throw await parseError(response)
+  return response.blob()
+}
+
 export const authApi = {
   me: async () => rememberSession(await apiFetch<AuthSession>('/auth/me')),
   login: async (token: string, locale: 'en' | 'fr') => rememberSession(await apiFetch<AuthSession>('/auth/login', {
@@ -179,6 +201,12 @@ export const systemApi = {
 export const analyticsApi = {
   dashboard: (range: DashboardRange) =>
     apiFetch<DashboardSnapshot>(`/analytics/dashboard?range=${range}`),
+  report: (request: CustomFieldReportRequest) => apiFetch<CustomFieldReport>('/analytics/reports', {
+    method: 'POST', body: JSON.stringify(request),
+  }),
+  exportReport: (request: CustomFieldReportRequest) => apiDownload('/analytics/reports/export', {
+    method: 'POST', body: JSON.stringify(request),
+  }),
 }
 
 export const documentsApi = {

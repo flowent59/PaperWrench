@@ -295,6 +295,52 @@ export interface DashboardSnapshot {
   custom_fields: CustomFieldCoverage[]
 }
 
+export type ReportGroupBy = 'month' | 'year' | 'document_type' | 'correspondent'
+export type NumericSemantics = 'sum' | 'snapshot'
+
+export interface CustomFieldReportRequest {
+  field_id: number
+  range: DashboardRange
+  group_by: ReportGroupBy
+  numeric_semantics: NumericSemantics
+  filters?: FilterSet | null
+}
+
+export interface ReportValue {
+  value: string
+  currency: string | null
+}
+
+export interface ReportGroup {
+  key: string
+  label: string | null
+  document_count: number
+  values: ReportValue[]
+  query: DatasetQuery
+}
+
+export interface MissingValueBucket {
+  kind: 'absent' | 'null' | 'invalid'
+  count: number
+  query: DatasetQuery | null
+}
+
+export interface CustomFieldReport {
+  field_id: number
+  field_name: string
+  data_type: string
+  range: DashboardRange
+  start: string
+  end: string
+  group_by: ReportGroupBy
+  aggregation: 'sum' | 'latest_snapshot' | 'count'
+  additive: boolean
+  matched_documents: number
+  valued_documents: number
+  groups: ReportGroup[]
+  missing: MissingValueBucket[]
+}
+
 export type SchemaRule =
   | { kind: 'required'; field: FieldRef; field_type: FieldType }
   | { kind: 'equals'; field: FieldRef; field_type: FieldType; value: unknown }
