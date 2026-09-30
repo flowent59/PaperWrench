@@ -43,7 +43,7 @@ import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation } from 'react-router'
 
-import { collectionsApi, documentsApi } from '@/api/client'
+import { collectionsApi, documentsApi, savedViewsApi } from '@/api/client'
 
 import {
   useCorrespondents,
@@ -62,6 +62,7 @@ import type {
   DocumentPageSize,
   FilterSet,
   SearchMode,
+  SavedExplorerViewDefinition,
 } from '@/api/types'
 import { DOCUMENT_PAGE_SIZES } from '@/api/types'
 import { Button } from '@/components/ui/button'
@@ -88,6 +89,13 @@ function sortingToOrdering(sorting: SortingState): string | undefined {
 export function ExplorerPage() {
   const queryClient = useQueryClient()
   const collections = useQuery({ queryKey: ['collections'], queryFn: collectionsApi.list })
+  const savedViews = useQuery({ queryKey: ['saved-views'], queryFn: savedViewsApi.list })
+  const [savedViewId, setSavedViewId] = React.useState<number | null>(null)
+  const [savedViewName, setSavedViewName] = React.useState('')
+  const [viewIsDefault, setViewIsDefault] = React.useState(false)
+  const [viewError, setViewError] = React.useState('')
+  const [viewBusy, setViewBusy] = React.useState(false)
+  const defaultRestored = React.useRef(false)
   const [collectionName, setCollectionName] = React.useState('')
   const [collectionId, setCollectionId] = React.useState('')
   const [collectionError, setCollectionError] = React.useState('')
@@ -144,6 +152,35 @@ export function ExplorerPage() {
       desc: value.startsWith('-') }] : [])
   }, [location.search]) // Reopen a different stable Quality URL in the same Explorer route.
 
+  const applySavedView = React.useCallback((definition: SavedExplorerViewDefinition) => {
+    const query = definition.query
+    setPage(1)
+    setPageSize(definition.page_size)
+    setSearchInput(query.search?.text ?? '')
+    setSearch(query.search?.text ?? '')
+    setSearchMode(query.search?.mode ?? 'title')
+    setFilters(query.filters ?? emptyFilterSet())
+    setSorting(query.ordering ? [{
+      id: query.ordering.startsWith('-') ? query.ordering.slice(1) : query.ordering,
+      desc: query.ordering.startsWith('-'),
+    }] : [])
+    setColumnVisibility(definition.column_visibility)
+  }, [setColumnVisibility])
+
+  React.useEffect(() => {
+    if (defaultRestored.current || !savedViews.isSuccess) return
+    defaultRestored.current = true
+    if (initialQuery !== null || qualityTarget.invalid || qualityTarget.ids !== null) return
+    const defaultView = savedViews.data.find((item) => item.is_default)
+    if (defaultView !== undefined) {
+      setSavedViewId(defaultView.id)
+      setSavedViewName(defaultView.name)
+      setViewIsDefault(true)
+      applySavedView(defaultView.definition)
+    }
+  }, [savedViews.data, savedViews.isSuccess, initialQuery, qualityTarget.invalid,
+    qualityTarget.ids, applySavedView])
+
   // Debounce the search box so every keystroke does not fire a request.
   React.useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -187,6 +224,42 @@ export function ExplorerPage() {
     ...(searchSpec !== null ? { search: searchSpec } : {}),
     ...(filtersEmpty ? {} : { filters }),
     ...(ordering !== undefined ? { ordering } : {}),
+  }
+
+  const savedDefinition: SavedExplorerViewDefinition = {
+    query: {
+      ...(searchSpec !== null ? { search: searchSpec } : {}),
+      ...(filtersEmpty ? {} : { filters }),
+      ...(ordering !== undefined ? { ordering } : {}),
+    },
+    page_size: pageSize,
+    column_visibility: columnVisibility,
+  }
+
+  async function saveView(isDefault = viewIsDefault) {
+    setViewBusy(true); setViewError('')
+    try {
+      const data = { name: savedViewName, definition: savedDefinition, is_default: isDefault }
+      const saved = savedViewId === null
+        ? await savedViewsApi.create(data)
+        : await savedViewsApi.update(savedViewId, data)
+      setSavedViewId(saved.id)
+      setSavedViewName(saved.name)
+      setViewIsDefault(saved.is_default)
+      await queryClient.invalidateQueries({ queryKey: ['saved-views'] })
+    } catch (cause) { setViewError(errorMessage(cause, messages.explorer.savedViewError)) }
+    finally { setViewBusy(false) }
+  }
+
+  async function deleteView() {
+    if (savedViewId === null) return
+    setViewBusy(true); setViewError('')
+    try {
+      await savedViewsApi.remove(savedViewId)
+      setSavedViewId(null); setSavedViewName(''); setViewIsDefault(false)
+      await queryClient.invalidateQueries({ queryKey: ['saved-views'] })
+    } catch (cause) { setViewError(errorMessage(cause, messages.explorer.savedViewError)) }
+    finally { setViewBusy(false) }
   }
 
   const datasetDocuments = useDocuments(request, filtersRunnable && explicitIds === null && !qualityTarget.invalid)
@@ -280,6 +353,37 @@ export function ExplorerPage() {
       <div>
         <h1 className="text-xl font-semibold">{messages.explorer.title}</h1>
         <p className="text-sm text-muted-foreground">{messages.explorer.subtitle}</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-border p-3">
+        <select aria-label={messages.explorer.savedViews} value={savedViewId ?? ''}
+          disabled={viewBusy || explicitIds !== null || initialQuery !== null}
+          onChange={(event) => {
+            const id = Number(event.target.value)
+            const selected = savedViews.data?.find((item) => item.id === id)
+            if (selected) {
+              setSavedViewId(id); setSavedViewName(selected.name); setViewIsDefault(selected.is_default)
+              applySavedView(selected.definition)
+            } else { setSavedViewId(null); setSavedViewName(''); setViewIsDefault(false) }
+          }} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
+          <option value="">{messages.explorer.chooseSavedView}</option>
+          {(savedViews.data ?? []).map((item) => <option key={item.id} value={item.id}>
+            {item.name}{item.is_default ? ` · ${messages.explorer.defaultView}` : ''}
+          </option>)}
+        </select>
+        <input aria-label={messages.explorer.savedViewName} value={savedViewName}
+          onChange={(event) => setSavedViewName(event.target.value)}
+          placeholder={messages.explorer.savedViewName}
+          className="h-9 rounded-md border border-input bg-background px-2 text-sm" />
+        <label className="flex items-center gap-1.5 text-sm">
+          <input type="checkbox" checked={viewIsDefault} onChange={(event) => setViewIsDefault(event.target.checked)} />
+          {messages.explorer.defaultView}
+        </label>
+        <Button size="sm" disabled={viewBusy || !savedViewName.trim() || explicitIds !== null}
+          onClick={() => void saveView()}>{savedViewId === null ? messages.explorer.saveView : messages.explorer.updateView}</Button>
+        {savedViewId !== null && <Button size="sm" variant="outline" disabled={viewBusy}
+          onClick={() => void deleteView()}>{messages.explorer.deleteView}</Button>}
+        {viewError && <span role="alert" className="text-sm text-destructive">{viewError}</span>}
       </div>
 
       {qualityTarget.invalid && <div role="alert" className="rounded-md border border-destructive p-3 text-sm">

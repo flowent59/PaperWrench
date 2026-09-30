@@ -51,6 +51,7 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
   expect(amount).toBeTruthy()
   const condition = { kind: 'condition', field: { source: 'core', name: 'document_type' }, operator: 'equals', value: vacation.id }
   const scope = { filters: { root: { kind: 'group', operator: 'and', children: [condition] } } }
+  let savedViewId: number | null = null
   const originalPage = await upstream.get(`/api/documents/?document_type__id=${vacation.id}&page_size=100`)
   type Doc = { id: number; title: string; custom_fields: { field: number; value: unknown }[] }
   const originals: Doc[] = (await originalPage.json()).results
@@ -78,6 +79,30 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
   }
   const explorer = (query: unknown) => `/documents?quality_query=${encodeURIComponent(JSON.stringify(query))}`
   try {
+    const savedViewResponse = await app.post('/api/v1/views', { headers: writeHeaders, data: {
+      name: 'M13 saved Explorer view', is_default: true,
+      definition: {
+        query: { ...scope, search: { mode: 'title', text: originals[0].title }, ordering: '-created' },
+        page_size: 25, column_visibility: { archive_serial_number: false },
+      },
+    } })
+    expect(savedViewResponse.status()).toBe(201)
+    savedViewId = (await savedViewResponse.json()).id
+    const expectedViewPage = await app.post('/api/v1/documents/query', { headers: writeHeaders, data: {
+      ...scope, search: { mode: 'title', text: originals[0].title }, ordering: '-created',
+      page_size: 25, page: 1,
+    } })
+    expect(expectedViewPage.ok()).toBeTruthy()
+    const viewResults = await expectedViewPage.json()
+    expect(viewResults.items.some((item: { id: number }) => originals.some(doc => doc.id === item.id))).toBe(true)
+    await page.goto('/documents')
+    await expect(page.getByLabel('Search by title...')).toHaveValue(originals[0].title)
+    await expect(page.getByLabel('Rows per page')).toHaveValue('25')
+    await expect(page.getByText(viewResults.items[0].title)).toBeVisible()
+    await page.reload()
+    await expect(page.getByLabel('Search by title...')).toHaveValue(originals[0].title)
+    await expect(page.getByLabel('Saved views')).toHaveValue(String(savedViewId))
+
     await page.goto(explorer(scope))
     await expect(page.getByRole('columnheader', { name: /Période concernée/ })).toBeVisible()
     await expect(page.getByRole('columnheader', { name: /Montant/ })).toBeVisible()
@@ -161,6 +186,9 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
       expect((await upstream.patch(`/api/documents/${doc.id}/`, { data: { title: doc.title } })).ok()).toBeTruthy()
     }
     await app.delete(`/api/v1/schemas/${schema.id}`, { headers: writeHeaders })
+    if (savedViewId !== null) {
+      await app.delete(`/api/v1/views/${savedViewId}`, { headers: writeHeaders })
+    }
     await app.delete(`/api/v1/collections/${collection.id}`, { headers: writeHeaders })
     await upstream.dispose()
   }

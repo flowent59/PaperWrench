@@ -43,5 +43,13 @@
   "filterTag": "Tag",
   "filterAll": "All",
   "resetFilters": "Reset filters",
-  "showingCount": "Showing {count} of {total}"
+  "showingCount": "Showing {count} of {total}",
+  "savedViews": "Saved views",
+  "chooseSavedView": "Choose a saved view...",
+  "savedViewName": "View name",
+  "saveView": "Save view",
+  "updateView": "Update view",
+  "deleteView": "Delete view",
+  "defaultView": "Default view",
+  "savedViewError": "Could not save this view."
 }

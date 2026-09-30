@@ -157,6 +157,7 @@ function mockFetchRouter(
 ): ReturnType<typeof vi.fn> {
   const defaultHandlers: Record<string, (init?: RequestInit) => Response> = {
     '/api/v1/collections': () => jsonResponse([]),
+    '/api/v1/views': () => jsonResponse([]),
     '/api/v1/metadata/tags': () => jsonResponse([]),
     '/api/v1/metadata/correspondents': () => jsonResponse([]),
     '/api/v1/metadata/document-types': () => jsonResponse([]),
@@ -189,6 +190,69 @@ afterEach(() => {
 })
 
 describe('ExplorerPage', () => {
+  it('restores the private default saved view, including advanced search, sort and page size', async () => {
+    const storageKey = 'paperwrench.explorer.columnVisibility'
+    const originalVisibility = window.localStorage.getItem(storageKey)
+    const requests: Record<string, unknown>[] = []
+    mockFetchRouter({
+      '/api/v1/views': () => jsonResponse([{
+        id: 9, name: 'Advanced invoices', is_default: true, created_at: '', updated_at: '',
+        definition: {
+          query: { search: { mode: 'advanced', text: 'title:invoice' },
+            filters: { root: { kind: 'group', operator: 'and', children: [] } },
+            ordering: '-created' },
+          page_size: 25, column_visibility: { correspondent: false },
+        },
+      }]),
+      '/api/v1/documents/query': (init) => {
+        requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+        return jsonResponse(makePage())
+      },
+    })
+    renderWithProviders(<ExplorerPage />)
+    await waitFor(() => expect(requests.some((request) =>
+      (request.search as { mode?: string } | undefined)?.mode === 'advanced' &&
+      request.page_size === 25 && request.ordering === '-created')).toBe(true))
+    expect(screen.getByLabelText('Rows per page')).toHaveValue('25')
+    expect(screen.getByLabelText('Saved views')).toHaveValue('9')
+    if (originalVisibility === null) window.localStorage.removeItem(storageKey)
+    else window.localStorage.setItem(storageKey, originalVisibility)
+  })
+
+  it('saves and deletes a named private view from the current Explorer state', async () => {
+    const writes: Array<{ method: string; body?: Record<string, unknown> }> = []
+    let saved: Record<string, unknown> | null = null
+    mockFetchRouter({
+      '/api/v1/views': (init) => {
+        if (init?.method === 'POST') {
+          const body = JSON.parse(String(init.body)) as Record<string, unknown>
+          writes.push({ method: 'POST', body })
+          saved = { ...body, id: 12, created_at: '', updated_at: '' }
+          return jsonResponse(saved, 201)
+        }
+        return jsonResponse(saved === null ? [] : [saved])
+      },
+      '/api/v1/views/12': (init) => {
+        if (init?.method === 'DELETE') {
+          writes.push({ method: 'DELETE' })
+          saved = null
+          return new Response(null, { status: 204 })
+        }
+        throw new Error(`Unexpected method ${init?.method}`)
+      },
+    })
+    renderWithProviders(<ExplorerPage />)
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('View name'), 'Invoices')
+    await user.click(screen.getByLabelText('Default view'))
+    await user.click(screen.getByRole('button', { name: 'Save view' }))
+    await waitFor(() => expect(writes[0]?.method).toBe('POST'))
+    expect(writes[0]?.body).toMatchObject({ name: 'Invoices', is_default: true,
+      definition: { query: {}, page_size: 100, column_visibility: {} } })
+    await user.click(await screen.findByRole('button', { name: 'Delete view' }))
+    await waitFor(() => expect(writes[1]?.method).toBe('DELETE'))
+  })
+
   it('refuses malformed Quality URLs without widening to the normal dataset', () => {
     const spy = mockFetchRouter()
     renderWithProviders(<ExplorerPage />, '/documents?quality_ids=1,not-an-id')

@@ -43,5 +43,13 @@
   "filterTag": "Étiquette",
   "filterAll": "Tous",
   "resetFilters": "Réinitialiser les filtres",
-  "showingCount": "Affichage de {count} sur {total}"
+  "showingCount": "Affichage de {count} sur {total}",
+  "savedViews": "Vues enregistrées",
+  "chooseSavedView": "Choisir une vue enregistrée…",
+  "savedViewName": "Nom de la vue",
+  "saveView": "Enregistrer la vue",
+  "updateView": "Modifier la vue",
+  "deleteView": "Supprimer la vue",
+  "defaultView": "Vue par défaut",
+  "savedViewError": "Impossible d’enregistrer cette vue."
 }

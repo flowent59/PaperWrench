@@ -426,6 +426,25 @@ class CollectionDocument(Base):
     collection: Mapped[Collection] = relationship(back_populates="documents")
 
 
+class SavedExplorerView(Base):
+    """A private, user-owned snapshot of Explorer query and display state."""
+
+    __tablename__ = "saved_explorer_views"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "name", name="saved_view_owner_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    definition_json: Mapped[str] = mapped_column(Text, nullable=False)
+    is_default: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 __all__ = [
     "AppSettings",
     "Base",
@@ -440,6 +459,7 @@ __all__ = [
     "JobType",
     "OperationStatus",
     "RuntimeLock",
+    "SavedExplorerView",
     "UserPreference",
 ]
 
