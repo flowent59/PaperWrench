@@ -64,7 +64,7 @@ def test_saved_view_crud_default_switch_and_private_owner(
 
     auth_record.paperless_user_id = 2
     assert client.get("/api/v1/views").json() == []
-    assert client.get(f"/api/v1/views/{view_id}").status_code == 404
+    assert client.delete(f"/api/v1/views/{view_id}").status_code == 404
     assert client.put(
         f"/api/v1/views/{view_id}",
         json={"name": "Leaked", "definition": definition},

@@ -88,7 +88,7 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
     } })
     expect(savedViewResponse.status()).toBe(201)
     savedViewId = (await savedViewResponse.json()).id
-    const expectedViewPage = await app.post('/api/v1/documents/query', { data: {
+    const expectedViewPage = await app.post('/api/v1/documents/query', { headers: writeHeaders, data: {
       ...scope, search: { mode: 'title', text: originals[0].title }, ordering: '-created',
       page_size: 25, page: 1,
     } })
