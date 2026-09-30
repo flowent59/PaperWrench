@@ -251,6 +251,50 @@ export interface SavedExplorerView {
   updated_at: string
 }
 
+export type DashboardRange = '30d' | '90d' | '365d'
+
+export interface DashboardPeriod {
+  start: string
+  end: string
+  count: number
+  query: DatasetQuery
+}
+
+export interface DashboardBreakdownItem {
+  id: number | null
+  label: string | null
+  count: number
+  query: DatasetQuery
+}
+
+export interface DashboardBreakdown {
+  dimension: 'correspondent' | 'document_type' | 'tags'
+  items: DashboardBreakdownItem[]
+}
+
+export interface CustomFieldCoverage {
+  field_id: number
+  label: string
+  data_type: string
+  present: number
+  missing: number
+  present_query: DatasetQuery
+  missing_query: DatasetQuery
+}
+
+export interface DashboardSnapshot {
+  range: DashboardRange
+  start: string
+  end: string
+  generated_at: string
+  cache_ttl_seconds: number
+  total_visible: number
+  documents_in_range: number
+  trend: DashboardPeriod[]
+  breakdowns: DashboardBreakdown[]
+  custom_fields: CustomFieldCoverage[]
+}
+
 export type SchemaRule =
   | { kind: 'required'; field: FieldRef; field_type: FieldType }
   | { kind: 'equals'; field: FieldRef; field_type: FieldType; value: unknown }
