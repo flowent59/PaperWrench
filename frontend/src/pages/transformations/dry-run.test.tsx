@@ -47,11 +47,22 @@ function setup(value = preview(), confirmationStatus = 200, transformation = spe
 afterEach(() => vi.unstubAllGlobals())
 
 describe('M7 Dry Run', () => {
+  it('requires an additional acknowledgement when values are removed', async () => {
+    setup(preview(), 200, { ...spec, operations: [{ operation: 'clear',
+      field: { source: 'core', name: 'title' } }] })
+    fireEvent.click(screen.getByRole('button', { name: m.create }))
+    await screen.findByText('Ancien')
+    fireEvent.click(screen.getByRole('checkbox', { name: m.acknowledge }))
+    expect(screen.getByRole('button', { name: m.confirm })).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox', { name: m.acknowledgeClear }))
+    expect(screen.getByRole('button', { name: m.confirm })).toBeEnabled()
+  })
+
   it('requires a separate acknowledgement before a custom-field Apply', async () => {
     const { fetchMock } = setup(preview(), 200, { ...spec, operations: [{ operation: 'set',
       field: { source: 'custom_field', field_id: 1 }, value: 'Août' }] })
     fireEvent.click(screen.getByRole('button', { name: m.create }))
-    await screen.findByText('Ancien → Été')
+    await screen.findByText('Ancien')
     fireEvent.click(screen.getByRole('checkbox', { name: m.acknowledge }))
     expect(screen.getByRole('button', { name: m.confirm })).toBeDisabled()
     fireEvent.click(screen.getByRole('checkbox', { name: messages.jobs.acknowledgeRace }))
@@ -64,7 +75,7 @@ describe('M7 Dry Run', () => {
   it('directs a lost Apply response to History without automatically resubmitting', async () => {
     const { fetchMock } = setup()
     fireEvent.click(screen.getByRole('button', { name: m.create }))
-    await screen.findByText('Ancien → Été')
+    await screen.findByText('Ancien')
     fetchMock.mockRejectedValueOnce(new TypeError('offline'))
     fireEvent.click(screen.getByRole('checkbox', { name: m.acknowledge }))
     fireEvent.click(screen.getByRole('button', { name: m.confirm }))
@@ -78,7 +89,7 @@ describe('M7 Dry Run', () => {
     const { fetchMock } = setup()
     expect(screen.queryByRole('button', { name: m.confirm })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: m.create }))
-    await screen.findByText('Ancien → Été')
+    await screen.findByText('Ancien')
     expect(screen.getByText(m.changed, { selector: 'dt' }).parentElement).toHaveTextContent(formatNumber(9000))
     expect(screen.getByText(m.unchanged, { selector: 'dt' }).parentElement).toHaveTextContent(formatNumber(1000))
     expect(screen.getByRole('button', { name: m.confirm })).toBeDisabled()
@@ -124,7 +135,7 @@ describe('M7 Dry Run', () => {
     first.view.unmount()
     setup(preview(), 409)
     fireEvent.click(screen.getByRole('button', { name: m.create }))
-    await screen.findByText('Ancien → Été')
+    await screen.findByText('Ancien')
     fireEvent.click(screen.getByRole('checkbox', { name: m.acknowledge }))
     fireEvent.click(screen.getByRole('button', { name: m.confirm }))
     await screen.findByText(m.expired)
@@ -134,7 +145,7 @@ describe('M7 Dry Run', () => {
   it('filters on the server and resets page navigation', async () => {
     const { fetchMock } = setup()
     fireEvent.click(screen.getByRole('button', { name: m.create }))
-    await screen.findByText('Ancien → Été')
+    await screen.findByText('Ancien')
     fireEvent.click(screen.getByRole('button', { name: m.next }))
     await screen.findByText('Document 2 (#2)')
     fireEvent.change(screen.getByLabelText(m.show), { target: { value: 'error' } })
@@ -145,17 +156,17 @@ describe('M7 Dry Run', () => {
   it('drops confirmation when editing the specification remounts the panel', async () => {
     const { view, client, fetchMock } = setup()
     fireEvent.click(screen.getByRole('button', { name: m.create }))
-    await screen.findByText('Ancien → Été')
+    await screen.findByText('Ancien')
     fireEvent.click(screen.getByRole('checkbox', { name: m.acknowledge }))
     view.rerender(<QueryClientProvider client={client}><DryRun key="edited-spec" build={() => spec} /></QueryClientProvider>)
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: m.title })).queryByText('Ancien → Été')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: m.title })).queryByText('Ancien')).not.toBeInTheDocument()
     await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(true))
   })
 
   it('renders ABSENT, NULL, empty, zero, false, money, dates and Select labels distinctly', () => {
-    expect(valueText({ kind: 'absent', raw: null })).toBe('ABSENT')
-    expect(valueText({ kind: 'null', raw: null })).toBe('NULL')
+    expect(valueText({ kind: 'absent', raw: null })).toBe(messages.transformations.absentValue)
+    expect(valueText({ kind: 'null', raw: null })).toBe(messages.transformations.nullValue)
     expect(valueText({ kind: 'present', raw: '' })).toBe(messages.transformations.emptyString)
     expect(valueText({ kind: 'present', raw: 0 })).toBe('0')
     expect(valueText({ kind: 'present', raw: false })).toBe('false')

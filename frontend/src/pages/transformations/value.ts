@@ -4,7 +4,8 @@ import { messages } from '@/i18n/messages'
 /** Render the staged M6 value, including its metadata snapshot, without refetching. */
 export function valueText(value: TransformationValue | null): string {
   if (value === null) return messages.transformations.unavailable
-  if (value.kind !== 'present') return value.kind.toUpperCase()
+  if (value.kind === 'absent') return messages.transformations.absentValue
+  if (value.kind === 'null') return messages.transformations.nullValue
   if (value.raw === '') return messages.transformations.emptyString
   if (value.monetary) return `${value.monetary.currency}${value.monetary.amount}`
   if (value.select_option_id != null) {

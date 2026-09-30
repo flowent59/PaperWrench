@@ -28,13 +28,22 @@ describe('M6 authoring page', () => {
       if (String(input).endsWith('/previews')) return new Response(JSON.stringify({
         error: { code: 'VALIDATION_ERROR', message: 'Captured selection' },
       }), { status: 422 })
+      if (String(input).endsWith('/transformations/validate')) return new Response(JSON.stringify({
+        valid: true, issues: [],
+      }))
       return new Response(JSON.stringify(String(input).endsWith('/metadata/custom-fields') ? fields : []))
     })
     vi.stubGlobal('fetch', fetchMock)
     renderPage(targets)
-    await screen.findAllByRole('option', { name: 'Période concernée' })
     expect(screen.getByLabelText(messages.preview.ordering)).toHaveValue('-created')
+    fireEvent.click(screen.getByRole('button', { name: m.continue }))
+    await screen.findAllByRole('option', { name: 'Période concernée' })
+    fireEvent.change(screen.getByRole('combobox', { name: `${m.operation} 1` }), { target: { value: 'template' } })
+    fireEvent.change(screen.getByLabelText(m.template), { target: { value: '{Période concernée}' } })
     fireEvent.change(screen.getByLabelText('{Période concernée}'), { target: { value: 'custom_field:7' } })
+    fireEvent.click(screen.getByRole('button', { name: m.continue }))
+    await screen.findByText(m.review, { selector: 'h2' })
+    fireEvent.click(screen.getByRole('button', { name: m.continue }))
     fireEvent.click(screen.getByRole('button', { name: messages.preview.create }))
     await screen.findByText('The submitted data is invalid.')
     const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/previews'))
@@ -68,11 +77,16 @@ describe('M6 authoring page', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     renderPage()
-    await screen.findAllByRole('option', { name: 'Période concernée' })
     fireEvent.change(screen.getByLabelText(m.ids), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: m.continue }))
+    await screen.findAllByRole('option', { name: 'Période concernée' })
+    fireEvent.change(screen.getByRole('combobox', { name: `${m.operation} 1` }), { target: { value: 'template' } })
+    fireEvent.change(screen.getByLabelText(m.template), { target: { value: 'Relevé de vacations – {Période concernée}' } })
     fireEvent.change(screen.getByLabelText('{Période concernée}'), {
       target: { value: 'custom_field:7' },
     })
+    fireEvent.click(screen.getByRole('button', { name: m.continue }))
+    await screen.findByText(m.review, { selector: 'h2' })
     fireEvent.click(screen.getByRole('button', { name: m.evaluate }))
     await screen.findByText(/Relevé de vacations – Juillet/u)
     const call = fetchMock.mock.calls.find(([input]) => String(input).includes('/transformations/documents/'))
@@ -90,8 +104,10 @@ describe('M6 authoring page', () => {
     renderPage()
     fireEvent.click(screen.getByLabelText(m.dataset))
     expect(screen.getByText(m.search)).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText(m.documentId), { target: { value: '100' } })
-    fireEvent.click(screen.getByRole('button', { name: m.evaluate }))
+    fireEvent.click(screen.getByRole('button', { name: m.continue }))
+    fireEvent.change(screen.getByRole('combobox', { name: `${m.operation} 1` }), { target: { value: 'template' } })
+    fireEvent.change(screen.getByLabelText(m.template), { target: { value: '{Missing field}' } })
+    fireEvent.click(screen.getByRole('button', { name: m.continue }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Choose a field'))
   })
 
@@ -107,12 +123,11 @@ describe('M6 authoring page', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     renderPage()
-    await screen.findAllByRole('option', { name: 'Période concernée' })
     fireEvent.change(screen.getByLabelText(m.ids), { target: { value: '100' } })
-    fireEvent.change(screen.getByLabelText('{Période concernée}'), {
-      target: { value: 'custom_field:7' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: m.evaluate }))
+    fireEvent.click(screen.getByRole('button', { name: m.continue }))
+    await screen.findAllByRole('option', { name: 'Période concernée' })
+    fireEvent.change(screen.getByRole('combobox', { name: `${m.field} 1` }), { target: { value: 'custom_field:7' } })
+    fireEvent.click(screen.getByRole('button', { name: m.continue }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(
       'This field is no longer available.',
     ))

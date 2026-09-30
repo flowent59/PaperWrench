@@ -14,7 +14,9 @@ const fields: CustomFieldDefinition[] = [
 
 describe('M6 authoring serialization', () => {
   it('uses stable custom IDs for Unicode template bindings', () => {
-    const draft = { ...emptyOperation(), bindings: { 'Période concernée': 'custom_field:7' } }
+    const draft = { ...emptyOperation(), operation: 'template' as const,
+      template: 'Relevé de vacations – {Période concernée}',
+      bindings: { 'Période concernée': 'custom_field:7' } }
     expect(placeholders(draft.template)).toEqual(['Période concernée'])
     expect(serializeOperation(draft, fields)).toEqual({
       operation: 'template', field: { source: 'core', name: 'title' },
@@ -47,7 +49,8 @@ describe('M6 authoring serialization', () => {
   })
 
   it('rejects unknown bindings and invalid integer input before request', () => {
-    expect(() => serializeOperation(emptyOperation(), fields)).toThrow()
+    expect(() => serializeOperation({ ...emptyOperation(), operation: 'template',
+      template: '{Missing field}' }, fields)).toThrow()
     expect(() => serializeOperation({ ...emptyOperation('core:correspondent'), operation: 'set', value: 'abc' }, fields)).toThrow()
   })
 })
