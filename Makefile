@@ -125,7 +125,8 @@ migration: ## Autogenerate a migration: make migration m="add jobs table"
 # ---------------------------------------------------------------------------
 
 .PHONY: dev-paperless-up
-dev-paperless-up: ## Start the disposable Paperless-ngx 3.2.1 sandbox on :8010
+dev-paperless-up: ## Start the disposable Paperless-ngx latest sandbox on :8010
+	docker compose -f docker-compose.dev.yml pull paperless
 	docker compose -f docker-compose.dev.yml up -d
 
 .PHONY: dev-paperless-seed
@@ -158,7 +159,7 @@ test-mocked: ## Backend integration tests against a MOCKED Paperless (respx)
 	$(PY) -m pytest tests/backend/integration_mocked
 
 .PHONY: test-live
-test-live: ## Opt-in tests against the REAL sandbox Paperless on :8010
+test-live: ## Opt-in sandbox tests; set PAPERWRENCH_EXPECTED_PAPERLESS_VERSION to X-Version
 	PAPERWRENCH_ALLOW_LIVE_TESTS=true \
 		PAPERWRENCH_PAPERLESS_URL=$${PAPERWRENCH_PAPERLESS_URL:-http://127.0.0.1:8010} \
 		$(PY) -m pytest tests/backend/live -v

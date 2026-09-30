@@ -44,7 +44,6 @@ AUTHORISED_LIVE_HOSTS = frozenset(
 
 ALLOW_ENV = "PAPERWRENCH_ALLOW_LIVE_TESTS"
 EXPECTED_VERSION_ENV = "PAPERWRENCH_EXPECTED_PAPERLESS_VERSION"
-DEFAULT_EXPECTED_VERSION = "3.2.1"
 
 # Two accepted spellings, in priority order, for both the URL and the token.
 #
@@ -84,8 +83,8 @@ def live_tests_allowed() -> bool:
 
 
 def expected_paperless_version() -> str:
-    """Use the CI-probed release, or the fixed reference for local runs."""
-    return os.environ.get(EXPECTED_VERSION_ENV, DEFAULT_EXPECTED_VERSION).strip()
+    """Require a probed release instead of trusting a moving tag's old version."""
+    return os.environ.get(EXPECTED_VERSION_ENV, "").strip()
 
 
 def assert_authorised_target(url: str) -> None:

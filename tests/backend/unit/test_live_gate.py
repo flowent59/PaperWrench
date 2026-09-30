@@ -31,8 +31,8 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class TestVersionSelection:
-    def test_defaults_to_fixed_reference(self) -> None:
-        assert gate.expected_paperless_version() == "3.2.1"
+    def test_requires_a_probed_version(self) -> None:
+        assert gate.expected_paperless_version() == ""
 
     def test_honours_ci_probed_version(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(gate.EXPECTED_VERSION_ENV, "3.4.0")

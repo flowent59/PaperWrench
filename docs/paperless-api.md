@@ -730,9 +730,9 @@ accident. A further guard refuses to run if the target instance holds more than
 Reproduce the environment with:
 
 ```sh
-make dev-paperless-up      # default: Paperless 3.2.1 + PostgreSQL + Redis on :8010
+make dev-paperless-up      # default: Paperless latest + PostgreSQL + Redis on :8010
 make dev-paperless-golden  # 17 deliberately imperfect documents, 7 custom fields
-make test-live             # opt-in live suite
+PAPERWRENCH_EXPECTED_PAPERLESS_VERSION=<reported-X-Version> make test-live
 ```
 
 The three backend suites are reported separately and must never be conflated:
@@ -740,7 +740,7 @@ The three backend suites are reported separately and must never be conflated:
 ```sh
 make test-unit    # no I/O whatsoever
 make test-mocked  # respx; proves our client's behaviour, NOT Paperless's
-make test-live    # the only suite that can promote a claim to VERIFIED_LIVE
+PAPERWRENCH_EXPECTED_PAPERLESS_VERSION=<reported-X-Version> make test-live
 ```
 
 A mocked test asserts what we believe Paperless does. Only a live test can

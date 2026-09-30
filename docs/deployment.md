@@ -2,9 +2,9 @@
 
 This guide covers fresh multi-user installations and upgrades from PaperWrench
 v0.1.x. Use the Compose files from the release you are installing: their default
-`PAPERWRENCH_IMAGE` is updated with each published version. Paperless-ngx 3.2.1
-is the fixed compatibility baseline and CI also exercises the current Paperless
-`latest` image. PaperWrench uses only the Paperless REST API; it never reads the
+`PAPERWRENCH_IMAGE` is updated with each published version. CI exercises the
+current stable Paperless-ngx `latest` image and records its digest and reported
+version for each run. PaperWrench uses only the Paperless REST API; it never reads the
 Paperless database or document files.
 
 PaperWrench has no local user database and no bootstrap administrator. Every

@@ -32,7 +32,7 @@ then uses the Release Please token to find a draft or published Release through
 the paginated GitHub API. The Release must belong to this repository, have the
 exact tag and notes, and target the same commit as the remote Git tag. It
 publishes one `linux/amd64` GHCR image under the exact version and
-`latest`. It pulls the remote image into a disposable Paperless 3.2.1 stack and
+`latest`. It pulls the remote image into a disposable Paperless-ngx `latest` stack and
 checks migration, network connection, direct HTTP, SPA routes, persistence and
 token redaction. After these checks pass, the workflow publishes the draft
 GitHub Release with Release Please's generated notes. If a version tag already

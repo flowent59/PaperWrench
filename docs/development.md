@@ -30,17 +30,22 @@ dev extras, and installs frontend dependencies from the lockfile.
 ## The development sandbox
 
 ```bash
-make dev-paperless-up      # Paperless-ngx 3.1.2 on http://localhost:8010
+make dev-paperless-up      # pulls Paperless-ngx latest on http://localhost:8010
 make dev-paperless-seed    # reference dataset
 ```
 
 Login is `admin` / `admin`. These credentials are intentionally trivial: the
 stack binds to `127.0.0.1` and must never be exposed.
 
-The version is pinned to **3.1.2** deliberately. That is the version whose
-serialisers, filter lookups and API version negotiation were read and verified
-during the architecture review (see [paperless-api.md](paperless-api.md)).
-Bumping the tag means re-verifying those findings, not just changing a string.
+The sandbox follows Paperless-ngx's latest stable image. Record the resolved
+image digest and `X-Version` when investigating a compatibility change;
+the historical API observations remain version-scoped in
+[paperless-api.md](paperless-api.md). The live suite requires
+`PAPERWRENCH_EXPECTED_PAPERLESS_VERSION` to match the sandbox's reported
+`X-Version` before it makes any changes.
+CI obtains this header automatically. For a local run, read it from an
+authenticated `/api/documents/` response, then run
+`PAPERWRENCH_EXPECTED_PAPERLESS_VERSION=<reported-X-Version> make test-live`.
 
 ### What the seed creates, and why
 

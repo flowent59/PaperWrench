@@ -34,6 +34,7 @@ if [ "${CHECK_LATEST:-false}" = true ]; then
 fi
 
 # The Paperless Compose file is explicitly a disposable development stack.
+docker compose -p "$stack" -f docker-compose.dev.yml pull paperless
 docker compose -p "$stack" -f docker-compose.dev.yml up -d db broker paperless
 for attempt in $(seq 1 90); do
   if curl -fsS -o /dev/null http://127.0.0.1:8010/accounts/login/; then break; fi
@@ -104,7 +105,7 @@ database = sqlite3.connect("/data/paperwrench.db")
 assert head and database.execute("select version_num from alembic_version").fetchone() == (head,)
 PY
 curl -fsS -b "$workdir/cookies" "$base/api/v1/system/paperless" -o "$workdir/paperless.json"
-jq -e '.connected == true and .compatible == true and .paperless_version == "3.2.1"' "$workdir/paperless.json" >/dev/null
+paperless_version=$(jq -er 'select(.connected == true and .compatible == true) | .paperless_version | select(type == "string" and length > 0)' "$workdir/paperless.json")
 for route in / /documents/42 /jobs/42 /history /schemas /quality; do
   curl -fsS "$base$route" -o "$workdir/page.html"
   grep -Fq '<div id="root">' "$workdir/page.html"
@@ -143,4 +144,4 @@ if grep -Fq -- "$token" "$workdir/responses" "$workdir/app-logs"; then
   echo 'Paperless token appeared in an HTTP response or application log' >&2
   exit 1
 fi
-echo "Verified remote ${repository}@${RELEASE_DIGEST}: Paperless 3.2.1, migration, direct HTTP, SPA, persistence and token redaction"
+echo "Verified remote ${repository}@${RELEASE_DIGEST}: Paperless ${paperless_version} (latest), migration, direct HTTP, SPA, persistence and token redaction"
