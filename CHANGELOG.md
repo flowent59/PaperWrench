@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/flowent59/PaperWrench/compare/v0.3.0...v0.4.0) (2026-09-30)
+
+
+### Features
+
+* **analytics:** add filtered custom-field reports ([#71](https://github.com/flowent59/PaperWrench/issues/71)) ([eac7ec6](https://github.com/flowent59/PaperWrench/commit/eac7ec6ac49c033328c74589438369cfd5ead93c))
+* **dashboard:** add permission-aware document analytics ([#70](https://github.com/flowent59/PaperWrench/issues/70)) ([80633b6](https://github.com/flowent59/PaperWrench/commit/80633b610928f123a65f5bdcc7d0987208fa2a25))
+
 ## [0.3.0](https://github.com/flowent59/PaperWrench/compare/v0.2.0...v0.3.0) (2026-09-30)
 
 
