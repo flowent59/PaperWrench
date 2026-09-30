@@ -229,6 +229,21 @@ export interface DatasetQuery {
   ordering?: string | null
 }
 
+export interface SavedExplorerViewDefinition {
+  query: DatasetQuery
+  page_size: DocumentPageSize
+  column_visibility: Record<string, boolean>
+}
+
+export interface SavedExplorerView {
+  id: number
+  name: string
+  definition: SavedExplorerViewDefinition
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
 export type SchemaRule =
   | { kind: 'required'; field: FieldRef; field_type: FieldType }
   | { kind: 'equals'; field: FieldRef; field_type: FieldType; value: unknown }

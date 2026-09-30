@@ -44,6 +44,8 @@ import type {
   CollectionView,
   CollectionMemberPage,
   AuthSession,
+  SavedExplorerView,
+  SavedExplorerViewDefinition,
 } from './types'
 
 export const API_PREFIX = '/api/v1'
@@ -246,6 +248,15 @@ export const collectionsApi = {
     apiFetch<CollectionView>(`/collections/${id}/documents`, {
       method: 'DELETE', body: JSON.stringify({ document_ids }),
     }),
+}
+
+export const savedViewsApi = {
+  list: () => apiFetch<SavedExplorerView[]>('/views'),
+  create: (data: { name: string; definition: SavedExplorerViewDefinition; is_default?: boolean }) =>
+    apiFetch<SavedExplorerView>('/views', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: number, data: { name: string; definition: SavedExplorerViewDefinition; is_default?: boolean }) =>
+    apiFetch<SavedExplorerView>(`/views/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/views/${id}`, { method: 'DELETE' }),
 }
 
 export const schemasApi = {
