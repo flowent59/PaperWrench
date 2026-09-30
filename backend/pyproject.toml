@@ -27,6 +27,7 @@ dependencies = [
   "alembic>=1.13",
   "structlog>=24.1",
   "python-multipart>=0.0.9",
+  "tzdata>=2025.2",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,1 @@
+"""Approved recurring rule execution."""

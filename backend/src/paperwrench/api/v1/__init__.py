@@ -21,6 +21,7 @@ from paperwrench.api.v1 import metadata
 from paperwrench.api.v1 import previews
 from paperwrench.api.v1 import quality
 from paperwrench.api.v1 import rules
+from paperwrench.api.v1 import schedules
 from paperwrench.api.v1 import schemas
 from paperwrench.api.v1 import system
 from paperwrench.api.v1 import transformations
@@ -43,6 +44,7 @@ protected.include_router(schemas.router)
 protected.include_router(quality.router)
 protected.include_router(views.router)
 protected.include_router(rules.router)
+protected.include_router(schedules.router)
 api_router.include_router(protected)
 
 __all__ = ["api_router"]

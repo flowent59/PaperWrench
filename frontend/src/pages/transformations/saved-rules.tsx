@@ -81,6 +81,7 @@ export function SavedRules({ build }: { build: (forCollection: boolean) => Trans
   return <section className="space-y-4 rounded-lg border p-4" aria-label={m.title}>
     <h2 className="text-lg font-semibold">{m.title}</h2>
     <p className="text-sm text-muted-foreground">{m.help}</p>
+    <Schedules />
     <div className="flex flex-wrap items-end gap-2">
       <label className="text-sm">{m.name}<input className={`${input} ml-2`} value={name}
         onChange={(event) => setName(event.target.value)} /></label>
@@ -137,3 +138,4 @@ export function SavedRules({ build }: { build: (forCollection: boolean) => Trans
     </div>}
   </section>
 }
+import { Schedules } from './schedules'

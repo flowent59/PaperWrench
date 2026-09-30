@@ -793,3 +793,33 @@ export interface OperationView {
   finished_at: string | null
 }
 export interface HistoryPage<T> { items: T[]; page: number; page_size: number; total: number; page_count: number }
+export interface ScheduleRecurrence {
+  timezone: string
+  frequency: 'daily' | 'weekly'
+  hour: number
+  minute: number
+  weekday: number
+}
+
+export interface RuleSchedule {
+  id: number
+  rule_id: number
+  rule_revision: number
+  approved_at: string
+  enabled: boolean
+  next_run_at: string
+  status: string
+  notification: string | null
+  recurrence: ScheduleRecurrence
+}
+
+export interface ScheduleRun {
+  id: number
+  scheduled_for: string
+  started_at: string
+  finished_at: string | null
+  rule_revision: number
+  status: string
+  error_code: string | null
+  job_id: number | null
+}

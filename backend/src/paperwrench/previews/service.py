@@ -458,6 +458,7 @@ class PreviewService:
         preview_id: str,
         request: ConfirmPreview,
         owner_id: int | None = None,
+        *, allow_unchanged: bool = False,
     ) -> PreviewSummary:
         """Consume inside the caller's transaction; never commit here."""
         preview = session.get(Preview, preview_id)
@@ -476,7 +477,7 @@ class PreviewService:
             summary.confirmed
             or summary.rollback_of_job_id is not None
             or summary.errors
-            or not summary.changed
+            or (not summary.changed and not allow_unchanged)
             or selection != summary.selection_fingerprint
             or spec_hash != summary.spec_fingerprint
             or request.target_fingerprint != summary.target_fingerprint
