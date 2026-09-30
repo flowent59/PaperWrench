@@ -458,7 +458,7 @@ describe('ExplorerPage', () => {
     const secondPageRow = secondPageTitle.closest('tr')
     if (secondPageRow === null) throw new Error('expected the second-page document row')
     await user.click(within(secondPageRow).getByLabelText('Select row', { selector: 'input' }))
-    expect(screen.getByText('2 selected')).toBeInTheDocument()
+    expect(await screen.findByText('2 selected')).toBeInTheDocument()
     await user.type(screen.getByLabelText('Name'), 'Vacations')
     await user.click(screen.getByRole('button', { name: 'Save selected IDs' }))
     await waitFor(() => expect(saved).toEqual([1, 4]))

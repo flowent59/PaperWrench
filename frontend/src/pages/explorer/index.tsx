@@ -183,12 +183,13 @@ export function ExplorerPage() {
 
   // Debounce the search box so every keystroke does not fire a request.
   React.useEffect(() => {
+    if (searchInput === search) return
     const handle = window.setTimeout(() => {
       setSearch(searchInput)
       setPage(1)
     }, 350)
     return () => window.clearTimeout(handle)
-  }, [searchInput])
+  }, [searchInput, search])
 
   const capabilitiesQuery = useFilterCapabilities()
   const localizedCapabilities = localizeFilterCapabilities(capabilitiesQuery.data)

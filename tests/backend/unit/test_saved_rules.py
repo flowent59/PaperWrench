@@ -165,8 +165,8 @@ def test_rule_rejects_unfiltered_scope_and_overlapping_job(client: TestClient) -
     blocked = client.post(f"/api/v1/rules/{rule['id']}/apply", json=request)
     assert blocked.status_code == 409, blocked.text
     with session_scope() as db:
-        blocker = db.get(Job, blocker_id)
-        assert blocker is not None
-        blocker.status = JobStatus.COMPLETED
+        current_blocker = db.get(Job, blocker_id)
+        assert current_blocker is not None
+        current_blocker.status = JobStatus.COMPLETED
     applied = client.post(f"/api/v1/rules/{rule['id']}/apply", json=request)
     assert applied.status_code == 201, applied.text

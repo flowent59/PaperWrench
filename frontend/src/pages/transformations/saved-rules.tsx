@@ -11,6 +11,10 @@ import { DryRun } from './dry-run'
 
 const input = 'h-9 rounded-md border border-input bg-background px-2 text-sm'
 
+interface RuleAction {
+  (): Promise<SavedRule>
+}
+
 export function SavedRules({ build }: { build: (forCollection: boolean) => Transformation }) {
   const m = messages.rules
   const cache = useQueryClient()
@@ -45,7 +49,7 @@ export function SavedRules({ build }: { build: (forCollection: boolean) => Trans
     return { target: { kind: 'filter', query }, operations: transformation.operations }
   }
 
-  async function run(action: () => Promise<SavedRule>) {
+  async function run(action: RuleAction) {
     setBusy(true)
     setError('')
     try {
