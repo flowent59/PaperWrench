@@ -46,6 +46,10 @@ import type {
   AuthSession,
   SavedExplorerView,
   SavedExplorerViewDefinition,
+  SavedRule,
+  SavedRuleDefinition,
+  SavedRuleRevision,
+  RuleCreatedPreview,
   DashboardRange,
   DashboardSnapshot,
   CustomFieldReport,
@@ -350,6 +354,26 @@ export const previewsApi = {
         result_fingerprint: preview.result_fingerprint, version: preview.version, acknowledge: true }),
     }),
   discard: (id: string) => apiFetch<void>(`/previews/${id}`, { method: 'DELETE' }),
+}
+
+export const rulesApi = {
+  list: () => apiFetch<SavedRule[]>('/rules'),
+  create: (data: { name: string; description?: string | null; definition: SavedRuleDefinition }) =>
+    apiFetch<SavedRule>('/rules', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: number, data: { name: string; description?: string | null;
+    definition: SavedRuleDefinition; expected_revision: number }) =>
+    apiFetch<SavedRule>(`/rules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/rules/${id}`, { method: 'DELETE' }),
+  revisions: (id: number) => apiFetch<SavedRuleRevision[]>(`/rules/${id}/revisions`),
+  preview: (id: number) => apiFetch<RuleCreatedPreview>(`/rules/${id}/preview`, { method: 'POST' }),
+  apply: (id: number, preview: CreatedPreview, transformation: Transformation,
+    acknowledgeExternalRace: boolean) => apiFetch<import('./types').JobView>(`/rules/${id}/apply`, {
+    method: 'POST', body: JSON.stringify({
+      preview_id: preview.id, preview_token: preview.preview_token, transformation,
+      target_fingerprint: preview.target_fingerprint, result_fingerprint: preview.result_fingerprint,
+      version: preview.version, acknowledge: true, acknowledge_external_race: acknowledgeExternalRace,
+    }),
+  }),
 }
 
 export const jobsApi = {

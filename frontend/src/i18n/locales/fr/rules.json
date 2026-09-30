@@ -1,0 +1,23 @@
+{
+  "title": "Règles enregistrées",
+  "help": "Enregistrez une transformation liée à un filtre ou une collection. Chaque exécution exige un nouvel aperçu et une confirmation explicite.",
+  "name": "Nom de la règle",
+  "description": "Description",
+  "target": "Cible de la règle",
+  "currentFilter": "Filtre ou recherche actuel",
+  "collection": "Collection",
+  "chooseCollection": "Choisir une collection",
+  "save": "Enregistrer la règle",
+  "replace": "Remplacer par la configuration actuelle",
+  "rename": "Enregistrer le nom et la description",
+  "run": "Vérifier et exécuter",
+  "close": "Fermer la règle",
+  "delete": "Supprimer la règle",
+  "deleteConfirm": "Supprimer cette règle ? L'historique des jobs reste disponible.",
+  "history": "Historique des modifications",
+  "revision": "Révision",
+  "empty": "Aucune règle enregistrée.",
+  "filterRequired": "Choisissez un filtre ou saisissez une recherche avant d'enregistrer une règle.",
+  "datasetRequired": "La configuration actuelle doit utiliser un jeu de documents filtré.",
+  "error": "La requête de règle a échoué."
+}

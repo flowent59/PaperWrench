@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
-import { ApiError, jobsApi, previewsApi } from '@/api/client'
-import type { CreatedPreview, Transformation } from '@/api/types'
+import { ApiError, jobsApi, previewsApi, rulesApi } from '@/api/client'
+import type { CreatedPreview, RuleCreatedPreview, Transformation } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
 import { formatDateTime, formatNumber } from '@/i18n/format'
@@ -11,7 +11,10 @@ import { errorMessage, issueMessage } from '@/i18n/errors'
 import { valueText } from './value'
 
 /** The parent remounts this panel on any spec edit, invalidating the old confirmation. */
-export function DryRun({ build, onPreviewCreated }: { build: () => Transformation; onPreviewCreated?: () => void }) {
+type DryRunProps = { build: () => Transformation; ruleId?: never; onPreviewCreated?: () => void }
+  | { ruleId: number; build?: never; onPreviewCreated?: () => void }
+
+export function DryRun({ build, onPreviewCreated, ruleId }: DryRunProps) {
   const m = messages.preview
   const [preview, setPreview] = useState<CreatedPreview | null>(null)
   const [spec, setSpec] = useState<Transformation | null>(null)
@@ -67,17 +70,23 @@ export function DryRun({ build, onPreviewCreated }: { build: () => Transformatio
     setUncertainApply(false)
     setExpired(false)
     try {
-      const transformation = build()
+      const transformation = ruleId === undefined ? build?.() : undefined
       if (retainedId.current) await previewsApi.discard(retainedId.current)
       retainedId.current = null
       setPreview(null)
-      const result = await previewsApi.create(transformation)
+      let result: CreatedPreview | RuleCreatedPreview
+      if (ruleId === undefined) {
+        if (!transformation) throw new Error(m.failure)
+        result = await previewsApi.create(transformation)
+      } else {
+        result = await rulesApi.preview(ruleId)
+      }
       if (!alive.current) {
         await previewsApi.discard(result.id)
         return
       }
       retainedId.current = result.id
-      setSpec(transformation)
+      setSpec(ruleId === undefined ? transformation ?? null : (result as RuleCreatedPreview).transformation)
       setPage(1)
       setStatus('')
       setPreview(result)
@@ -92,7 +101,9 @@ export function DryRun({ build, onPreviewCreated }: { build: () => Transformatio
     setBusy(true)
     setError('')
     try {
-      const result = await jobsApi.create(preview, spec, raceAcknowledged)
+      const result = ruleId === undefined
+        ? await jobsApi.create(preview, spec, raceAcknowledged)
+        : await rulesApi.apply(ruleId, preview, spec, raceAcknowledged)
       if (alive.current) {
         setPreview({ ...preview, confirmed: true, preview_token: '' })
         setJobId(result.id)

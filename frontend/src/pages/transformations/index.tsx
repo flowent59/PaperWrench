@@ -20,6 +20,7 @@ import {
   type OperationDraft, type OperationKind,
 } from './model'
 import { DryRun } from './dry-run'
+import { SavedRules } from './saved-rules'
 import { valueText } from './value'
 
 const INPUT = 'h-9 rounded-md border border-input bg-background px-2 text-sm'
@@ -166,6 +167,9 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
       <h1 className="text-2xl font-semibold">{m.title}</h1>
       <p className="text-sm text-muted-foreground">{m.subtitle}</p>
     </header>
+    <SavedRules build={(forCollection) => forCollection
+      ? serializeTransformation('ids', '1', null, emptyFilterSet(), drafts, fields, '')
+      : buildTransformation()} />
     <nav aria-label={m.steps} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {STEPS.map((name, index) => <button type="button" key={name}
         aria-current={step === index ? 'step' : undefined}

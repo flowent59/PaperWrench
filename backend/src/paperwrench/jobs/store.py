@@ -21,10 +21,14 @@ from paperwrench.db.models import JobStatus
 from paperwrench.db.models import JobTarget
 from paperwrench.db.models import JobType
 from paperwrench.db.models import OperationStatus
+from paperwrench.db.models import Preview
 from paperwrench.db.models import PreviewDocument
+from paperwrench.db.models import SavedRule
 from paperwrench.db.models import TargetStatus
 from paperwrench.db.session import session_scope
+from paperwrench.errors import ErrorCode
 from paperwrench.errors import NotFoundError
+from paperwrench.errors import PaperWrenchError
 from paperwrench.jobs.model import CreateJob
 from paperwrench.jobs.model import HistoryPage
 from paperwrench.jobs.model import JobView
@@ -66,7 +70,9 @@ def rollback_candidate(operation: JobOperation) -> bool:
 _field_value: TypeAdapter[FieldValue] = TypeAdapter(FieldValue)
 
 
-def create_job(request: CreateJob, owner_id: int | None = None) -> int:
+def create_job(
+    request: CreateJob, owner_id: int | None = None, rule_id: int | None = None
+) -> int:
     spec = request.transformation
     from paperwrench.filters.model import CustomFieldRef
 
@@ -77,11 +83,46 @@ def create_job(request: CreateJob, owner_id: int | None = None) -> int:
         raise limit("Custom writes require acknowledgement of the external-writer race.")
     with session_scope() as session:
         session.execute(text("BEGIN IMMEDIATE"))
+        preview = session.get(Preview, request.preview_id)
+        if preview is None or preview.rule_id != rule_id:
+            raise stale("Preview source does not match this execution.")
+        rule = None
+        if rule_id is not None:
+            rule = session.get(SavedRule, rule_id)
+            if (
+                rule is None or rule.owner_id != owner_id
+                or rule.revision != preview.rule_revision
+                or preview.rule_spec_json != spec.model_dump_json()
+            ):
+                raise stale("Rule changed since preview; review a new preview.")
+        # BEGIN IMMEDIATE serializes all local apply requests. A target still
+        # present in any unfinished job cannot be claimed by another job.
+        overlap_query = (
+            select(JobTarget.document_id)
+            .join(Job, Job.id == JobTarget.job_id)
+            .join(PreviewDocument, PreviewDocument.document_id == JobTarget.document_id)
+            .where(
+                PreviewDocument.preview_id == request.preview_id,
+                Job.status.in_((JobStatus.PENDING, JobStatus.RUNNING, JobStatus.INTERRUPTED)),
+            )
+            .limit(1)
+        )
+        if rule_id is None:
+            overlap_query = overlap_query.where(Job.rule_id.is_not(None))
+        overlap = session.scalar(overlap_query)
+        if overlap is not None:
+            raise PaperWrenchError(
+                "Documents overlap an unfinished job; finish it before applying.",
+                status_code=409, code=ErrorCode.CONFLICT,
+            )
         summary = PreviewService().claim(session, request.preview_id, request, owner_id)
         job = Job(
             owner_id=owner_id,
+            rule_id=rule_id,
+            rule_revision=rule.revision if rule else None,
+            rule_name=rule.name if rule else None,
             type=JobType.TRANSFORM,
-            title="Document transformation",
+            title=rule.name if rule else "Document transformation",
             preview_id=request.preview_id,
             preview_summary_json=summary.model_dump_json(),
             source_kind=spec.targets.source,
@@ -203,6 +244,9 @@ def _view(session: Session, job: Job) -> JobView:
     counts = counts_for(session, job.id)
     return JobView(
         id=job.id,
+        rule_id=job.rule_id,
+        rule_revision=job.rule_revision,
+        rule_name=job.rule_name,
         type=job.type,
         rollback_of_job_id=job.rollback_of_job_id,
         rollback_job_id=session.scalar(select(Job.id).where(Job.rollback_of_job_id == job.id)),

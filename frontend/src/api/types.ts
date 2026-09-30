@@ -659,6 +659,25 @@ export interface Transformation {
   operations: TransformationOperation[]
 }
 
+export interface SavedRuleDefinition {
+  target: { kind: 'filter'; query: Extract<TransformationTarget, { source: 'dataset' }>['query'] }
+    | { kind: 'collection'; collection_id: number }
+  operations: TransformationOperation[]
+}
+
+export interface SavedRule {
+  id: number
+  name: string
+  description: string | null
+  definition: SavedRuleDefinition
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export type SavedRuleRevision = Omit<SavedRule, 'id' | 'updated_at'>
+export interface RuleCreatedPreview extends CreatedPreview { transformation: Transformation }
+
 export interface TransformationValue {
   kind: CustomFieldValueKind
   raw: unknown
@@ -724,6 +743,9 @@ export type JobStatus = 'pending' | 'running' | 'completed' | 'partial' | 'faile
 export type TargetStatus = 'pending' | 'reading' | 'writing' | 'succeeded' | 'unchanged' | 'conflict' | 'permission' | 'missing' | 'failed' | 'ambiguous'
 export interface JobView {
   id: number
+  rule_id?: number | null
+  rule_revision?: number | null
+  rule_name?: string | null
   type: 'transform' | 'rollback'
   rollback_of_job_id: number | null
   rollback_job_id: number | null

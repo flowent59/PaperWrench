@@ -194,6 +194,9 @@ class Job(Base):
         String(32), default=JobStatus.PENDING, nullable=False
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    rule_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    rule_revision: Mapped[int | None] = mapped_column(Integer)
+    rule_name: Mapped[str | None] = mapped_column(String(255))
 
     #: How the dataset was obtained. Kept for History even though execution
     #: uses the snapshot below.
@@ -325,6 +328,7 @@ class JobTarget(Base):
     __table_args__ = (
         UniqueConstraint("job_id", "position", name="target_job_position"),
         Index("ix_targets_claim", "job_id", "status", "position"),
+        Index("ix_targets_document_id", "document_id"),
     )
     job_id: Mapped[int] = mapped_column(
         ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True
@@ -445,6 +449,38 @@ class SavedExplorerView(Base):
     )
 
 
+class SavedRule(Base):
+    """Private reusable transformation definition; documents remain in Paperless."""
+
+    __tablename__ = "saved_rules"
+    __table_args__ = (UniqueConstraint("owner_id", "name", name="rule_owner_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    definition_json: Mapped[str] = mapped_column(Text, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, nullable=False)
+
+
+class SavedRuleRevision(Base):
+    """Immutable rule edit history, including the initial definition."""
+
+    __tablename__ = "saved_rule_revisions"
+    __table_args__ = (UniqueConstraint("rule_id", "revision", name="rule_revision_identity"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    owner_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    definition_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, nullable=False)
+
+
 __all__ = [
     "AppSettings",
     "Base",
@@ -460,6 +496,8 @@ __all__ = [
     "OperationStatus",
     "RuntimeLock",
     "SavedExplorerView",
+    "SavedRule",
+    "SavedRuleRevision",
     "UserPreference",
 ]
 
@@ -474,6 +512,9 @@ class Preview(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     #: Null only for legacy/abandoned staging; authenticated APIs never expose it.
     owner_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    rule_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    rule_revision: Mapped[int | None] = mapped_column(Integer)
+    rule_spec_json: Mapped[str | None] = mapped_column(Text)
     expires_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, index=True)
     ready: Mapped[bool] = mapped_column(default=False, nullable=False)
     confirmed: Mapped[bool] = mapped_column(default=False, nullable=False)
