@@ -3,7 +3,7 @@ import * as React from 'react'
 import { Link } from 'react-router'
 
 import { useDashboard } from '@/api/queries'
-import type { DashboardBreakdown, DashboardPeriod, DashboardRange } from '@/api/types'
+import type { DashboardBreakdown, DashboardBreakdownItem, DashboardPeriod, DashboardRange } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { errorMessage } from '@/i18n/errors'
@@ -45,6 +45,12 @@ function PeriodChart({ periods }: { periods: DashboardPeriod[] }) {
   )
 }
 
+function breakdownLabel(item: DashboardBreakdownItem): string {
+  return item.label ?? (item.id === null
+    ? messages.dashboard.unassigned
+    : `${messages.dashboard.unknown} (#${item.id})`)
+}
+
 function BreakdownCard({ breakdown }: { breakdown: DashboardBreakdown }) {
   const title = breakdown.dimension === 'correspondent'
     ? messages.dashboard.correspondent
@@ -62,10 +68,10 @@ function BreakdownCard({ breakdown }: { breakdown: DashboardBreakdown }) {
             key={`${breakdown.dimension}-${item.id ?? 'none'}`}
             to={exactQueryHref(item.query)}
             className="focus-ring block rounded-sm"
-            aria-label={`${item.label ?? messages.dashboard.unassigned}: ${formatNumber(item.count)}. ${messages.dashboard.viewInExplorer}`}
+            aria-label={`${breakdownLabel(item)}: ${formatNumber(item.count)}. ${messages.dashboard.viewInExplorer}`}
           >
             <div className="mb-1 flex justify-between gap-3 text-sm">
-              <span className="truncate">{item.label ?? messages.dashboard.unassigned}</span>
+              <span className="truncate">{breakdownLabel(item)}</span>
               <span className="tabular text-muted-foreground">{formatNumber(item.count)}</span>
             </div>
             <div className="h-1.5 rounded bg-muted">

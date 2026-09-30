@@ -15,6 +15,7 @@ import { NotFoundPage } from '@/pages/not-found'
 import { SchemasPage } from '@/pages/schemas'
 import { QualityPageView } from '@/pages/quality'
 import { CollectionsPage, CollectionPage } from '@/pages/collections'
+import { AnalyticsPage } from '@/pages/analytics'
 
 import './index.css'
 
@@ -52,6 +53,7 @@ createRoot(container).render(
               <Route path="quality" element={<QualityPageView />} />
               <Route path="collections" element={<CollectionsPage />} />
               <Route path="collections/:collectionId" element={<CollectionPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             </Routes>
