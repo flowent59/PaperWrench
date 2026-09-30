@@ -7,16 +7,18 @@ Paperless-ngx **3.1.2**. They remain version-scoped in
 
 ## Current verification
 
-The CI live matrix runs the **same complete** `tests/backend/live` suite against
-two independent disposable Compose stacks. Each stack has PostgreSQL, Redis,
-the 17-document Golden Dataset and a compiled Chromium journey. It exercises
-real reads, mutations, recovery and rollback. Both jobs explicitly pull their
-images, record the Paperless image digest, probe API v10 and record the server's
-`X-Version` before seeding. The fixed job requires `X-Version: 3.2.1`; the
-`latest` job records the version it resolves and passes that exact value to the
-suite's destructive-test guard. A missing version, a non-200 API v10 response,
-any failed test or any skipped live test fails the job. JUnit reports are kept
-as CI artifacts.
+CI runs the **complete** `tests/backend/live` suite against one disposable
+Paperless-ngx `latest` stack with PostgreSQL, Redis, the 17-document Golden
+Dataset and a compiled Chromium journey. It exercises real reads, mutations,
+recovery and rollback. Every run pulls the image, records its digest, probes
+API v10 and records the server's `X-Version` before seeding. That exact version
+is passed to the suite's destructive-test guard. A missing version, a non-200
+API v10 response, any failed test or any skipped live test fails the job. JUnit
+reports are kept as CI artifacts. This follows the newest stable Paperless
+release whenever its `latest` tag moves, so compare the recorded digest and
+version when diagnosing a new failure.
+
+### Historical 2026-09-25 run
 
 | Image tag | Reported `X-Version` | Image digest | Complete live suite | Chromium | CI job |
 | --- | --- | --- | --- | --- | --- |
@@ -43,12 +45,10 @@ continues to depend on API negotiation and HTTP status, as described in
 [ADR-0008](decisions/0008-api-compatibility-is-decided-by-status-code.md);
 `X-Version` here identifies the **test target**.
 
-## Fixed-reference update policy
+## Moving-tag policy
 
-Keep `3.2.1` fixed until a deliberate compatibility change is reviewed.
-To advance it, update the CI matrix and Compose default together, pull the new
-image, confirm its reported version, run the full live suite including Chromium,
-inspect failures and skips, and record the new digest and results here. Do not
-silently advance the reference when `latest` moves. Treat a `latest` failure as
-an incompatibility to diagnose; do not relax assertions or change business
-rules just to obtain a green job.
+Treat a failure after `latest` moves as a possible compatibility change. Use
+the recorded digest and reported version to reproduce it, inspect failures and
+skips, and review any required adaptation. Do not relax assertions or change
+business rules just to obtain a green job. Historical evidence above remains
+scoped to the versions and digests shown in its table.

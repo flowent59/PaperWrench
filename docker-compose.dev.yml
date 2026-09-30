@@ -6,8 +6,8 @@
 #   docker compose -f docker-compose.dev.yml up -d
 #   docker compose -f docker-compose.dev.yml run --rm seed
 #
-# The default is the fixed compatibility reference. CI overrides PAPERLESS_IMAGE
-# per matrix entry; see docs/paperless-api.md before moving the default.
+# The default follows the latest stable Paperless release. CI pulls it afresh
+# and records the resolved digest and reported version for every live run.
 #
 # Credentials here are intentionally weak and public: this stack must never be
 # exposed outside a development machine.
@@ -30,7 +30,7 @@ services:
       - dev_pgdata:/var/lib/postgresql/data
 
   paperless:
-    image: ${PAPERLESS_IMAGE:-ghcr.io/paperless-ngx/paperless-ngx:3.2.1}
+    image: ${PAPERLESS_IMAGE:-ghcr.io/paperless-ngx/paperless-ngx:latest}
     restart: unless-stopped
     depends_on:
       - db

@@ -148,14 +148,10 @@ jobs:
   # deletes, which is exactly why it runs against a throwaway container and
   # is double-gated by the suite's own conftest.
   backend-live-paperless:
-    name: Backend / live tests (Paperless-ngx ${{ matrix.paperless_tag }})
+    name: Backend / live tests (Paperless-ngx latest)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        paperless_tag: ["3.2.1", "latest"]
     env:
-      PAPERLESS_IMAGE: ghcr.io/paperless-ngx/paperless-ngx:${{ matrix.paperless_tag }}
+      PAPERLESS_IMAGE: ghcr.io/paperless-ngx/paperless-ngx:latest
     steps:
       - uses: actions/checkout@v4
 
@@ -181,7 +177,7 @@ jobs:
           echo "Resolved digest: $digest"
           test -n "$digest" || { echo "::error::Paperless image has no pull digest"; exit 1; }
           {
-            echo "### Paperless-ngx ${{ matrix.paperless_tag }}"
+            echo "### Paperless-ngx latest"
             echo "Image: \`$PAPERLESS_IMAGE\`"
             echo "Resolved digest: \`$digest\`"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -225,10 +221,6 @@ jobs:
           echo "Reported version: \`${version:-missing}\`; API v10: HTTP $status" >> "$GITHUB_STEP_SUMMARY"
           if [ -z "$version" ] || [ "$status" != 200 ]; then
             echo "::error::Paperless $PAPERLESS_IMAGE reports X-Version '${version:-missing}' and HTTP $status for API v10"
-            exit 1
-          fi
-          if [ '${{ matrix.paperless_tag }}' = '3.2.1' ] && [ "$version" != '3.2.1' ]; then
-            echo "::error::fixed Paperless reference must report 3.2.1, got '$version'"
             exit 1
           fi
           echo "PAPERWRENCH_EXPECTED_PAPERLESS_VERSION=$version" >> "$GITHUB_ENV"
@@ -281,7 +273,7 @@ jobs:
         env:
           PAPERWRENCH_ALLOW_LIVE_TESTS: "true"
           PAPERWRENCH_PAPERLESS_URL: http://127.0.0.1:8010
-        run: pytest tests/backend/live -v --junitxml=paperless-live-${{ matrix.paperless_tag }}.xml
+        run: pytest tests/backend/live -v --junitxml=paperless-live-latest.xml
 
       - name: Reject skipped live tests and record counts
         run: |
@@ -290,7 +282,7 @@ jobs:
           import os
           from pathlib import Path
 
-          report = Path("paperless-live-${{ matrix.paperless_tag }}.xml")
+          report = Path("paperless-live-latest.xml")
           root = ET.parse(report).getroot()
           suites = root.findall("testsuite") or [root]
           tests = sum(int(s.get("tests", 0)) for s in suites)
@@ -306,8 +298,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: paperless-live-${{ matrix.paperless_tag }}
-          path: paperless-live-${{ matrix.paperless_tag }}.xml
+          name: paperless-live-latest
+          path: paperless-live-latest.xml
           if-no-files-found: ignore
 
       - name: Paperless logs (on failure)

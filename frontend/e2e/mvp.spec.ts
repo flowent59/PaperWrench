@@ -12,7 +12,9 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
     extraHTTPHeaders: { Authorization: `Token ${token}`, Accept: 'application/json; version=10' } })
   const probe = await upstream.get('/api/documents/?page_size=1')
   expect(probe.status()).toBe(200)
-  expect(probe.headers()['x-version']).toBe(process.env.PAPERWRENCH_EXPECTED_PAPERLESS_VERSION ?? '3.2.1')
+  const expectedPaperlessVersion = process.env.PAPERWRENCH_EXPECTED_PAPERLESS_VERSION
+  expect(expectedPaperlessVersion).toBeTruthy()
+  expect(probe.headers()['x-version']).toBe(expectedPaperlessVersion)
   expect((await probe.json()).count).toBeLessThanOrEqual(500)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Sign in to PaperWrench' })).toBeVisible()
