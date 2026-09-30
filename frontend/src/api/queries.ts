@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery, type UseQueryResult } from '@tanstack/react-query'
 
-import { documentsApi, filtersApi, metadataApi, systemApi } from './client'
+import { analyticsApi, documentsApi, filtersApi, metadataApi, systemApi } from './client'
 import type {
   CorrespondentDefinition,
   CustomFieldDefinition,
@@ -17,6 +17,8 @@ import type {
   SearchSpec,
   StoragePathDefinition,
   TagDefinition,
+  DashboardRange,
+  DashboardSnapshot,
 } from './types'
 
 export const queryKeys = {
@@ -24,6 +26,7 @@ export const queryKeys = {
   health: ['system', 'health'] as const,
   info: ['system', 'info'] as const,
   paperless: ['system', 'paperless'] as const,
+  dashboard: (range: DashboardRange) => ['analytics', 'dashboard', range] as const,
   documents: (request: DatasetPageRequest) => ['documents', request] as const,
   tags: ['metadata', 'tags'] as const,
   correspondents: ['metadata', 'correspondents'] as const,
@@ -34,6 +37,14 @@ export const queryKeys = {
   filterValidation: (filters: FilterSet) => ['filters', 'validate', filters] as const,
   filterCount: (filters: FilterSet, search: SearchSpec | null) =>
     ['filters', 'count', filters, search] as const,
+}
+
+export function useDashboard(range: DashboardRange): UseQueryResult<DashboardSnapshot> {
+  return useQuery({
+    queryKey: queryKeys.dashboard(range),
+    queryFn: () => analyticsApi.dashboard(range),
+    staleTime: 60_000,
+  })
 }
 
 export function useHealth(): UseQueryResult<HealthResponse> {

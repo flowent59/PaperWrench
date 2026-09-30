@@ -18,6 +18,7 @@ from datetime import timedelta
 
 from pydantic import SecretStr
 
+from paperwrench.analytics import DashboardCache
 from paperwrench.config import Settings
 from paperwrench.errors import ErrorCode
 from paperwrench.errors import PaperlessUnauthorizedError
@@ -42,6 +43,7 @@ class AuthSession:
     validated_at: datetime
     client: PaperlessClient
     registry: MetadataRegistry
+    dashboard_cache: DashboardCache
 
 
 class SessionStore:
@@ -97,6 +99,7 @@ class SessionStore:
             validated_at=now,
             client=client,
             registry=MetadataRegistry(client),
+            dashboard_cache=DashboardCache(),
         )
         async with self._lock:
             self._sessions[record.session_id] = record

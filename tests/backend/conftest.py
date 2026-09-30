@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
+from paperwrench.analytics import DashboardCache
 from paperwrench.api.deps import get_auth_session
 from paperwrench.auth.service import AuthSession
 from paperwrench.config import Settings
@@ -76,6 +77,7 @@ def auth_record(settings: Settings) -> AuthSession:
         validated_at=datetime.now(UTC),
         client=paperless,
         registry=MetadataRegistry(paperless),
+        dashboard_cache=DashboardCache(),
     )
 
 

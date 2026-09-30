@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import Depends
 from fastapi import Request
 
+from paperwrench.analytics import DashboardCache
 from paperwrench.auth.service import SESSION_COOKIE
 from paperwrench.auth.service import AuthSession
 from paperwrench.paperless import MetadataRegistry
@@ -48,3 +49,10 @@ async def get_metadata_registry(
 ) -> MetadataRegistry:
     """Metadata cache scoped to the authenticated Paperless account."""
     return record.registry
+
+
+async def get_dashboard_cache(
+    record: AuthSession = Depends(get_auth_session),
+) -> DashboardCache:
+    """Dashboard snapshot cache isolated to the authenticated session."""
+    return record.dashboard_cache

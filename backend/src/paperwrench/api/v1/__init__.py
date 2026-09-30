@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 
 from paperwrench.api.deps import require_session
+from paperwrench.api.v1 import analytics
 from paperwrench.api.v1 import auth
 from paperwrench.api.v1 import collections
 from paperwrench.api.v1 import documents
@@ -28,6 +29,7 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth.router)
 api_router.include_router(system.router)
 protected = APIRouter(dependencies=[Depends(require_session)])
+protected.include_router(analytics.router)
 protected.include_router(metadata.router)
 protected.include_router(documents.router)
 protected.include_router(collections.router)

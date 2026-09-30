@@ -46,6 +46,8 @@ import type {
   AuthSession,
   SavedExplorerView,
   SavedExplorerViewDefinition,
+  DashboardRange,
+  DashboardSnapshot,
 } from './types'
 
 export const API_PREFIX = '/api/v1'
@@ -172,6 +174,11 @@ export const systemApi = {
   // failure is described in the payload rather than thrown, so the UI can
   // render *why* it is not connected instead of a bare network error.
   paperless: () => apiFetch<PaperlessStatusResponse>('/system/paperless'),
+}
+
+export const analyticsApi = {
+  dashboard: (range: DashboardRange) =>
+    apiFetch<DashboardSnapshot>(`/analytics/dashboard?range=${range}`),
 }
 
 export const documentsApi = {
