@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 
 const labels = {
   en: { continue: 'Continue', back: 'Back', ids: 'Document IDs (comma separated)',
@@ -97,6 +98,8 @@ for (const locale of ['en', 'fr'] as const) {
       expect(api.jobCreates()).toBe(0)
       await page.getByRole('button', { name: l.preview }).click()
       await expect(page.getByText('Final title')).toBeVisible()
+      const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()
+      expect(accessibility.violations.map(item => item.id)).toEqual([])
       await expect(page.getByRole('button', { name: l.apply })).toBeDisabled()
       await page.getByRole('checkbox', { name: new RegExp(l.acknowledge) }).check()
       await page.getByRole('button', { name: l.apply }).click()

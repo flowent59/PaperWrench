@@ -114,7 +114,8 @@ export function DryRun({ build, onPreviewCreated }: { build: () => Transformatio
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {pageQuery.isError && !stale && <p role="alert">{errorMessage(pageQuery.error)}</p>}
     {preview && <>
-      <dl role="status" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <p role="status" className="sr-only">{m.matched}: {formatNumber(preview.matched)}. {m.errors}: {formatNumber(preview.errors)}.</p>
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {(['matched', 'evaluated', 'changed', 'unchanged', 'errors'] as const).map((name) =>
           <div key={name} className={`rounded-md border p-3 ${name === 'errors' && preview.errors > 0 ? statusClass('error') : ''}`}>
             <dt className="text-sm text-muted-foreground">{m[name]}</dt>
