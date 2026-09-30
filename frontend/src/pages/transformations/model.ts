@@ -2,6 +2,7 @@ import type {
   CustomFieldDefinition, FieldRef, FilterSet, SearchSpec, Transformation,
   TransformationOperation,
 } from '@/api/types'
+import { messages } from '@/i18n/messages'
 
 export type OperationKind = 'set' | 'clear' | 'replace' | 'template'
 
@@ -17,15 +18,15 @@ export interface OperationDraft {
 }
 
 export function emptyOperation(fieldKey = 'core:title'): OperationDraft {
-  return { operation: 'template', fieldKey, value: '', clearState: 'absent', find: '',
-    replacement: '', template: 'Relevé de vacations – {Période concernée}', bindings: {} }
+  return { operation: 'set', fieldKey, value: '', clearState: 'absent', find: '',
+    replacement: '', template: '', bindings: {} }
 }
 
 export function fieldRef(key: string, fields: CustomFieldDefinition[]): FieldRef {
   if (key.startsWith('core:')) return { source: 'core', name: key.slice(5) }
   const fieldId = Number(key.slice('custom_field:'.length))
   const definition = fields.find((field) => field.id === fieldId)
-  if (!key.startsWith('custom_field:') || !definition) throw new Error('Unknown field')
+  if (!key.startsWith('custom_field:') || !definition) throw new Error(messages.transformations.unknownField)
   return { source: 'custom_field', field_id: fieldId, display_name: definition.name }
 }
 
@@ -36,12 +37,12 @@ export function placeholders(template: string): string[] {
 function parseSetValue(draft: OperationDraft, fields: CustomFieldDefinition): unknown {
   switch (fields.data_type) {
     case 'boolean':
-      if (draft.value !== 'true' && draft.value !== 'false') throw new Error('Choose true or false')
+      if (draft.value !== 'true' && draft.value !== 'false') throw new Error(messages.transformations.chooseBoolean)
       return draft.value === 'true'
     case 'integer': {
       const number = Number(draft.value)
       if (!/^-?\d+$/u.test(draft.value) || !Number.isSafeInteger(number)) {
-        throw new Error('Enter an integer')
+        throw new Error(messages.transformations.enterInteger)
       }
       return number
     }
@@ -66,7 +67,7 @@ export function serializeOperation(
   if (draft.operation === 'template') {
     const bindings: Record<string, FieldRef> = {}
     for (const name of placeholders(draft.template)) {
-      if (!draft.bindings[name]) throw new Error(`Choose a field for {${name}}`)
+      if (!draft.bindings[name]) throw new Error(messages.transformations.chooseBinding.replace('{name}', name))
       bindings[name] = fieldRef(draft.bindings[name], fields)
     }
     return { operation: 'template', field, template: draft.template, bindings }
@@ -76,14 +77,14 @@ export function serializeOperation(
   if (field.source === 'core') {
     if (['correspondent', 'document_type', 'storage_path', 'archive_serial_number'].includes(field.name)) {
       if (!/^-?\d+$/u.test(draft.value) || !Number.isSafeInteger(Number(draft.value))) {
-        throw new Error('Enter an integer ID')
+        throw new Error(messages.transformations.enterIntegerId)
       }
       value = Number(draft.value)
     } else if (field.name === 'tags') {
       value = draft.value.split(',').map((part) => {
         const text = part.trim()
         if (!/^\d+$/u.test(text) || !Number.isSafeInteger(Number(text))) {
-          throw new Error('Enter comma-separated tag IDs')
+          throw new Error(messages.transformations.enterTagIds)
         }
         return Number(text)
       })
@@ -102,6 +103,6 @@ export function serializeTransformation(
     : { source: 'dataset' as const, query: { search, filters, ...(ordering ? { ordering } : {}) } }
   if (source === 'ids' && (targets.source !== 'ids' || targets.document_ids.some(
     (id) => !Number.isSafeInteger(id) || id <= 0,
-  ))) throw new Error('Enter positive document IDs separated by commas')
+  ))) throw new Error(messages.transformations.enterDocumentIds)
   return { targets, operations: drafts.map((draft) => serializeOperation(draft, fields)) }
 }
