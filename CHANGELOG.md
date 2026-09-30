@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/flowent59/PaperWrench/compare/v0.4.0...v0.5.0) (2026-09-30)
+
+
+### Features
+
+* **automation:** saved bulk-processing rules with dry-run-first execution ([#74](https://github.com/flowent59/PaperWrench/issues/74)) ([b07375c](https://github.com/flowent59/PaperWrench/commit/b07375c2893653063733b11510d56d54514482c0))
+
 ## [0.4.0](https://github.com/flowent59/PaperWrench/compare/v0.3.0...v0.4.0) (2026-09-30)
 
 
