@@ -2,7 +2,7 @@
 # GHCR image by default; a local build remains available as described in docs.
 services:
   paperwrench:
-    image: ${PAPERWRENCH_IMAGE:-ghcr.io/flowent59/paperwrench:0.3.0} # x-release-please-version
+    image: ${PAPERWRENCH_IMAGE:-ghcr.io/flowent59/paperwrench:0.4.0} # x-release-please-version
     pull_policy: always
     restart: unless-stopped
     ports:
