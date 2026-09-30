@@ -1,0 +1,23 @@
+{
+  "title": "Saved rules",
+  "help": "Save a transformation for a filter or collection. Every run requires a new dry run and explicit confirmation.",
+  "name": "Rule name",
+  "description": "Description",
+  "target": "Rule target",
+  "currentFilter": "Current filter or search",
+  "collection": "Collection",
+  "chooseCollection": "Choose a collection",
+  "save": "Save rule",
+  "replace": "Replace with current setup",
+  "rename": "Save name and description",
+  "run": "Review and run",
+  "close": "Close rule",
+  "delete": "Delete rule",
+  "deleteConfirm": "Delete this saved rule? Existing job history remains available.",
+  "history": "Change history",
+  "revision": "Revision",
+  "empty": "No saved rules yet.",
+  "filterRequired": "Choose a filter or enter a search before saving a rule.",
+  "datasetRequired": "Current setup must use a filtered dataset.",
+  "error": "Rule request failed."
+}

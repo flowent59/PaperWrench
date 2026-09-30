@@ -33,6 +33,9 @@ class CreateRollback(BaseModel):
 
 class JobView(BaseModel):
     id: int
+    rule_id: int | None = None
+    rule_revision: int | None = None
+    rule_name: str | None = None
     type: JobType
     rollback_of_job_id: int | None
     rollback_job_id: int | None
