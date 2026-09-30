@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/flowent59/PaperWrench/compare/v0.2.0...v0.3.0) (2026-09-30)
+
+
+### Features
+
+* **collections:** support dynamic saved filters ([#65](https://github.com/flowent59/PaperWrench/issues/65)) ([18a918c](https://github.com/flowent59/PaperWrench/commit/18a918c649098443557b4c1e408f81971841d5d1))
+* **ux:** guide transformation workflow ([#68](https://github.com/flowent59/PaperWrench/issues/68)) ([88bd263](https://github.com/flowent59/PaperWrench/commit/88bd263f66ade406260a2383a46974626127d09b))
+* **views:** save and reuse Explorer views ([#67](https://github.com/flowent59/PaperWrench/issues/67)) ([4d61341](https://github.com/flowent59/PaperWrench/commit/4d6134122ea657963d0616e325ac46347c3910b7))
+
 ## [0.2.0](https://github.com/flowent59/PaperWrench/compare/v0.1.1...v0.2.0) (2026-09-29)
 
 
