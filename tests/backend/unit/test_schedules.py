@@ -18,6 +18,7 @@ from paperwrench.db.base import utcnow
 from paperwrench.db.models import CollectionDocument
 from paperwrench.db.models import Job
 from paperwrench.db.models import RuleSchedule
+from paperwrench.db.models import SavedRule
 from paperwrench.db.models import ScheduleRun
 from paperwrench.db.session import session_scope
 from paperwrench.jobs import store
@@ -157,6 +158,32 @@ def test_failures_never_write(
     assert schedule["enabled"] == (failure == "downtime")
     runs = client.get(f"/api/v1/schedules/{schedule_id}/runs").json()
     assert runs[0]["status"] == "failed" and runs[0]["job_id"] is None
+    with session_scope() as db:
+        assert db.scalar(select(func.count()).select_from(Job)) == 0
+
+
+@respx.mock
+def test_revision_change_during_preview_cannot_inherit_approval(
+    client: TestClient, auth_record: AuthSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from paperwrench.api.v1 import rules
+
+    mock_docs(doc(1))
+    rule_id, body = setup_rule(client, auth_record)
+    schedule_id = approve(client, body)
+    original = rules.build_rule_preview
+
+    async def changed(*args: Any, **kwargs: Any) -> rules.RuleCreatedPreview:
+        with session_scope() as db:
+            rule = db.get(SavedRule, rule_id)
+            assert rule is not None
+            rule.revision += 1
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(rules, "build_rule_preview", changed)
+    due(schedule_id)
+    tick(client)
+    assert client.get("/api/v1/schedules").json()[0]["notification"] == "PREVIEW_STALE"
     with session_scope() as db:
         assert db.scalar(select(func.count()).select_from(Job)) == 0
 

@@ -114,6 +114,8 @@ def create_job(
             ):
                 raise stale("Rule changed since preview; review a new preview.")
             if schedule_run_id is not None:
+                if occurrence is None or occurrence.rule_revision != rule.revision:
+                    raise stale("Rule revision changed during scheduled preparation.")
                 from paperwrench.api.v1.rules import RuleDefinition
                 from paperwrench.api.v1.rules import _spec
 
