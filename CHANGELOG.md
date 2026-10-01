@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/flowent59/PaperWrench/compare/v0.4.0...v0.5.0) (2026-10-01)
+
+
+### Features
+
+* **automation:** saved bulk-processing rules with dry-run-first execution ([#74](https://github.com/flowent59/PaperWrench/issues/74)) ([b07375c](https://github.com/flowent59/PaperWrench/commit/b07375c2893653063733b11510d56d54514482c0))
+* **automation:** schedule and monitor approved rules ([562b64f](https://github.com/flowent59/PaperWrench/commit/562b64f5ce3a91af6395a62d7d34d9751ace8e3a))
+* **automation:** schedule and monitor approved rules ([f81ccdb](https://github.com/flowent59/PaperWrench/commit/f81ccdbc679a2c98a9b2014f741c4bc66273d9cb))
+* **rollback:** restore selected documents safely ([eb45762](https://github.com/flowent59/PaperWrench/commit/eb45762e384ced9e26ee4360d348aefe9d8615a1))
+* **rollback:** restore selected documents safely ([be0fffe](https://github.com/flowent59/PaperWrench/commit/be0fffeb1b5f7caff0c980b1235a81ef3b9f552a))
+
+
+### Bug Fixes
+
+* **automation:** recheck approved revision at job creation ([d013da5](https://github.com/flowent59/PaperWrench/commit/d013da5d073a20993301eab8775648b6e3d821f8))
+
 ## [0.4.0](https://github.com/flowent59/PaperWrench/compare/v0.3.0...v0.4.0) (2026-09-30)
 
 
