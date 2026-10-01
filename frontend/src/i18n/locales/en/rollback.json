@@ -8,5 +8,22 @@
   "uncertain": "Confirmation outcome is unknown. Check the original Job in History before proceeding.",
   "original": "Original Job",
   "linked": "Rollback Job",
-  "operation": "Original operation"
+  "operation": "Original operation",
+  "scope": "Rollback scope",
+  "full": "All remaining documents",
+  "selected": "Selected documents",
+  "selectiveHelp": "Search and select up to 500 modified documents. Selection is kept across pages. The preview will recheck current values and permissions.",
+  "search": "Search title or document ID",
+  "filter": "Filter restoration state",
+  "states": {"all": "All", "available": "Available", "restored": "Restored", "in_progress": "In progress", "manual_review": "Manual review"},
+  "selectPage": "Select available on this page",
+  "clearSelection": "Clear selection",
+  "selectedCount": "Selected documents: {count}",
+  "before": "Before original job",
+  "current": "Current value",
+  "restored": "Restored value",
+  "history": "Rollback history",
+  "counts": {"selected": "Selected", "restored": "Restored", "skipped": "Skipped", "conflicted": "Conflicted"},
+  "new": "Prepare another rollback",
+  "waitForPrevious": "Finish or resume the previous rollback before creating another."
 }

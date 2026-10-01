@@ -58,6 +58,8 @@
     "MANUAL_REVIEW": "Le résultat de l'écriture initiale est inconnu. Vérifiez ce document manuellement.",
     "LEGACY_MANUAL_REVIEW": "Le résultat de cette ancienne écriture nécessite une vérification manuelle.",
     "NO_PROVEN_WRITE": "Aucune écriture confirmée ne peut être restaurée.",
+    "ALREADY_RESTORED": "Ce champ a déjà été restauré par une tâche précédente.",
+    "ROLLBACK_IN_PROGRESS": "Une restauration précédente est encore en cours. Consultez ou reprenez sa tâche.",
     "ROLLBACK_CONFLICT": "Le document a changé après l'écriture initiale. Rien ne sera restauré pour celui-ci.",
     "ROLLBACK_INVALID": "Ce document ne peut pas être restauré automatiquement.",
     "INTERNAL_FAILURE": "La tâche a échoué à cause d'une erreur interne.",

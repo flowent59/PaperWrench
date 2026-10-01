@@ -377,7 +377,16 @@ export const rulesApi = {
 }
 
 export const jobsApi = {
-  rollbackPreview: (id: number) => apiFetch<CreatedPreview>(`/jobs/${id}/rollback-preview`, { method: 'POST' }),
+  rollbackPreview: (id: number, documentIds?: number[]) =>
+    apiFetch<CreatedPreview>(`/jobs/${id}/rollback-preview`, {
+      method: 'POST', ...(documentIds ? { body: JSON.stringify({ document_ids: documentIds }) } : {}),
+    }),
+  rollbackCandidates: (id: number, page: number, search: string, state: string) =>
+    apiFetch<import('./types').HistoryPage<import('./types').RollbackCandidate>>(
+      `/jobs/${id}/rollback-candidates?page=${page}&page_size=25&search=${encodeURIComponent(search)}&state=${state}`),
+  rollbacks: (id: number, page: number) =>
+    apiFetch<import('./types').HistoryPage<import('./types').JobView>>(
+      `/jobs/${id}/rollbacks?page=${page}&page_size=25`),
   rollback: (id: number, preview: CreatedPreview, acknowledgeExternalRace: boolean) =>
     apiFetch<import('./types').JobView>(`/jobs/${id}/rollback`, { method: 'POST', body: JSON.stringify({
       preview_id: preview.id, preview_token: preview.preview_token,

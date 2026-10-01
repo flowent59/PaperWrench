@@ -312,7 +312,7 @@ class JobOperation(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     rollback_of_operation_id: Mapped[int | None] = mapped_column(
-        ForeignKey("job_operations.id", ondelete="SET NULL")
+        ForeignKey("job_operations.id", ondelete="SET NULL"), index=True,
     )
 
     started_at: Mapped[datetime | None] = mapped_column(UtcDateTime)

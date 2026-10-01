@@ -12,6 +12,17 @@ const m = messages.rollback
 function setup({ changed = 1, custom = false, failure = 0 } = {}) {
   const mock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
+    if (url.includes('/rollback-candidates?')) {
+      const page = new URL(url, 'http://localhost').searchParams.get('page')
+      const items = page === '2' ? [
+        { document_id: 3, title: 'Third', status: 'restored' },
+        { document_id: 4, title: 'Fourth', status: 'available' },
+      ] : [
+        { document_id: 1, title: 'Vacation', status: 'available' },
+        { document_id: 2, title: 'External', status: 'available' },
+      ]
+      return new Response(JSON.stringify({ items, page_count: 2, total: 4 }))
+    }
     if (url.endsWith('/rollback-preview')) return new Response(JSON.stringify({
       id: 'preview', preview_token: 'opaque', version: 1, changed, unchanged: 1, errors: 1,
       expires_at: new Date(Date.now() + 60000).toISOString(), confirmed: false,
@@ -79,4 +90,24 @@ it.each([409, 500])('does not replay stale or uncertain confirmation (%i)', asyn
   await waitFor(() => expect(screen.getByRole('button', { name: m.confirm })).toBeDisabled())
   await screen.findByText(failure === 409 ? messages.preview.expired : m.uncertain, { exact: false })
   expect(mock.mock.calls.filter(([url]) => String(url).endsWith('/rollback'))).toHaveLength(1)
+})
+
+it('keeps selected documents across pages and sends only that subset to preview', async () => {
+  const mock = setup()
+  fireEvent.click(screen.getByLabelText(m.selected))
+  expect(screen.getByRole('button', { name: m.preview })).toBeDisabled()
+  fireEvent.click(await screen.findByLabelText(/Vacation \(#1\)/))
+  fireEvent.click(screen.getByRole('button', { name: messages.preview.next }))
+  fireEvent.click(await screen.findByLabelText(/Fourth \(#4\)/))
+  expect(screen.getByText(m.selectedCount.replace('{count}', '2'))).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: m.preview }))
+  await screen.findByText(/New → Before/)
+  const sent = mock.mock.calls.find(([url, init]) =>
+    String(url).endsWith('/rollback-preview') && init?.method === 'POST')?.[1]
+  expect(JSON.parse(String(sent?.body))).toEqual({ document_ids: [1, 4] })
+  expect(screen.getByText(m.before)).toBeInTheDocument()
+  expect(screen.getByText(m.current)).toBeInTheDocument()
+  expect(screen.getByText(m.restored)).toBeInTheDocument()
+  fireEvent.click(screen.getByLabelText(/Fourth \(#4\)/))
+  expect(screen.queryByText(m.before)).not.toBeInTheDocument()
 })

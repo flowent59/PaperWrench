@@ -58,6 +58,8 @@
     "MANUAL_REVIEW": "The original write outcome is unknown. Review this document manually.",
     "LEGACY_MANUAL_REVIEW": "This legacy write outcome requires manual review.",
     "NO_PROVEN_WRITE": "There is no confirmed write to restore.",
+    "ALREADY_RESTORED": "This field was already restored by an earlier rollback.",
+    "ROLLBACK_IN_PROGRESS": "A prior restoration is still in progress. Inspect or resume its Job.",
     "ROLLBACK_CONFLICT": "The document changed after the original write. Nothing will be restored for it.",
     "ROLLBACK_INVALID": "This document cannot be restored automatically.",
     "INTERNAL_FAILURE": "The job failed because of an internal error.",

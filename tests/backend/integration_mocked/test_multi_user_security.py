@@ -150,11 +150,17 @@ def test_two_sessions_reject_idor_and_revoke_only_the_affected_identity(
             assert owner_b.get(f"/api/v1/jobs/{job_id}").status_code == 404
             assert owner_b.get(f"/api/v1/jobs/{job_id}/targets").status_code == 404
             assert owner_b.get(f"/api/v1/jobs/{job_id}/operations").status_code == 404
+            assert owner_b.get(f"/api/v1/jobs/{job_id}/rollback-candidates").status_code == 404
+            assert owner_b.get(f"/api/v1/jobs/{job_id}/rollbacks").status_code == 404
             assert owner_b.post(
                 f"/api/v1/jobs/{job_id}/resume", headers=_csrf(bob)
             ).status_code == 404
             assert owner_b.post(
                 f"/api/v1/jobs/{job_id}/rollback-preview", headers=_csrf(bob)
+            ).status_code == 404
+            assert owner_b.post(
+                f"/api/v1/jobs/{job_id}/rollback-preview",
+                headers=_csrf(bob), json={"document_ids": [42]},
             ).status_code == 404
             assert owner_b.post(
                 f"/api/v1/jobs/{job_id}/rollback",

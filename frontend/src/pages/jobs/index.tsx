@@ -15,13 +15,16 @@ import { RollbackReview } from './rollback'
 const m = messages.jobs
 const active = (job?: JobView) => job?.status === 'pending' || job?.status === 'running'
 
-function Pagination({ data, page, setPage, busy }: {
-  data: Pick<HistoryPage<unknown>, 'page_count'> | undefined; page: number; setPage: (page: number) => void; busy: boolean
+function Pagination({ data, page, setPage, busy, labelPrefix }: {
+  data: Pick<HistoryPage<unknown>, 'page_count'> | undefined; page: number; setPage: (page: number) => void;
+  busy: boolean; labelPrefix?: string
 }) {
   return <div className="flex items-center gap-3">
-    <Button variant="outline" disabled={busy || page <= 1} onClick={() => setPage(page - 1)}>{m.previous}</Button>
+    <Button variant="outline" aria-label={labelPrefix ? `${labelPrefix}: ${m.previous}` : undefined}
+      disabled={busy || page <= 1} onClick={() => setPage(page - 1)}>{m.previous}</Button>
     <span>{m.page} {page} / {Math.max(data?.page_count ?? 1, 1)}</span>
-    <Button variant="outline" disabled={busy || page >= (data?.page_count ?? 1)}
+    <Button variant="outline" aria-label={labelPrefix ? `${labelPrefix}: ${m.next}` : undefined}
+      disabled={busy || page >= (data?.page_count ?? 1)}
       onClick={() => setPage(page + 1)}>{m.next}</Button>
   </div>
 }
@@ -77,6 +80,7 @@ export function JobPage() {
   const jobId = Number(rawId)
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState('')
+  const [rollbackPage, setRollbackPage] = useState(1)
   const [documentId, setDocumentId] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -86,6 +90,9 @@ export function JobPage() {
   const targets = useQuery({ queryKey: ['job-targets', jobId, page, status, job?.processed],
     queryFn: () => jobsApi.targets(jobId, page, status), enabled: !!job,
     refetchInterval: active(job) ? 2000 : false })
+  const rollbacks = useQuery({ queryKey: ['job-rollbacks', jobId, rollbackPage],
+    queryFn: () => jobsApi.rollbacks(jobId, rollbackPage),
+    enabled: job?.type === 'transform', refetchInterval: 3000 })
 
   async function resume() {
     setBusy(true)
@@ -117,7 +124,26 @@ export function JobPage() {
       {job.resumable && <Button onClick={resume} disabled={busy}>{busy ? m.resuming : m.resume}</Button>}
       {job.rollback_of_job_id != null && <Link className="text-primary underline" to={`/jobs/${job.rollback_of_job_id}`}>{messages.rollback.original} #{job.rollback_of_job_id}</Link>}
       {job.rollback_job_id != null && <Link className="text-primary underline" to={`/jobs/${job.rollback_job_id}`}>{messages.rollback.linked} #{job.rollback_job_id}</Link>}
-      {job.type === 'transform' && job.rollback_job_id == null && ['completed', 'partial', 'failed', 'cancelled'].includes(job.status) && <RollbackReview key={job.id} jobId={job.id} />}
+      {job.rollback_counts && <dl className="flex flex-wrap gap-5">{Object.entries(job.rollback_counts).map(([key, count]) =>
+        <div key={key}><dt>{messages.rollback.counts[key as keyof typeof messages.rollback.counts]}</dt>
+          <dd>{formatNumber(count)}</dd></div>)}</dl>}
+      {job.type === 'transform' && <section className="space-y-2" aria-label={messages.rollback.history}>
+        <h2 className="font-semibold">{messages.rollback.history}</h2>
+        {rollbacks.error && <p role="alert">{errorMessage(rollbacks.error)}</p>}
+        <ol className="space-y-2">{rollbacks.data?.items.map(item => <li key={item.id}>
+          <Link className="text-primary underline" to={`/jobs/${item.id}`}>
+            {messages.rollback.linked} #{item.id}</Link> · {m.statuses[item.status]}
+          {item.rollback_counts && <span> · {messages.rollback.counts.selected}: {formatNumber(item.rollback_counts.selected)}
+            {' · '}{messages.rollback.counts.restored}: {formatNumber(item.rollback_counts.restored)}
+            {' · '}{messages.rollback.counts.skipped}: {formatNumber(item.rollback_counts.skipped)}
+            {' · '}{messages.rollback.counts.conflicted}: {formatNumber(item.rollback_counts.conflicted)}</span>}
+        </li>)}</ol>
+        <Pagination data={rollbacks.data} page={rollbackPage} setPage={setRollbackPage}
+          busy={rollbacks.isFetching} labelPrefix={messages.rollback.history} />
+      </section>}
+      {job.type === 'transform' && ['completed', 'partial', 'failed', 'cancelled'].includes(job.status) &&
+        <RollbackReview key={job.id} jobId={job.id} blocked={rollbacks.data?.items.some(item =>
+          ['pending', 'running', 'interrupted'].includes(item.status)) ?? false} />}
       <details><summary>{m.transformation}</summary>
         <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">{JSON.stringify(job.operations, null, 2)}</pre></details>
       <details><summary>{m.source}</summary>{job.source_kind === 'ids' ? <p>{m.explicit}</p>

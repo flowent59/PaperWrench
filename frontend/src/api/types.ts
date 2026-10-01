@@ -749,6 +749,7 @@ export interface JobView {
   type: 'transform' | 'rollback'
   rollback_of_job_id: number | null
   rollback_job_id: number | null
+  rollback_counts?: { selected: number; restored: number; skipped: number; conflicted: number } | null
   title: string
   status: JobStatus
   total: number
@@ -762,6 +763,11 @@ export interface JobView {
   started_at: string | null
   finished_at: string | null
   resumable: boolean
+}
+export interface RollbackCandidate {
+  document_id: number
+  title: string | null
+  status: 'available' | 'restored' | 'in_progress' | 'manual_review'
 }
 export interface TargetView {
   excluded_operations?: Record<string, string>

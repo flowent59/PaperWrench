@@ -8,5 +8,22 @@
   "uncertain": "Le résultat de la confirmation est inconnu. Vérifiez la tâche d'origine dans l'Historique avant de continuer.",
   "original": "Tâche d'origine",
   "linked": "Tâche de restauration",
-  "operation": "Opération d'origine"
+  "operation": "Opération d'origine",
+  "scope": "Portée de la restauration",
+  "full": "Tous les documents restants",
+  "selected": "Documents sélectionnés",
+  "selectiveHelp": "Recherchez et sélectionnez jusqu'à 500 documents modifiés. La sélection est conservée entre les pages. L'aperçu revérifie les valeurs et les droits actuels.",
+  "search": "Rechercher un titre ou un identifiant",
+  "filter": "Filtrer l'état de restauration",
+  "states": {"all": "Tous", "available": "Disponibles", "restored": "Restaurés", "in_progress": "En cours", "manual_review": "Vérification manuelle"},
+  "selectPage": "Sélectionner les documents disponibles sur cette page",
+  "clearSelection": "Effacer la sélection",
+  "selectedCount": "Documents sélectionnés : {count}",
+  "before": "Avant la tâche initiale",
+  "current": "Valeur actuelle",
+  "restored": "Valeur restaurée",
+  "history": "Historique des restaurations",
+  "counts": {"selected": "Sélectionnés", "restored": "Restaurés", "skipped": "Ignorés", "conflicted": "En conflit"},
+  "new": "Préparer une autre restauration",
+  "waitForPrevious": "Terminez ou reprenez la restauration précédente avant d'en créer une autre."
 }
