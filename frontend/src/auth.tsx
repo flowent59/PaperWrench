@@ -15,16 +15,36 @@ function LoginPage({ locale, onLocaleChange, onLogin }: {
   onLogin: (session: AuthSession) => void
 }) {
   const [token, setToken] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [remember, setRemember] = useState(true)
+  const [available, setAvailable] = useState(false)
+  const [optionsLoaded, setOptionsLoaded] = useState(false)
+  const [mode, setMode] = useState<'token' | 'password'>('token')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    void authApi.options().then((options) => {
+      if (active) setAvailable(options.remember_available)
+    }).catch(() => {}).finally(() => { if (active) setOptionsLoaded(true) })
+    return () => { active = false }
+  }, [])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setSubmitting(true)
     setError(null)
     try {
-      onLogin(await authApi.login(token, locale))
+      onLogin(mode === 'password'
+        ? await authApi.passwordLogin(username, password)
+        : await authApi.login(token, locale, {
+          remember: available && remember,
+          ...(available && remember ? { password } : {}),
+        }))
       setToken('')
+      setPassword('')
     } catch (cause) {
       setError(errorMessage(cause, messages.auth.unreachable))
     } finally {
@@ -48,8 +68,18 @@ function LoginPage({ locale, onLocaleChange, onLogin }: {
           <CardDescription>{messages.auth.description}</CardDescription>
         </CardHeader>
         <CardContent>
+          {available && <div className="mb-4 flex gap-2">
+            <Button type="button" variant={mode === 'token' ? 'default' : 'outline'} disabled={submitting}
+              onClick={() => { setMode('token'); setPassword(''); setError(null) }}>
+              {messages.auth.tokenMode}
+            </Button>
+            <Button type="button" variant={mode === 'password' ? 'default' : 'outline'} disabled={submitting}
+              onClick={() => { setMode('password'); setToken(''); setPassword(''); setError(null) }}>
+              {messages.auth.passwordMode}
+            </Button>
+          </div>}
           <form className="space-y-4" onSubmit={submit}>
-            <label className="block space-y-2 text-sm font-medium">
+            {mode === 'token' ? <label className="block space-y-2 text-sm font-medium">
               <span>{messages.auth.token}</span>
               <input
                 autoComplete="off"
@@ -58,13 +88,33 @@ function LoginPage({ locale, onLocaleChange, onLogin }: {
                 name="paperless-token"
                 onChange={(event) => setToken(event.target.value)}
                 required
+                maxLength={4096}
                 type="password"
                 value={token}
               />
-            </label>
-            <p className="text-xs text-muted-foreground">{messages.auth.storage}</p>
+            </label> : <label className="block space-y-2 text-sm font-medium">
+              <span>{messages.auth.username}</span>
+              <input autoComplete="username" className="w-full rounded-md border border-input bg-background px-3 py-2"
+                required maxLength={255} value={username} onChange={(event) => setUsername(event.target.value)} />
+            </label>}
+            {mode === 'token' && available && <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={remember} onChange={(event) => {
+                setRemember(event.target.checked); setPassword('')
+              }} />
+              {messages.auth.remember}
+            </label>}
+            {(mode === 'password' || (available && remember)) && <label className="block space-y-2 text-sm font-medium">
+              <span>{messages.auth.password}</span>
+              <input type="password" autoComplete={mode === 'password' ? 'current-password' : 'new-password'}
+                className="w-full rounded-md border border-input bg-background px-3 py-2"
+                required minLength={mode === 'password' ? 1 : 12} maxLength={1024} value={password}
+                onChange={(event) => setPassword(event.target.value)} />
+            </label>}
+            <p className="text-xs text-muted-foreground">{mode === 'password' ? messages.auth.recovery
+              : available && remember ? messages.auth.rememberHelp : messages.auth.storage}</p>
             {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
-            <Button className="w-full" disabled={submitting || !token.trim()} type="submit">
+            <Button className="w-full" disabled={submitting || !optionsLoaded
+              || (mode === 'token' ? !token.trim() : !username || !password)} type="submit">
               {submitting ? messages.auth.signingIn : messages.auth.signIn}
             </Button>
           </form>
@@ -97,10 +147,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
       queryClient.clear()
       setSession(null)
     }
+    const updated = (event: Event) => setSession((event as CustomEvent<AuthSession>).detail)
+    window.addEventListener('paperwrench:session-updated', updated)
     window.addEventListener('paperwrench:unauthorized', unauthorized)
     return () => {
       active = false
       window.removeEventListener('paperwrench:unauthorized', unauthorized)
+      window.removeEventListener('paperwrench:session-updated', updated)
     }
   }, [queryClient])
 

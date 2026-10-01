@@ -68,7 +68,8 @@ drops capabilities and uses `/tmp` as tmpfs. Keep `/data` on reliable local disk
 SQLite WAL and the runtime lock are not a distributed deployment protocol.
 
 The token must never be in a Vite variable or browser configuration. It is sent
-only in the login request and then retained in server memory. The Docker
+only during login or explicit credential replacement. Optional memorization
+stores it encrypted; otherwise it stays in server memory. The Docker
 build context excludes local secrets, databases, caches and dependencies.
 
 ## First sign-in and Paperless permissions
@@ -98,7 +99,7 @@ correctly treat them as the same Paperless identity, so they will share
 PaperWrench-owned resources.
 
 The token is exchanged for an opaque `HttpOnly`, `SameSite=Strict` cookie. It is
-kept only in PaperWrench process memory, never in SQLite. Logout, process restart,
+kept in PaperWrench process memory for the session. Logout, process restart,
 absolute expiry or a revoked token detected during Paperless revalidation
 destroys the session and the user signs in again. The relevant settings are:
 
@@ -107,6 +108,88 @@ destroys the session and the user signs in again. The relevant settings are:
 | `PAPERWRENCH_SESSION_TTL_SECONDS` | `28800` | Absolute session lifetime (8 hours; allowed range 5 minutes to 7 days). |
 | `PAPERWRENCH_SESSION_REVALIDATE_SECONDS` | `300` | Interval before PaperWrench asks Paperless to validate the token again; `0` checks every request. |
 | `PAPERWRENCH_SESSION_COOKIE_SECURE` | `false` in Compose | Set `true` behind HTTPS when the original scheme is forwarded correctly. Direct application execution auto-detects it when unset. |
+
+## Remembered credentials
+
+With a master key configured, **Remember my Paperless token** is checked by
+default. The user supplies their own valid Paperless token and chooses a local
+PaperWrench password (12–1024 characters). PaperWrench obtains the username from
+Paperless; enrollment never accepts a user-chosen username or needs administrator
+approval. Subsequent sign-in uses **Local account**, that username and the local
+password. This password is independent of the Paperless password.
+
+Compatibility: PaperWrench first validates the token with `/api/profile/`.
+When that response lacks a stable numeric `id` and `username` (including
+Paperless 3.2.1), it reads the current user from `/api/ui_settings/`. This requires
+Paperless's **UI settings: view** permission, without administrator privileges
+or permission to list other users. If neither endpoint supplies the identity,
+memorization fails explicitly; uncheck the option to use token-only login.
+Email and display name are never used as local account identifiers.
+
+On first verified sign-in, a non-secret identity binding preserves the existing
+local owner key, including the legacy token fingerprint. Future tokens for that
+same upstream identity reuse the binding; forgetting the saved token retains it.
+Existing resources are neither reassigned to another identity nor merged.
+See the [API contract](auth-api.md).
+
+Set `PAPERWRENCH_REMEMBER_TOKENS=false` to disable enrollment, replacement and
+password login globally. Existing encrypted rows remain available for deletion.
+Without a master key, memorization is unavailable and token login still works.
+Unchecking the option uses an ephemeral session and saves no new credentials;
+it does not delete credentials saved previously.
+
+Generate a key once in an environment with the backend dependencies installed:
+
+```sh
+python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```
+
+Supply it as `PAPERWRENCH_CREDENTIAL_KEY`, or preferably mount a Docker secret
+and set `PAPERWRENCH_CREDENTIAL_KEY_FILE`. The file takes precedence; unreadable,
+empty or malformed explicit key files prevent startup. For example, save the
+generated key to a restricted file outside the data volume and add this Compose
+override (adjust the source path):
+
+```yaml
+services:
+  paperwrench:
+    environment:
+      PAPERWRENCH_CREDENTIAL_KEY_FILE: /run/secrets/paperwrench_credential_key
+    secrets:
+      - paperwrench_credential_key
+secrets:
+  paperwrench_credential_key:
+    file: /secure/paperwrench-credential-key
+```
+
+Back up the master key **separately** from SQLite. It must be readable by the
+container's UID 10001, but should not be exposed to other users. Losing it makes
+saved tokens irrecoverable; users must enroll again with valid Paperless tokens.
+Replacing the key does not automatically re-encrypt existing rows. A compromise
+of the NAS/container together with its configuration can expose every saved
+token. Encryption at rest does not protect a running compromised server.
+
+**My account** shows the Paperless username and supports replacing the token and
+local password for that same identity, or **Forget token and sign out**. Replacing
+credentials invalidates the owner's other sessions. Forgetting them invalidates
+all their sessions and removes both saved token and password hash, while retaining
+their PaperWrench data. SQLite pages and old backups can retain deleted ciphertext;
+deletion is not secure erasure.
+
+A revoked token prevents password login. Use **Use a token** with a new valid
+Paperless token and a local password to recover access; the valid upstream token
+is the recovery proof, so the old local password is not required. A changed
+Paperless username likewise requires token enrollment to refresh the local name.
+Accounts remain bound to one stable Paperless identity and instance URL. They
+cannot be transferred or merged by reusing a username. If changing the instance
+URL, use a separate PaperWrench database or perform an explicit offline migration
+of identity bindings; changing the URL never silently adopts another instance.
+
+Sessions are never persisted: restart always requires sign-in. Saved tokens never
+resume jobs automatically. Every password sign-in validates the recovered token
+against Paperless, and normal session expiry, CSRF and periodic revalidation still
+apply. Login attempts are limited to ten per minute per direct client address;
+behind a proxy, clients may share this limit.
 
 ## Advanced: reverse proxy and HTTPS (optional)
 
@@ -173,7 +256,7 @@ PaperWrench administrator can claim or inspect another user's local history.
 | Symptom | Meaning and action |
 | --- | --- |
 | Sign-in reports an invalid or unauthorized token | Confirm the token was copied from the intended Paperless account. Regenerate it in **My Profile**, then sign in again. Regeneration revokes the old token and all PaperWrench sessions using it fail at their next revalidation. |
-| A session returns to the sign-in page | The absolute lifetime elapsed, PaperWrench restarted, the user logged out, or Paperless rejected revalidation. This is expected because credentials are memory-only; sign in again. |
+| A session returns to the sign-in page | The absolute lifetime elapsed, PaperWrench restarted, the user logged out, or Paperless rejected revalidation. Sessions are memory-only; sign in with the local account if enrolled, or supply a valid token again. |
 | A document or metadata object is missing | Paperless can hide unauthorized objects as `404 Not Found`. Check the account's global and object-level view permissions in Paperless; do not use an administrator token to bypass diagnosis. |
 | Preview or apply reports a permission failure | The account lacks the required current edit permission, or it changed after preview. Correct the permission in Paperless and build a new preview; PaperWrench never falls back to a deployment token. |
 | Paperless is unavailable | From inside the PaperWrench container, verify DNS, port, network attachment and `PAPERLESS_URL`. `/api/v1/system/health` can remain healthy because it checks PaperWrench's local database, not Paperless. |
@@ -185,9 +268,9 @@ PaperWrench administrator can claim or inspect another user's local history.
 PaperWrench history, before/written values, schemas and collections reside in
 `/data/paperwrench.db`. This contains sensitive metadata, even though it has no
 document files. Encrypt and restrict backups; include non-secret configuration
-separately and record the image/commit plus Alembic head. User tokens are not in
-the database or deployment configuration and are intentionally absent from the
-backup.
+separately and record the image/commit plus Alembic head. Remembered tokens are
+encrypted in SQLite, alongside local password hashes. Store the master-key backup
+separately, with restricted access; database backups must never contain that key.
 
 Quiesce Jobs first. The standard-library SQLite backup API copies committed WAL
 pages consistently while the process is running:

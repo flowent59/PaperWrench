@@ -29,6 +29,9 @@ SENSITIVE_KEYS = frozenset(
         "set-cookie",
         "x-api-key",
         "credentials",
+        "credential_key",
+        "password_hash",
+        "encrypted_token",
     }
 )
 

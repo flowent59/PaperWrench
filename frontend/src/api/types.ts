@@ -29,6 +29,7 @@ export interface AuthSession {
   expires_at: string
   csrf_token: string
   locale: 'en' | 'fr' | null
+  remembered?: boolean
 }
 
 /**

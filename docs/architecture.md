@@ -358,7 +358,9 @@ heartbeat that enforce single-instance execution.
 with no cached documents. **`Collection`, `CollectionDocument`, `Preview`,
 `AppSettings`** are supporting state. The owning Paperless user ID is recorded on
 each local root resource. `AppSettings` deliberately has **no token column**:
-per-user tokens live only in ephemeral server sessions.
+per-user sessions remain ephemeral. Optional `LocalCredential` rows store an
+Argon2id password hash and an encrypted token bound to the identity and instance;
+the master key is supplied separately (ADR-0019).
 
 M12 collections use the existing static `Collection` and `CollectionDocument`
 tables. The compound membership key makes each Paperless ID unique within a
@@ -369,7 +371,7 @@ SQLite and appear as unavailable with no document metadata; users can remove
 those rows. `kind=dynamic` and `filterset_json` remain reserved scaffolding.
 
 What is deliberately *not* persisted: document content, OCR text, thumbnails,
-any cached copy of Paperless data that could drift, and the API token.
+any cached copy of Paperless data that could drift, and plaintext API tokens.
 
 ## Job status model
 
@@ -534,9 +536,9 @@ before deploying it.
 
 The properties it does guarantee:
 
-- Each token lives in the backend process only — never in the database, never in
-  a log (redaction is a structlog processor, so an ad-hoc log call cannot leak
-  it), never in a response body.
+- Plaintext tokens stay in the backend process, never in logs or response bodies.
+  Optional remembered credentials use authenticated encryption and a separately
+  supplied master key (ADR-0019).
 - Same-origin by construction; CORS is empty by default and an origin guard
   rejects cross-origin state-changing requests. Mutations also require a
   per-session CSRF token.

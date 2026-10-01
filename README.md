@@ -66,8 +66,10 @@ M5 exposes immediate, explicit single-document edits in the Inspector.
   M9 adds safe, explicitly confirmed rollback of proven Job writes.
 - **No automatic write retries.** After an uncertain outcome, reload and inspect
   before deciding whether to make another edit.
-- **The token stays in the backend.** It is not persisted, logged or sent to the
-  browser. Paperless permissions remain authoritative.
+- **The token stays in the backend.** Optional local accounts store it encrypted
+  with a separate operator key. It is never logged or returned to the browser.
+  See [remembered credentials](docs/deployment.md#remembered-credentials).
+  Paperless permissions remain authoritative.
 
 See [ADR-0012](docs/decisions/0012-inspector-coordinated-writes-and-external-race.md)
 for the concurrency contract and its limitations. M8 adds explicitly confirmed
@@ -168,7 +170,7 @@ What this means concretely:
   on a LAN, and it removes protection against an active network attacker.
 
 What PaperWrench does *not* do: after login it never sends your token back to the
-browser, never writes it to its database, never includes it in logs (log output is scrubbed at
+browser, never writes it unencrypted to its database, never includes it in logs (log output is scrubbed at
 the logging layer, not at each call site), and never contacts any third-party
 service. There is no telemetry.
 

@@ -38,6 +38,29 @@ from paperwrench.db.base import utcnow
 # Enumerations
 # ---------------------------------------------------------------------------
 
+class PaperlessIdentity(Base):
+    """Verified upstream identity bound to an existing local owner key."""
+
+    __tablename__ = "paperless_identities"
+    __table_args__ = (UniqueConstraint("paperless_url", "upstream_user_id"),)
+
+    owner_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    upstream_user_id: Mapped[int] = mapped_column(Integer)
+    paperless_url: Mapped[str] = mapped_column(Text)
+
+
+class LocalCredential(Base):
+    """One recoverable credential per verified Paperless identity (ADR-0019)."""
+
+    __tablename__ = "local_credentials"
+
+    owner_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    username: Mapped[str] = mapped_column(String(255), unique=True)
+    paperless_url: Mapped[str] = mapped_column(Text)
+    password_hash: Mapped[str] = mapped_column(Text)
+    encrypted_token: Mapped[str] = mapped_column(Text)
+
+
 
 class JobType(StrEnum):
     TRANSFORM = "transform"
