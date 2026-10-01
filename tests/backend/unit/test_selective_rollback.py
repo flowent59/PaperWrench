@@ -87,7 +87,8 @@ async def test_four_of_150_preserves_other_documents(harness: Harness) -> None:
     harness.requests.clear()
     await harness.run()
     assert counts(rollback_id)["restored"] == 4
-    assert [i for i, state in harness.documents.items() if state["title"] == "Ancien"] == selected_ids
+    restored_ids = [i for i, state in harness.documents.items() if state["title"] == "Ancien"]
+    assert restored_ids == selected_ids
     assert len([r for r in harness.requests if r.method == "PATCH"]) == 4
 
 
