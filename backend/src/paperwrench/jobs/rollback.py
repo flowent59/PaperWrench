@@ -7,9 +7,14 @@ import hmac
 import json
 from typing import Any
 
+from sqlalchemy import String
+from sqlalchemy import case
+from sqlalchemy import cast
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import aliased
 
 from paperwrench.db.base import utcnow
 from paperwrench.db.models import Job
@@ -25,7 +30,10 @@ from paperwrench.db.session import session_scope
 from paperwrench.errors import PaperlessForbiddenError
 from paperwrench.filters.model import CustomFieldRef
 from paperwrench.jobs.model import CreateRollback
+from paperwrench.jobs.model import HistoryPage
+from paperwrench.jobs.model import RollbackCandidateView
 from paperwrench.jobs.store import UNSCOPED_OWNER
+from paperwrench.jobs.store import _pagination
 from paperwrench.jobs.store import encoded
 from paperwrench.jobs.store import require_job
 from paperwrench.jobs.store import rollback_candidate
@@ -51,9 +59,97 @@ def require_original(
     job = require_job(session, job_id, owner_id)
     if job.type != JobType.TRANSFORM or not JobStatus(job.status).is_terminal:
         raise stale("Rollback requires a terminal transformation Job.")
-    if session.scalar(select(Job.id).where(Job.rollback_of_job_id == job_id)) is not None:
-        raise stale("A rollback Job already exists; inspect its History or resume unsent work.")
     return job
+
+
+def active_rollback(session: Session, job_id: int) -> bool:
+    return session.scalar(select(Job.id).where(
+        Job.rollback_of_job_id == job_id,
+        Job.status.in_((JobStatus.PENDING, JobStatus.RUNNING, JobStatus.INTERRUPTED)),
+    ).limit(1)) is not None
+
+
+def blocked_operations(session: Session, operation_ids: list[int]) -> dict[int, str]:
+    """Successful and uncertain restorations are never candidates again."""
+    if not operation_ids:
+        return {}
+    result: dict[int, str] = {}
+    for original_id, status in session.execute(
+        select(JobOperation.rollback_of_operation_id, JobOperation.status)
+        .where(JobOperation.rollback_of_operation_id.in_(operation_ids))
+    ):
+        if original_id is None:
+            continue
+        if status == OperationStatus.SUCCEEDED:
+            result[original_id] = "ALREADY_RESTORED"
+        elif status == OperationStatus.AMBIGUOUS:
+            result[original_id] = "MANUAL_REVIEW"
+        elif status == OperationStatus.PENDING:
+            result[original_id] = "ROLLBACK_IN_PROGRESS"
+    return result
+
+
+def candidate_page(
+    job_id: int, page: int, page_size: int, search: str, state: str,
+    owner_id: int | None,
+) -> HistoryPage[RollbackCandidateView]:
+    _pagination(page, page_size, 0)
+    with session_scope() as session:
+        require_original(session, job_id, owner_id)
+        original = JobOperation
+        linked = aliased(JobOperation)
+
+        def linked_status(status: OperationStatus) -> Any:
+            return select(linked.id).where(
+                linked.rollback_of_operation_id == original.id,
+                linked.status == status,
+            ).exists()
+
+        restored = linked_status(OperationStatus.SUCCEEDED)
+        uncertain = linked_status(OperationStatus.AMBIGUOUS)
+        pending = linked_status(OperationStatus.PENDING)
+        open_field = ~restored & ~uncertain & ~pending
+        query = select(
+            original.document_id.label("document_id"),
+            func.max(original.document_title).label("title"),
+            func.max(case((open_field, 1), else_=0)).label("available"),
+            func.max(case((restored, 1), else_=0)).label("restored"),
+            func.max(case((uncertain, 1), else_=0)).label("uncertain"),
+            func.max(case((pending, 1), else_=0)).label("pending"),
+        ).where(
+            original.job_id == job_id,
+            original.status == OperationStatus.SUCCEEDED,
+            original.attempts > 0,
+            original.before_value_json.is_not(None),
+            original.written_value_json.is_not(None),
+            original.before_value_json != original.written_value_json,
+        )
+        if search:
+            query = query.where(
+                original.document_title.contains(search, autoescape=True)
+                | cast(original.document_id, String).contains(search, autoescape=True)
+            )
+        grouped = query.group_by(original.document_id).subquery()
+        status = case(
+            (grouped.c.available > 0, "available"),
+            (grouped.c.uncertain > 0, "manual_review"),
+            (grouped.c.pending > 0, "in_progress"),
+            else_="restored",
+        )
+        filtered = select(
+            grouped.c.document_id, grouped.c.title, status.label("status"),
+        )
+        if state != "all":
+            filtered = filtered.where(status == state)
+        total = session.scalar(select(func.count()).select_from(filtered.subquery())) or 0
+        rows = session.execute(
+            filtered.order_by(grouped.c.document_id).offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+        return HistoryPage[RollbackCandidateView](
+            items=[RollbackCandidateView.model_validate(row._mapping) for row in rows],
+            **_pagination(page, page_size, total),
+        )
 
 
 async def preview_row(
@@ -77,11 +173,16 @@ async def preview_row(
             else PreviewRow(document_id=document_id, changes=[], status=ResultStatus.UNCHANGED)
         )
         refs = {change.field.key: change.field for change in original.changes}
-        for operation in session.scalars(
+        originals = list(session.scalars(
             select(JobOperation)
             .where(JobOperation.job_id == job_id, JobOperation.document_id == document_id)
             .order_by(JobOperation.id)
-        ):
+        ))
+        blocked = blocked_operations(session, [operation.id for operation in originals])
+        for operation in originals:
+            if operation.id in blocked:
+                excluded[operation.field_key] = blocked[operation.id]
+                continue
             if not rollback_candidate(operation) or operation.field_key not in refs:
                 excluded[operation.field_key] = (
                     "MANUAL_REVIEW"
@@ -111,11 +212,11 @@ async def preview_row(
         excluded_operations=excluded,
     )
     if not operations:
-        if "MANUAL_REVIEW" in excluded.values():
+        if any(reason in excluded.values() for reason in ("MANUAL_REVIEW", "ROLLBACK_IN_PROGRESS")):
             row.status = ResultStatus.ERROR
             row.issue = TransformationIssue(
                 code="MANUAL_REVIEW",
-                message="Original write outcome is unknown; automatic rollback is forbidden.",
+                message="A prior restoration is uncertain or active; review it manually.",
             )
         return row
     spec = Transformation.model_validate(
@@ -167,6 +268,8 @@ def create_rollback(
     with session_scope() as session:
         session.execute(text("BEGIN IMMEDIATE"))
         require_original(session, job_id, owner_id)
+        if active_rollback(session, job_id):
+            raise stale("Finish or resume the previous rollback before starting another.")
         preview = session.get(Preview, request.preview_id)
         if (
             preview is None
@@ -215,9 +318,17 @@ def create_rollback(
             ).all()
             if not batch:
                 break
-            for staged in batch:
+            prepared = [
+                (staged, PreviewRow.model_validate_json(staged.result_json)) for staged in batch
+            ]
+            original_ids = [
+                original_id for _, row in prepared for original_id in row.rollback_operation_ids
+            ]
+            blocked: dict[int, str] = {}
+            for offset in range(0, len(original_ids), 500):
+                blocked.update(blocked_operations(session, original_ids[offset:offset + 500]))
+            for staged, row in prepared:
                 copied += 1
-                row = PreviewRow.model_validate_json(staged.result_json)
                 if (
                     row.rollback_spec
                     and any(
@@ -258,6 +369,8 @@ def create_rollback(
                     assert operation is not None
                     if not rollback_candidate(operation) or operation.job_id != job_id:
                         raise stale("Original operation no longer has certain provenance.")
+                    if original_id in blocked:
+                        raise stale("A candidate was restored or became uncertain since preview.")
                     session.add(
                         JobOperation(
                             job_id=job.id,

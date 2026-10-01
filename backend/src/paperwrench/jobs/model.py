@@ -31,6 +31,13 @@ class CreateRollback(BaseModel):
     acknowledge_external_race: bool = False
 
 
+class RollbackCounts(BaseModel):
+    selected: int
+    restored: int
+    skipped: int
+    conflicted: int
+
+
 class JobView(BaseModel):
     id: int
     rule_id: int | None = None
@@ -39,6 +46,7 @@ class JobView(BaseModel):
     type: JobType
     rollback_of_job_id: int | None
     rollback_job_id: int | None
+    rollback_counts: RollbackCounts | None = None
     title: str
     status: JobStatus
     total: int
@@ -65,6 +73,12 @@ class TargetView(BaseModel):
     attempts: int
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class RollbackCandidateView(BaseModel):
+    document_id: int
+    title: str | None
+    status: Literal["available", "restored", "in_progress", "manual_review"]
 
 
 class OperationView(BaseModel):

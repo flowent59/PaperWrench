@@ -28,6 +28,10 @@ function setup(path = '/jobs/1', value = job) {
     }])))
     if (url.includes('/targets?')) return new Response(JSON.stringify(envelope([target], 100)))
     if (url.includes('/jobs?')) return new Response(JSON.stringify(envelope([value], 100)))
+    if (url.includes('/rollbacks?')) return new Response(JSON.stringify(envelope(value.rollback_job_id ? [{
+      ...value, id: 2, type: 'rollback', rollback_of_job_id: value.id,
+      rollback_counts: { selected: 2, restored: 1, skipped: 0, conflicted: 1 },
+    }] : [])))
     if (url.endsWith('/resume') && init?.method === 'POST') value = { ...value, status: 'running', resumable: false }
     return new Response(JSON.stringify(value))
   })
@@ -84,8 +88,12 @@ describe('durable History', () => {
 
   it('links original and rollback History and never offers recursive rollback', async () => {
     const first = setup('/jobs/1', { ...job, rollback_job_id: 2 })
-    expect(await screen.findByRole('link', { name: 'Rollback Job #2' })).toHaveAttribute('href', '/jobs/2')
-    expect(screen.queryByRole('button', { name: 'Preview rollback' })).not.toBeInTheDocument()
+    expect((await screen.findAllByRole('link', { name: 'Rollback Job #2' }))[0]).toHaveAttribute('href', '/jobs/2')
+    const history = screen.getByRole('region', { name: messages.rollback.history })
+    await within(history).findByRole('link', { name: 'Rollback Job #2' })
+    expect(history).toHaveTextContent(/Selected: 2/)
+    expect(history).toHaveTextContent(/Conflicted: 1/)
+    expect(screen.getByRole('button', { name: 'Preview rollback' })).toBeInTheDocument()
     first.view.unmount()
     setup('/jobs/2', { ...job, id: 2, type: 'rollback', rollback_of_job_id: 1 })
     expect(await screen.findByRole('link', { name: 'Original Job #1' })).toHaveAttribute('href', '/jobs/1')

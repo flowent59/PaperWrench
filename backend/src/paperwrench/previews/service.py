@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy import true
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -150,6 +151,7 @@ class PreviewService:
         client: PaperlessClient,
         registry: MetadataRegistry,
         *, rollback_of_job_id: int | None = None,
+        rollback_document_ids: list[int] | None = None,
         owner_id: int | None = None,
     ) -> CreatedPreview:
         if self._building:
@@ -163,7 +165,8 @@ class PreviewService:
         try:
             async with asyncio.timeout(TIMEOUT_SECONDS):
                 return await self._build(
-                    preview_id, spec, client, registry, rollback_of_job_id, owner_id
+                    preview_id, spec, client, registry, rollback_of_job_id, owner_id,
+                    rollback_document_ids,
                 )
         except BaseException as exc:
             with session_scope() as session:
@@ -184,6 +187,7 @@ class PreviewService:
         registry: MetadataRegistry,
         rollback_of_job_id: int | None = None,
         owner_id: int | None = None,
+        rollback_document_ids: list[int] | None = None,
     ) -> CreatedPreview:
         # The existing query adapter is re-used verbatim. Import after router
         # assembly to avoid the api.v1 package's eager router imports.
@@ -211,6 +215,13 @@ class PreviewService:
 
             with session_scope() as session:
                 require_original(session, rollback_of_job_id, owner_id)
+                if rollback_document_ids is not None:
+                    found = set(session.scalars(select(JobTarget.document_id).where(
+                        JobTarget.job_id == rollback_of_job_id,
+                        JobTarget.document_id.in_(rollback_document_ids),
+                    )))
+                    if found != set(rollback_document_ids):
+                        raise stale("Selected documents do not all belong to this Job.")
             await registry.refresh(MetadataKind.CUSTOM_FIELD)
         fields = {field.id: field for field in await registry.all_custom_fields()}
         params: dict[str, Any] = {}
@@ -220,7 +231,10 @@ class PreviewService:
                 registry=registry,
             )
         if rollback_of_job_id is not None:
-            selection = fingerprint({"rollback_of_job_id": rollback_of_job_id})
+            selection = fingerprint({
+                "rollback_of_job_id": rollback_of_job_id,
+                "document_ids": rollback_document_ids,
+            })
             spec_hash = fingerprint({"rollback": selection, "version": PREVIEW_VERSION})
         else:
             assert spec is not None
@@ -285,6 +299,9 @@ class PreviewService:
                         JobTarget.document_id, JobTarget.position
                     ).where(
                         JobTarget.job_id == rollback_of_job_id, JobTarget.position > position
+                    ).where(
+                        JobTarget.document_id.in_(rollback_document_ids)
+                        if rollback_document_ids is not None else true()
                     ).order_by(JobTarget.position).limit(PAGE_SIZE)).all()
                 if not batch_targets:
                     break

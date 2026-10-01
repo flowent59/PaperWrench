@@ -34,11 +34,15 @@ in the rollback Job; they are never scheduled later merely because state changes
 Confirmation validates capability, expiry, version, fingerprints, original Job
 and race acknowledgement. `BEGIN IMMEDIATE` serializes token consumption,
 original-Job validation and bounded target/operation adoption in one transaction.
-**One rollback Job per original Job**: duplicate tokens, concurrent requests and
-distinct previews cannot create another. Replays return 409; inspect the linked
-Job after a lost response. Only explicit resume of its unsent work is available.
-This conservative rule also applies after failed/partial rollback; retrying
-terminal fields is outside this milestone.
+For M9, only one rollback Job per original Job was allowed. Issue #39 extends
+this decision: multiple sequential rollback Jobs may target distinct documents
+or proven fields still eligible after an earlier attempt. An active or interrupted
+rollback blocks another confirmation for the same original Job. Successful
+restoration and ambiguous outcomes are tracked through
+`rollback_of_operation_id`; they cannot be scheduled again. Confirmation
+rechecks those links under `BEGIN IMMEDIATE`, so two previews cannot adopt the
+same candidate concurrently. Reusing a token remains a 409. Inspect linked
+History after a lost response, and resume unsent work before attempting more.
 
 ## Execution and evidence
 

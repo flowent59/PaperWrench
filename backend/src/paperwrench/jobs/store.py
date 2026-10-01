@@ -35,6 +35,7 @@ from paperwrench.jobs.model import CreateJob
 from paperwrench.jobs.model import HistoryPage
 from paperwrench.jobs.model import JobView
 from paperwrench.jobs.model import OperationView
+from paperwrench.jobs.model import RollbackCounts
 from paperwrench.jobs.model import TargetView
 from paperwrench.previews.model import PAGE_SIZE
 from paperwrench.previews.model import PreviewRow
@@ -282,7 +283,16 @@ def _view(session: Session, job: Job) -> JobView:
         rule_name=job.rule_name,
         type=job.type,
         rollback_of_job_id=job.rollback_of_job_id,
-        rollback_job_id=session.scalar(select(Job.id).where(Job.rollback_of_job_id == job.id)),
+        rollback_job_id=session.scalar(
+            select(Job.id).where(Job.rollback_of_job_id == job.id).order_by(Job.id.desc())
+        ),
+        rollback_counts=RollbackCounts(
+            selected=job.total_count,
+            restored=counts[TargetStatus.SUCCEEDED],
+            conflicted=counts[TargetStatus.CONFLICT],
+            skipped=job.total_count - sum(counts[s] for s in ACTIVE_TARGETS)
+            - counts[TargetStatus.SUCCEEDED] - counts[TargetStatus.CONFLICT],
+        ) if job.type == JobType.ROLLBACK else None,
         title=job.title,
         status=job.status,
         total=job.total_count,
@@ -302,6 +312,24 @@ def _view(session: Session, job: Job) -> JobView:
 def job_view(job_id: int, owner_id: int | object | None = UNSCOPED_OWNER) -> JobView:
     with session_scope() as session:
         return _view(session, require_job(session, job_id, owner_id))
+
+
+def rollback_page(
+    job_id: int, page: int, page_size: int,
+    owner_id: int | object | None = UNSCOPED_OWNER,
+) -> HistoryPage[JobView]:
+    _pagination(page, page_size, 0)
+    with session_scope() as session:
+        require_job(session, job_id, owner_id)
+        query = select(Job).where(Job.rollback_of_job_id == job_id)
+        total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        rows = session.scalars(
+            query.order_by(Job.id.desc()).offset((page - 1) * page_size).limit(page_size)
+        ).all()
+        return HistoryPage[JobView](
+            items=[_view(session, row) for row in rows],
+            **_pagination(page, page_size, total),
+        )
 
 
 def _pagination(page: int, page_size: int, total: int) -> dict[str, int]:
