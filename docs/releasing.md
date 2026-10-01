@@ -16,8 +16,13 @@ start after the repository's initial commit, so the MVP's Conventional Commits
 were included. The generated `chore(main): release 0.1.0` PR has been merged;
 the tag and draft GitHub Release exist, while image publication is pending.
 
-Use Conventional Commit titles for all PRs, because squash merges put the PR
-title on `main`. Examples: `feat: add a view`, `fix(api): handle a 403`,
+Use squash merging for all PRs. GitHub repository settings enforce this because
+Release Please can count both a feature commit and its merge commit, creating
+duplicate changelog entries. The release workflow checks unreleased history
+before running Release Please and fails if it finds a merge commit containing a
+releasable Conventional Commit. A regression fixture covers both a merge commit
+and the supported squash-commit shape. Squash merges put the PR title on `main`,
+so use Conventional Commit titles for all PRs. Examples: `feat: add a view`, `fix(api): handle a 403`,
 `docs: explain backup`, `feat!: change an API contract`. Explain breaking
 changes in a `BREAKING CHANGE:` footer. CI rejects titles outside the
 convention. For the 0.x series, breaking changes advance the minor version,
@@ -85,7 +90,8 @@ before its anonymous-pull check can pass.
    to run `googleapis/release-please-action`, Docker's official actions and
    the existing CI actions if the repository uses an action allowlist.
 3. Protect `main` with the existing CI required checks and review the generated
-   release PR. Prefer squash merges so PR titles become Conventional Commits.
+   release PR. Allow squash merging only; merge commits and rebase merges are
+   disabled to keep Release Please's changelog entries unique.
 4. The first GHCR package may initially be private. Set
    `flowent59/paperwrench` to public in the package settings after its first
    upload, then rerun the release workflow. That workflow checks anonymous
