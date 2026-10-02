@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/flowent59/PaperWrench/compare/v0.5.0...v0.6.0) (2026-10-02)
+
+
+### Features
+
+* **auth:** remember Paperless tokens with local accounts ([#84](https://github.com/flowent59/PaperWrench/issues/84)) ([75d73d9](https://github.com/flowent59/PaperWrench/commit/75d73d934fe521f2fc6d56fd56f78fb6e5cad9e0))
+
+
+### Bug Fixes
+
+* **release:** prevent duplicate notes from merge commits ([#82](https://github.com/flowent59/PaperWrench/issues/82)) ([abebb9f](https://github.com/flowent59/PaperWrench/commit/abebb9fdcad2b8964ee995c0c003a4aea828681d))
+
 ## [0.5.0](https://github.com/flowent59/PaperWrench/compare/v0.4.0...v0.5.0) (2026-10-01)
 
 
