@@ -6,8 +6,8 @@ Configuration is environment-driven (see ``.env.example``). Two prefixes exist:
 * ``PAPERWRENCH_*`` - PaperWrench's own behaviour.
 
 Legacy shared-token fields remain parseable for downgrade compatibility but
-normal operation uses per-user server-side sessions. Tokens must never be
-persisted to SQLite, returned by an endpoint, or logged. See ADR-0016.
+normal operation uses per-user server-side sessions. Remembered tokens are
+encrypted with an operator-supplied key. Never return or log credentials.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Annotated
 from typing import Literal
 
+from cryptography.fernet import Fernet
 from pydantic import Field
 from pydantic import SecretStr
 from pydantic import field_validator
@@ -49,6 +50,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        hide_input_in_errors=True,
     )
 
     # -- Paperless connection ------------------------------------------------
@@ -134,6 +136,13 @@ class Settings(BaseSettings):
         validation_alias="PAPERWRENCH_SESSION_COOKIE_SECURE",
         description="Force Secure cookies; unset selects it from the request scheme.",
     )
+    remember_tokens: bool = Field(default=True, validation_alias="PAPERWRENCH_REMEMBER_TOKENS")
+    credential_key: SecretStr = Field(
+        default=SecretStr(""), validation_alias="PAPERWRENCH_CREDENTIAL_KEY"
+    )
+    credential_key_file: Path | None = Field(
+        default=None, validation_alias="PAPERWRENCH_CREDENTIAL_KEY_FILE"
+    )
 
     # Directory containing the built SPA. Defaults to the packaged
     # `paperwrench/static` produced by `vite build`, which is what the
@@ -163,6 +172,28 @@ class Settings(BaseSettings):
         return self
 
     # -- Derived -------------------------------------------------------------
+    @model_validator(mode="after")
+    def _load_credential_key(self) -> Settings:
+        key = self.credential_key.get_secret_value()
+        if self.credential_key_file is not None:
+            try:
+                key = self.credential_key_file.read_text(encoding="utf-8").strip()
+            except OSError:
+                raise ValueError("Cannot read PAPERWRENCH_CREDENTIAL_KEY_FILE") from None
+            if not key:
+                raise ValueError("PAPERWRENCH_CREDENTIAL_KEY_FILE must not be empty")
+        if key:
+            try:
+                Fernet(key.encode("ascii"))
+            except (ValueError, UnicodeError):
+                raise ValueError("PAPERWRENCH_CREDENTIAL_KEY must be a Fernet key") from None
+        object.__setattr__(self, "credential_key", SecretStr(key))
+        return self
+
+    @property
+    def credential_storage_available(self) -> bool:
+        return self.remember_tokens and bool(self.credential_key.get_secret_value())
+
     @field_validator("auto_resume_jobs")
     @classmethod
     def _manual_resume_only(cls, value: bool) -> bool:

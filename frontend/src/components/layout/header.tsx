@@ -1,4 +1,5 @@
 import { LogOut, Moon, Sun } from 'lucide-react'
+import { AccountSettings } from '@/account-settings'
 
 import { useHealth, usePaperlessStatus } from '@/api/queries'
 import { Badge } from '@/components/ui/badge'
@@ -64,6 +65,7 @@ export function Header() {
 
       <div className="flex items-center gap-3">
         <span className="hidden text-sm text-muted-foreground md:inline">{session.display_name}</span>
+        <AccountSettings />
         <select aria-label={messages.locale.language}
           className="rounded border border-input bg-background px-2 py-1 text-xs"
           onChange={(event) => void changeLocale(event.target.value as Locale)} value={locale}>

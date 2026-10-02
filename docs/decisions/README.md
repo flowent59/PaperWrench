@@ -26,6 +26,7 @@ edited: a new record supersedes it, and the old one is marked accordingly.
 | [0014](0014-durable-jobs-and-write-provenance.md) | Durable Jobs, target snapshot, provenance and recovery | Accepted (M8); qualifies 0003/0005/0006/0012/0013 |
 | [0015](0015-safe-rollback-jobs.md) | Safe linked rollback Jobs, review and grouped conflicts | Accepted (M9) |
 | [0018](0018-per-user-interface-locale.md) | Interface locale is a per-user presentation preference | Accepted |
+| [0019](0019-remembered-credentials.md) | Optional local accounts and encrypted remembered credentials | Accepted; qualifies 0016 |
 
 ## Format
 

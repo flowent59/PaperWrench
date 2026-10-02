@@ -28,6 +28,8 @@ dependencies = [
   "structlog>=24.1",
   "python-multipart>=0.0.9",
   "tzdata>=2025.2",
+  "cryptography>=49.0.0",
+  "argon2-cffi>=25.1.0",
 ]
 
 [project.optional-dependencies]

@@ -2,9 +2,8 @@
  * Typed API client.
  *
  * Single-origin by design (ADR-0001): all requests are relative, so no base
- * URL, no CORS and no credentials handling in the browser. The Paperless token
- * lives only in the backend process and must never appear in a frontend
- * request.
+ * URL or CORS. Tokens/passwords are sent only during authentication or explicit
+ * credential replacement. They are never persisted in browser storage.
  *
  * Every backend error uses the same envelope, so parsing happens in exactly
  * one place.
@@ -147,7 +146,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
 
   if (!response.ok) {
-    if (response.status === 401 && path !== '/auth/login') {
+    if (response.status === 401 && !['/auth/login', '/auth/password-login'].includes(path)) {
       clearBrowserSession()
       window.dispatchEvent(new Event('paperwrench:unauthorized'))
     }
@@ -180,10 +179,22 @@ async function apiDownload(path: string, init: RequestInit): Promise<Blob> {
 }
 
 export const authApi = {
+  options: () => apiFetch<{ remember_available: boolean }>('/auth/options'),
   me: async () => rememberSession(await apiFetch<AuthSession>('/auth/me')),
-  login: async (token: string, locale: 'en' | 'fr') => rememberSession(await apiFetch<AuthSession>('/auth/login', {
-    method: 'POST', body: JSON.stringify({ token, locale }),
+  login: async (token: string, locale: 'en' | 'fr', enrollment?: { remember: boolean; password?: string }) => rememberSession(await apiFetch<AuthSession>('/auth/login', {
+    method: 'POST', body: JSON.stringify({ token, locale, ...enrollment }),
   })),
+  passwordLogin: async (username: string, password: string) => rememberSession(await apiFetch<AuthSession>('/auth/password-login', {
+    method: 'POST', body: JSON.stringify({ username, password }),
+  })),
+  replaceCredentials: async (token: string, password: string) => rememberSession(await apiFetch<AuthSession>('/auth/credentials', {
+    method: 'PUT', body: JSON.stringify({ token, password }),
+  })),
+  deleteCredentials: async () => {
+    await apiFetch<void>('/auth/credentials', { method: 'DELETE' })
+    clearBrowserSession()
+    window.dispatchEvent(new Event('paperwrench:unauthorized'))
+  },
   updateLocale: (locale: 'en' | 'fr') => apiFetch<{ locale: 'en' | 'fr' }>('/auth/preferences', {
     method: 'PATCH', body: JSON.stringify({ locale }),
   }),

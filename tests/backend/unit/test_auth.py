@@ -46,6 +46,7 @@ def test_login_normalizes_the_real_paperless_321_profile_without_disclosure(
     unauthenticated_client: TestClient,
 ) -> None:
     token = "paperless-321-profile-token-secret"
+    respx.get("http://paperless.test/api/ui_settings/").respond(403)
     respx.get("http://paperless.test/api/profile/").mock(
         return_value=httpx.Response(
             200,

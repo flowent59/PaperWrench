@@ -263,6 +263,21 @@ docs/decisions/    ADRs
 
 ## Conventions
 
+Authentication regression checks for remembered credentials (issue #64):
+
+```sh
+pytest tests/backend/unit/test_auth.py tests/backend/unit/test_local_credentials.py tests/backend/unit/test_release_migrations.py
+cd frontend && npm test -- src/auth.test.tsx src/api/client.test.ts
+```
+
+The guarded `tests/backend/live/test_local_credentials_live.py` creates disposable
+regular Paperless users, checks UI identity permission, enrollment and password
+login across a PaperWrench restart, rotates their upstream tokens, verifies
+revocation/recovery, and deletes the users afterwards. It requires the live
+opt-in, an allowlisted sandbox and a verified `PAPERWRENCH_EXPECTED_PAPERLESS_VERSION`,
+like the rest of the live suite. Both tests passed against the disposable
+Paperless 3.2.1 sandbox; this does not establish compatibility with every release.
+
 Code, identifiers, endpoints, commits and public documentation are in English.
 Application *data* is whatever the user's library contains, which for the
 reference dataset is French — accents, spaces in custom field names, euro

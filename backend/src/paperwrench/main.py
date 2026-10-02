@@ -28,6 +28,7 @@ from starlette.responses import Response
 from paperwrench import __version__
 from paperwrench.api.v1 import api_router
 from paperwrench.auth import SessionStore
+from paperwrench.auth.credentials import CredentialVault
 from paperwrench.config import Settings
 from paperwrench.config import get_settings
 from paperwrench.db.engine import dispose_engine
@@ -121,6 +122,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
+        if request.url.path.startswith("/api/v1/auth/"):
+            response.headers["Cache-Control"] = "no-store"
         return response
 
 
@@ -240,6 +243,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Each login owns a server-side Paperless client and metadata cache.
         # No deployment-wide credential is constructed or required.
         app.state.sessions = SessionStore(settings)
+        app.state.credential_vault = CredentialVault(settings)
         cleanup_previews(startup=True)
         app.state.previews = PreviewService()
         recover()

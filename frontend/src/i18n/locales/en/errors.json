@@ -13,7 +13,7 @@
     "PAPERLESS_INCOMPATIBLE": "This Paperless-ngx API version is not supported.",
     "PAPERLESS_ERROR": "Paperless-ngx rejected the request.",
     "AUTH_REQUIRED": "Sign in to continue.",
-    "AUTH_INVALID_CREDENTIALS": "The Paperless-ngx token is invalid.",
+    "AUTH_INVALID_CREDENTIALS": "Sign-in failed. Check your credentials or supply a new valid Paperless token.",
     "AUTH_SESSION_EXPIRED": "Your session expired. Sign in again.",
     "AUTH_SESSION_REVOKED": "Your session was revoked. Sign in again.",
     "CSRF_FAILED": "The security token is invalid. Reload and try again.",
@@ -64,6 +64,10 @@
     "ROLLBACK_INVALID": "This document cannot be restored automatically.",
     "INTERNAL_FAILURE": "The job failed because of an internal error.",
     "READBACK_DISAGREES": "The stored document differs from the confirmed write response.",
-    "PROCESS_INTERRUPTED": "The process stopped while the write outcome was unknown."
+    "PROCESS_INTERRUPTED": "The process stopped while the write outcome was unknown.",
+    "AUTH_STORAGE_UNAVAILABLE": "Remembered credentials are unavailable on this server. Use a Paperless token.",
+    "AUTH_IDENTITY_UNSUPPORTED": "Paperless could not provide a stable user ID and username. Check UI settings view permission, or uncheck “Remember my Paperless token” to sign in.",
+    "AUTH_IDENTITY_CONFLICT": "These credentials belong to a different Paperless identity or instance.",
+    "AUTH_RATE_LIMITED": "Too many sign-in attempts. Try again in a minute."
   }
 }

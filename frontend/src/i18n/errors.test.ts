@@ -14,7 +14,7 @@ describe('coded error translations', () => {
       message: '<script>server text must never be rendered</script>',
     })
 
-    expect(errorMessage(error)).toBe('The Paperless-ngx token is invalid.')
+    expect(errorMessage(error)).toBe('Sign-in failed. Check your credentials or supply a new valid Paperless token.')
     expect(errorMessage(error)).not.toContain('server text')
   })
 

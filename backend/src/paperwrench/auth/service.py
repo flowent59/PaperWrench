@@ -1,9 +1,8 @@
 """Short-lived server-side sessions backed by a user's Paperless token.
 
-The opaque cookie is only a lookup key. Paperless credentials and clients stay
-in process memory and disappear on logout, expiry, or process restart. This is
-an intentional security/availability trade-off: no recoverable credential is
-written to SQLite, so durable work must be resumed by an authenticated user.
+The opaque cookie is only a lookup key. Sessions and their clients stay in
+process memory. Optional encrypted credentials are managed separately; they
+never restore sessions or resume durable work automatically.
 """
 
 from __future__ import annotations
@@ -44,6 +43,9 @@ class AuthSession:
     client: PaperlessClient
     registry: MetadataRegistry
     dashboard_cache: DashboardCache
+    identity_verified: bool = False
+    upstream_user_id: int | None = None
+    token_owner_id: int | None = None
 
 
 class SessionStore:
@@ -76,6 +78,9 @@ class SessionStore:
                 status_code=401,
                 code=ErrorCode.AUTH_INVALID_CREDENTIALS,
             ) from exc
+        except BaseException:
+            await client.aclose()
+            raise
         try:
             user_id = int(profile["id"])
             username = str(profile["username"])
@@ -100,6 +105,9 @@ class SessionStore:
             client=client,
             registry=MetadataRegistry(client),
             dashboard_cache=DashboardCache(),
+            identity_verified=profile.get("identity_verified") is True,
+            upstream_user_id=profile.get("upstream_user_id"),
+            token_owner_id=user_id,
         )
         async with self._lock:
             self._sessions[record.session_id] = record
@@ -122,7 +130,15 @@ class SessionStore:
             )
         if (now - record.validated_at).total_seconds() >= self.settings.session_revalidate_seconds:
             try:
-                await record.client.get_profile()
+                profile = await record.client.get_profile()
+                if profile["id"] != (record.token_owner_id or record.paperless_user_id):
+                    raise PaperlessUnauthorizedError("Paperless identity changed.")
+                if (
+                    record.upstream_user_id is not None
+                    and profile.get("upstream_user_id") is not None
+                    and profile["upstream_user_id"] != record.upstream_user_id
+                ):
+                    raise PaperlessUnauthorizedError("Paperless identity changed.")
             except PaperlessUnauthorizedError as exc:
                 await self.delete(session_id)
                 raise PaperWrenchError(
@@ -145,6 +161,16 @@ class SessionStore:
         async with self._lock:
             records = list(self._sessions.values())
             self._sessions.clear()
+        await asyncio.gather(*(record.client.invalidate_credentials() for record in records))
+
+    async def delete_owner(self, owner_id: int, *, except_id: str | None = None) -> None:
+        """Invalidate prior sessions after a remembered credential is changed."""
+        async with self._lock:
+            records = [
+                self._sessions.pop(key)
+                for key, value in list(self._sessions.items())
+                if value.paperless_user_id == owner_id and key != except_id
+            ]
         await asyncio.gather(*(record.client.invalidate_credentials() for record in records))
 
     async def cleanup_expired(self) -> None:

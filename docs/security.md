@@ -1,7 +1,7 @@
 # MVP security and accessibility review
 
 PaperWrench authenticates users with their own Paperless API token. The token is
-validated through Paperless `/api/profile/`, retained only in process memory,
+validated through Paperless `/api/profile/`, retained in session memory,
 and replaced in the browser by an opaque `HttpOnly`, `SameSite=Strict` session
 cookie. Sessions expire after eight hours by default, are revoked on logout or
 restart, and revalidate the upstream token every five minutes. State-changing
@@ -31,7 +31,17 @@ automatic mutation retry. The Paperless GET/PATCH race remains: pause external
 writers, particularly for replacement-style custom-field writes. Readback cannot
 recover overwritten external data or prove authorship after a lost response.
 
-Credentials are not recoverable after restart. Durable jobs remain interrupted
+Optional local accounts store authenticated Fernet ciphertext and an Argon2id
+password verifier in SQLite (64 MiB, three iterations, four lanes, unique salt).
+The encryption key comes from a separate environment setting or Docker secret,
+never SQLite. The encrypted payload binds the token to the owner ID, username and
+Paperless URL. Password work runs off the event loop with bounded concurrency;
+unknown users undergo a dummy verification and receive the same error as wrong
+passwords. Authentication requests are rate limited and responses use `no-store`.
+See [deployment.md](deployment.md#remembered-credentials) for setup, recovery and
+key-loss/host-compromise limits, and [ADR-0019](decisions/0019-remembered-credentials.md).
+
+Sessions are not recoverable after restart. Durable jobs remain interrupted
 until their owner authenticates and explicitly resumes them. The container runs
 non-root with a read-only root filesystem in Compose. Keep
 `/data` and backups private; preview expiry is logical deletion, not secure erasure.

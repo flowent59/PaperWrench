@@ -29,6 +29,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 from typing import Self
+from typing import TypeGuard
 from urllib.parse import urlsplit
 
 import httpx
@@ -41,6 +42,7 @@ from paperwrench.errors import PaperlessIncompatibleError
 from paperwrench.errors import PaperlessNotConfiguredError
 from paperwrench.errors import PaperlessUnauthorizedError
 from paperwrench.errors import PaperlessUnreachableError
+from paperwrench.errors import PaperWrenchError
 from paperwrench.logging import register_secret
 from paperwrench.paperless.errors import PaperlessApiError
 from paperwrench.paperless.errors import PaperlessConflictError
@@ -63,6 +65,17 @@ from paperwrench.paperless.mutations import core_payload
 from paperwrench.paperless.mutations import revision
 
 logger = structlog.get_logger(__name__)
+
+
+def _valid_identity(value: object) -> TypeGuard[dict[str, Any]]:
+    return (
+        isinstance(value, dict)
+        and type(value.get("id")) is int
+        and 0 < value["id"] < (1 << 63)
+        and isinstance(value.get("username"), str)
+        and bool(value["username"].strip())
+        and len(value["username"]) <= 255
+    )
 
 # `GET /api/` 302-redirects to /api/schema/view/ on 3.1.2 (VERIFIED_LIVE), so
 # the probe uses a cheap authenticated list instead.
@@ -373,11 +386,10 @@ class PaperlessClient:
         """Return a normalized identity for the authenticated Paperless user.
 
         Paperless documents ``/api/profile/`` as the self-service endpoint,
-        available without permission to enumerate other users. 3.2.1 does not
-        expose a user ID or username there, so its per-user API token is
-        reduced to a signed-SQLite-safe fingerprint. The token itself and the
-        raw profile (which contains ``auth_token`` on 3.2.1) never leave this
-        boundary.
+        available without permission to enumerate other users. If identity is
+        absent, read the authenticated user's identity from UI settings. Keep
+        the historical owner key separate so existing data remains reachable.
+        Raw upstream payloads (including auth_token) never leave this boundary.
         """
         response = await self._request("GET", "/api/profile/")
         payload = response.json()
@@ -395,9 +407,30 @@ class PaperlessClient:
         email = str(payload.get("email") or "").strip()
         display_name = " ".join(part for part in (first_name, last_name) if part)
         username = str(payload.get("username") or email or display_name or "Paperless user")
+        identity = payload
+        if not _valid_identity(identity):
+            try:
+                ui_response = await self._request("GET", "/api/ui_settings/")
+                ui_payload = ui_response.json()
+                candidate = ui_payload.get("user") if isinstance(ui_payload, dict) else None
+                if _valid_identity(candidate) and (
+                    "id" not in payload or payload["id"] == candidate["id"]
+                ):
+                    identity = candidate
+            except PaperlessUnauthorizedError:
+                raise
+            except (PaperWrenchError, ValueError):
+                # Missing UI permission/endpoint must not break token-only login.
+                # Enrollment requires a verified identity and fails explicitly.
+                pass
+        verified = _valid_identity(identity)
+        if verified:
+            username = identity["username"]
         return {
             "id": user_id,
             "username": username,
+            "identity_verified": verified,
+            "upstream_user_id": identity["id"] if verified else None,
             "first_name": first_name,
             "last_name": last_name,
         }

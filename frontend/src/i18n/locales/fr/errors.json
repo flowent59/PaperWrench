@@ -13,7 +13,7 @@
     "PAPERLESS_INCOMPATIBLE": "Cette version de l'API Paperless-ngx n'est pas prise en charge.",
     "PAPERLESS_ERROR": "Paperless-ngx a refusé la requête.",
     "AUTH_REQUIRED": "Connectez-vous pour continuer.",
-    "AUTH_INVALID_CREDENTIALS": "Le jeton Paperless-ngx n'est pas valide.",
+    "AUTH_INVALID_CREDENTIALS": "Connexion refusée. Vérifiez vos identifiants ou fournissez un nouveau jeton Paperless valide.",
     "AUTH_SESSION_EXPIRED": "Votre session a expiré. Reconnectez-vous.",
     "AUTH_SESSION_REVOKED": "Votre session a été révoquée. Reconnectez-vous.",
     "CSRF_FAILED": "Le jeton de sécurité n'est pas valide. Rechargez la page et réessayez.",
@@ -64,6 +64,10 @@
     "ROLLBACK_INVALID": "Ce document ne peut pas être restauré automatiquement.",
     "INTERNAL_FAILURE": "La tâche a échoué à cause d'une erreur interne.",
     "READBACK_DISAGREES": "Le document enregistré diffère de la réponse d'écriture confirmée.",
-    "PROCESS_INTERRUPTED": "Le processus s'est arrêté alors que le résultat de l'écriture était inconnu."
+    "PROCESS_INTERRUPTED": "Le processus s'est arrêté alors que le résultat de l'écriture était inconnu.",
+    "AUTH_STORAGE_UNAVAILABLE": "La mémorisation est indisponible sur ce serveur. Utilisez un jeton Paperless.",
+    "AUTH_IDENTITY_UNSUPPORTED": "Paperless n’a pas fourni d’identité stable. Vérifiez la permission de consultation des paramètres d’interface, ou décochez « Mémoriser mon jeton Paperless » pour vous connecter.",
+    "AUTH_IDENTITY_CONFLICT": "Ces identifiants appartiennent à une autre identité ou instance Paperless.",
+    "AUTH_RATE_LIMITED": "Trop de tentatives de connexion. Réessayez dans une minute."
   }
 }

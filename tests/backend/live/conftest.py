@@ -17,6 +17,7 @@ library anyone cares about.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from collections.abc import Iterator
@@ -210,6 +211,27 @@ async def raw_live(live_settings: Settings) -> AsyncIterator[httpx.AsyncClient]:
         yield client
 
 
+async def _obtain_test_token(
+    client: httpx.AsyncClient, username: str, password: str
+) -> str:
+    """Respect the sandbox's login throttle, with at most two bounded waits."""
+    for attempt in range(3):
+        response = await client.post(
+            "/api/token/", data={"username": username, "password": password}
+        )
+        if response.status_code == 429 and attempt < 2:
+            try:
+                delay = int(response.headers.get("Retry-After", ""))
+            except ValueError:
+                delay = -1
+            if 0 <= delay <= 120:
+                await asyncio.sleep(delay)
+                continue
+        response.raise_for_status()
+        return str(response.json()["token"])
+    raise AssertionError("Token retry loop exhausted without returning or raising")
+
+
 @pytest_asyncio.fixture
 async def restricted_user(
     raw_live: httpx.AsyncClient, live_url: str
@@ -243,14 +265,9 @@ async def restricted_user(
     created.raise_for_status()
     user_id = int(created.json()["id"])
 
-    async with httpx.AsyncClient(base_url=live_url, timeout=10.0) as anon_client:
-        token_response = await anon_client.post(
-            "/api/token/", data={"username": username, "password": password}
-        )
-    token_response.raise_for_status()
-    token = str(token_response.json()["token"])
-
     try:
+        async with httpx.AsyncClient(base_url=live_url, timeout=10.0) as anon_client:
+            token = await _obtain_test_token(anon_client, username, password)
         yield {"id": user_id, "token": token, "username": username}
     finally:
         await raw_live.delete(f"/api/users/{user_id}/")
@@ -309,11 +326,7 @@ async def multi_user_library(
             user_id = int(created.json()["id"])
             user_ids.append(user_id)
             async with httpx.AsyncClient(base_url=live_url, timeout=10.0) as anonymous:
-                token_response = await anonymous.post(
-                    "/api/token/", data={"username": username, "password": password}
-                )
-            token_response.raise_for_status()
-            token = str(token_response.json()["token"])
+                token = await _obtain_test_token(anonymous, username, password)
 
             title = f"PaperWrench {label} private {marker}"
             upload = await raw_live.post(
