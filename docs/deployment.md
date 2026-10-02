@@ -111,6 +111,103 @@ destroys the session and the user signs in again. The relevant settings are:
 
 ## Remembered credentials
 
+### Enable saved-token sign-in
+
+Saved-token sign-in is available when a master key is configured and
+`PAPERWRENCH_REMEMBER_TOKENS` is `true` (the default). Without a key, users can
+still sign in with a Paperless token, but the remember option is unavailable.
+On Docker Compose, the shortest setup is:
+
+1. Generate a Fernet key once. Docker can run the generator from the same
+   PaperWrench release image:
+
+   ```sh
+   docker run --rm --entrypoint python ghcr.io/flowent59/paperwrench:0.6.0 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+   ```
+
+2. In the Compose project's ignored `.env` file, enable the option and set the
+   generated value, replacing the placeholder (including its angle brackets).
+   Restrict access to this file; do not commit or share it.
+
+   ```sh
+   PAPERWRENCH_REMEMBER_TOKENS=true
+   PAPERWRENCH_CREDENTIAL_KEY=<paste-the-generated-key-here>
+   ```
+
+   The supplied Compose files pass both settings into PaperWrench. On Linux,
+   restrict the file with `chmod 600 .env`. The key is read at startup; keep
+   the same value across restarts and back it up separately from the PaperWrench
+   database.
+
+3. Recreate the service with the same Compose file(s) you already use. For
+   example, with an existing Paperless network:
+
+   ```sh
+   docker compose -f docker-compose.paperless.yml up -d --force-recreate paperwrench
+   ```
+
+4. Check that storage is available. Adjust the host and port for your install:
+
+   ```sh
+   curl --fail http://localhost:8000/api/v1/auth/options
+   ```
+
+   The response should contain `"remember_available":true`. The sign-in screen
+   now checks **Remember my Paperless token** by default. Each user enters their
+   own valid Paperless token and chooses a separate PaperWrench password. After
+   signing out or restarting PaperWrench, they can reconnect from **Local
+   account** with their Paperless username and PaperWrench password.
+
+   Existing token-only sessions are not saved automatically. To enable saved
+   sign-in for an existing user, sign out, sign in again with that user's valid
+   Paperless token, leave **Remember my Paperless token** checked and choose a
+   PaperWrench password.
+
+On Paperless 3.2.1, each user also needs the **UI settings: view** permission for
+PaperWrench to obtain their identity. It does not require administrator
+privileges or permission to list users. Without the permission, token-only
+sign-in remains available, but saving that token is refused.
+
+For a stronger deployment, keep the key in a separate file and mount it as a
+Docker secret instead of putting it in the container environment. Create
+`compose.credentials.yml` next to your Compose file:
+
+```yaml
+services:
+  paperwrench:
+    environment:
+      PAPERWRENCH_CREDENTIAL_KEY_FILE: /run/secrets/paperwrench_credential_key
+    secrets:
+      - paperwrench_credential_key
+secrets:
+  paperwrench_credential_key:
+    file: ../paperwrench-secrets/paperwrench-credential-key
+```
+
+Generate that file with restrictive permissions, keep it outside the Compose
+project and data volume, and make it readable by PaperWrench's UID 10001. For
+example, from the directory containing your Compose file on a Linux Docker
+host:
+
+```sh
+sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0700 ../paperwrench-secrets
+umask 077
+docker run --rm --entrypoint python ghcr.io/flowent59/paperwrench:0.6.0 \
+  -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())' \
+  > ../paperwrench-secrets/paperwrench-credential-key
+sudo chown 10001:10001 ../paperwrench-secrets/paperwrench-credential-key
+sudo chmod 0400 ../paperwrench-secrets/paperwrench-credential-key
+```
+
+Then start the service with both Compose files, for example:
+
+```sh
+docker compose -f docker-compose.paperless.yml -f compose.credentials.yml up -d --force-recreate paperwrench
+```
+
+The file setting takes precedence over `PAPERWRENCH_CREDENTIAL_KEY`; unreadable,
+empty or malformed explicit key files prevent startup.
+
 With a master key configured, **Remember my Paperless token** is checked by
 default. The user supplies their own valid Paperless token and chooses a local
 PaperWrench password (12–1024 characters). PaperWrench obtains the username from
@@ -137,30 +234,6 @@ password login globally. Existing encrypted rows remain available for deletion.
 Without a master key, memorization is unavailable and token login still works.
 Unchecking the option uses an ephemeral session and saves no new credentials;
 it does not delete credentials saved previously.
-
-Generate a key once in an environment with the backend dependencies installed:
-
-```sh
-python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
-```
-
-Supply it as `PAPERWRENCH_CREDENTIAL_KEY`, or preferably mount a Docker secret
-and set `PAPERWRENCH_CREDENTIAL_KEY_FILE`. The file takes precedence; unreadable,
-empty or malformed explicit key files prevent startup. For example, save the
-generated key to a restricted file outside the data volume and add this Compose
-override (adjust the source path):
-
-```yaml
-services:
-  paperwrench:
-    environment:
-      PAPERWRENCH_CREDENTIAL_KEY_FILE: /run/secrets/paperwrench_credential_key
-    secrets:
-      - paperwrench_credential_key
-secrets:
-  paperwrench_credential_key:
-    file: /secure/paperwrench-credential-key
-```
 
 Back up the master key **separately** from SQLite. It must be readable by the
 container's UID 10001, but should not be exposed to other users. Losing it makes
