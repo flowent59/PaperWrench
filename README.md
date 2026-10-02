@@ -68,7 +68,7 @@ M5 exposes immediate, explicit single-document edits in the Inspector.
   before deciding whether to make another edit.
 - **The token stays in the backend.** Optional local accounts store it encrypted
   with a separate operator key. It is never logged or returned to the browser.
-  See [remembered credentials](docs/deployment.md#remembered-credentials).
+  See [how to enable saved-token sign-in](docs/deployment.md#enable-saved-token-sign-in).
   Paperless permissions remain authoritative.
 
 See [ADR-0012](docs/decisions/0012-inspector-coordinated-writes-and-external-race.md)
