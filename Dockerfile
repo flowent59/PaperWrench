@@ -11,7 +11,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 - build the SPA
 # ---------------------------------------------------------------------------
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS frontend
+FROM node:22-trixie-slim@sha256:b26b04c123d9ff8ab646ceb18b9d75a1173acf64b9a401094b906d27b29338d4 AS frontend
 
 WORKDIR /build
 
@@ -28,7 +28,7 @@ RUN npx tsc -b && npx vite build --outDir /build/dist --emptyOutDir
 # ---------------------------------------------------------------------------
 # Stage 2 - build the Python wheel
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim-bookworm@sha256:a36c24f9cbdf4fd0f52d67f0823eeac19c2028c637cecc392d97f980d4fec56b AS backend
+FROM python:3.11-slim-trixie@sha256:bab1b7ef4b450c81002278d035eff85ebe394ae94df904f7a3ba14f7e16e487b AS backend
 
 WORKDIR /build
 
@@ -42,7 +42,7 @@ RUN python -m build --wheel --outdir /wheels
 # ---------------------------------------------------------------------------
 # Stage 3 - runtime
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim-bookworm@sha256:a36c24f9cbdf4fd0f52d67f0823eeac19c2028c637cecc392d97f980d4fec56b AS runtime
+FROM python:3.11-slim-trixie@sha256:bab1b7ef4b450c81002278d035eff85ebe394ae94df904f7a3ba14f7e16e487b AS runtime
 
 ARG VCS_REF
 LABEL org.opencontainers.image.title="PaperWrench" \

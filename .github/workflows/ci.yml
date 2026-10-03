@@ -471,6 +471,25 @@ jobs:
       - name: Installed release and nested compiled SPA routes
         run: docker exec -i pw python < scripts/smoke_release.py
 
+      - name: Native TLS, credentials and installed dependency consistency
+        run: |
+          docker exec pw python -m pip check
+          docker exec -i pw python < scripts/smoke_native_runtime.py
+
+      - name: Populated SQLite backup restores on the installed runtime
+        run: |
+          docker cp tests/backend/unit/test_release_migrations.py pw:/tmp/test_release_migrations.py
+          docker exec -i pw python - <<'PY'
+          import runpy
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+
+          fixture = runpy.run_path("/tmp/test_release_migrations.py")
+          with TemporaryDirectory(prefix="paperwrench-restore-") as directory:
+              fixture["test_m12_backup_restore_and_idempotent_release_upgrade"](Path(directory))
+          print("Populated backup: migration, repeated upgrade and SQLite integrity OK")
+          PY
+
       - name: Paperless probe requires a per-user session
         run: |
           body=$(curl -sS -w '\n%{http_code}' http://127.0.0.1:8000/api/v1/system/paperless)
