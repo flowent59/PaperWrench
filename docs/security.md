@@ -54,6 +54,23 @@ recheck the durable owner before using the initiating user's credential and Pape
 re-evaluates document permissions on every read/write. Revoked tokens and changed
 permissions fail the affected targets; they never fall back to a deployment token.
 
+## Container review (2026-10-04)
+
+The Docker build uses Debian 13 (Trixie) for the Node 22 frontend builder and
+Python 3.11 backend/runtime. Bases are pinned by digest; the runtime also installs
+the available PCRE2 security update from Debian. The installed image, native TLS,
+Fernet/Argon2 credentials and a populated Bookworm SQLite backup are verified.
+See the [Debian 13 audit evidence](security-audits/2026-10-04-debian13/README.md)
+for immutable image identities, database snapshots and every package/advisory delta.
+
+System and Python findings remain and are tracked in
+[#99](https://github.com/flowent59/PaperWrench/issues/99) and
+[#100](https://github.com/flowent59/PaperWrench/issues/100).
+The separate frontend builder audit now reports six high package entries,
+including transitive findings; these are also recorded in #99. The September
+dependency review below is a historical snapshot. Recurring image scans and the
+final policy are tracked in [#101](https://github.com/flowent59/PaperWrench/issues/101).
+
 ## Dependency review (2026-09-26)
 
 Earlier compatible lockfile updates removed the high-severity js-yaml and Redocly
