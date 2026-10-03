@@ -44,6 +44,11 @@ RUN python -m build --wheel --outdir /wheels
 # ---------------------------------------------------------------------------
 FROM python:3.11-slim-trixie@sha256:bab1b7ef4b450c81002278d035eff85ebe394ae94df904f7a3ba14f7e16e487b AS runtime
 
+# The pinned base predates the PCRE2 fix for CVE-2026-103111.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 ARG VCS_REF
 LABEL org.opencontainers.image.title="PaperWrench" \
       org.opencontainers.image.description="Power tools for Paperless-ngx. Independent project, not affiliated with Paperless-ngx." \
