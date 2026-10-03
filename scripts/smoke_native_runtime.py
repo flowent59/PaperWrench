@@ -90,10 +90,12 @@ def probe_tls(directory: Path) -> None:
 
 
 async def probe_credentials() -> None:
-    settings = Settings(
-        paperless_url="http://paperless.invalid",
-        remember_tokens=True,
-        credential_key=SecretStr(Fernet.generate_key().decode("ascii")),
+    settings = Settings(_env_file=None).model_copy(
+        update={
+            "paperless_url": "http://paperless.invalid",
+            "remember_tokens": True,
+            "credential_key": SecretStr(Fernet.generate_key().decode("ascii")),
+        }
     )
     vault = CredentialVault(settings)
     encrypted = vault.encrypt(42, "native-smoke", "native-smoke-token")
