@@ -72,9 +72,14 @@ RUN groupadd --gid 10001 paperwrench \
 COPY --from=backend /wheels/*.whl /tmp/
 COPY backend/requirements.lock /tmp/requirements.lock
 # Alembic revisions live inside the package, so the wheel is self-contained
-# and migrations run on boot without any extra files.
+# and migrations run on boot without any extra files. Installation tools are
+# unused at runtime. Check the installed application's dependencies after removing
+# setuptools/wheel, then remove pip and its vulnerable vendored libraries too.
 RUN pip install --no-cache-dir -r /tmp/requirements.lock \
     && pip install --no-cache-dir --no-deps /tmp/*.whl \
+    && pip uninstall -y setuptools wheel \
+    && pip check \
+    && pip uninstall -y pip \
     && rm -f /tmp/*.whl /tmp/requirements.lock
 
 RUN mkdir -p /data /app /run/secrets && chown -R paperwrench:paperwrench /data /app
