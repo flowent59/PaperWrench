@@ -471,9 +471,10 @@ jobs:
       - name: Installed release and nested compiled SPA routes
         run: docker exec -i pw python < scripts/smoke_release.py
 
-      - name: Native TLS, credentials and installed dependency consistency
+      - name: Native TLS, credentials and absence of installation tools
         run: |
-          docker exec pw python -m pip check
+          # pip check is a build gate, after setuptools/wheel removal and before pip removal.
+          docker exec pw python -c 'import importlib.util; assert all(importlib.util.find_spec(name) is None for name in ("pip", "setuptools", "wheel", "pkg_resources", "ensurepip"))'
           docker exec -i pw python < scripts/smoke_native_runtime.py
 
       - name: Populated SQLite backup restores on the installed runtime

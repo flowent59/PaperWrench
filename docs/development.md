@@ -233,6 +233,15 @@ The image is multi-stage: Node builds the SPA, Python builds a wheel that
 embeds it, and the runtime stage installs only that wheel and runs as a
 non-root user with a read-only root filesystem.
 
+The runtime installs exact dependencies from `backend/requirements.lock`, then
+installs the application wheel with `--no-deps`. The build removes unused
+setuptools/wheel, requires `pip check` to pass, then removes pip and its vendored
+dependencies and ensurepip's bootstrap wheels. The final container has no package
+installer; dependency changes require rebuilding it. Developer environments still
+use pip normally. Inspect
+runtime versions with Python's `importlib.metadata`; image audits run tools in a
+separate environment so they do not alter the deployed dependency inventory.
+
 ## Project layout
 
 ```
