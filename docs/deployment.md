@@ -278,6 +278,26 @@ five-minute preview build window plus network overhead. A lost Apply response
 means inspect History, never automatically submit again. The original
 `docker-compose.yml` binds to loopback for this style of deployment.
 
+## Debian 13 container base
+
+The Dockerfile builds the frontend with Node 22 on Trixie and uses Python 3.11
+on Trixie for the backend and runtime. The language major/minor versions, port,
+UID/GID 10001 and `/data` layout are unchanged. The pinned runtime includes a
+PCRE2 security update installed from Debian during the build.
+
+Before deploying an image containing this migration, record your current image
+digest and make the SQLite backup described below. Stop the old application,
+retain its volume, then start the reviewed replacement image with the same
+project and volume. Verify health and sign-in before allowing writes. This base
+change adds no Alembic revision; normal startup migrations still apply when
+upgrading application versions. For recovery, use the matching old image and a
+pre-upgrade backup in a new empty volume, as described under Restore.
+
+A populated backup made by SQLite 3.40.1 in the published Bookworm image was
+restored and migrated with SQLite 3.46.1 on Trixie, including repeated upgrade,
+preserved collection/schema data and integrity checks. See the
+[migration evidence](security-audits/2026-10-04-debian13/README.md).
+
 ## Upgrade from v0.1.0 or v0.1.1
 
 Legacy `PAPERLESS_TOKEN` and `PAPERLESS_TOKEN_FILE` values are not imported into
