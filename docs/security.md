@@ -54,7 +54,35 @@ recheck the durable owner before using the initiating user's credential and Pape
 re-evaluates document permissions on every read/write. Revoked tokens and changed
 permissions fail the affected targets; they never fall back to a deployment token.
 
-## Container review (2026-10-04)
+## Dependency corrections (2026-10-04)
+
+The runtime lockfile and project metadata now require cryptography 50.0.2,
+including the PKCS#7 fix introduced in 50.0.0 and the updated bundled OpenSSL.
+See the [upstream changelog](https://cryptography.io/en/stable/changelog/).
+The runtime removes unused pip, setuptools, wheel and ensurepip after installation.
+The vulnerable msgpack/urllib3 and legacy setuptools copies were inside pip's
+`_vendor` tree, independently of the installed setuptools distribution.
+No application imports or active runtime requirements depend on these tools.
+Removing ensurepip also removes its old bundled bootstrap wheels, which are
+outside the installed distribution metadata examined by pip-audit.
+
+`pip check` remains a mandatory Docker build gate, after removing setuptools and
+wheel and before removing pip. CI verifies that the installed runtime has no
+installation tools and retains installed-wheel, native TLS/credential and SQLite
+checks. Auditing tools run separately from the image being examined. See the
+[dependency audit evidence](security-audits/2026-10-04-dependencies/README.md)
+for exact image IDs, installed versions, audit reports and upgrade checks.
+
+The frontend lockfile also updates both brace-expansion copies to compatible
+patched versions 2.1.7 and 5.0.12. The remaining unpatched braces advisory and its
+Tailwind build dependencies are tracked in
+[#104](https://github.com/flowent59/PaperWrench/issues/104); the
+[upstream advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) lists no
+patched version at this review. The resulting npm report still contains five
+high package entries for that one advisory. System and CPython residual findings
+remain in [#100](https://github.com/flowent59/PaperWrench/issues/100).
+
+## Container migration snapshot (2026-10-04)
 
 The Docker build uses Debian 13 (Trixie) for the Node 22 frontend builder and
 Python 3.11 backend/runtime. Bases are pinned by digest; the runtime also installs
@@ -63,11 +91,11 @@ Fernet/Argon2 credentials and a populated Bookworm SQLite backup are verified.
 See the [Debian 13 audit evidence](security-audits/2026-10-04-debian13/README.md)
 for immutable image identities, database snapshots and every package/advisory delta.
 
-System and Python findings remain and are tracked in
+That migration snapshot retained system and Python findings, tracked in
 [#99](https://github.com/flowent59/PaperWrench/issues/99) and
 [#100](https://github.com/flowent59/PaperWrench/issues/100).
-The separate frontend builder audit now reports six high package entries,
-including transitive findings; these are also recorded in #99. The September
+At that point, the separate frontend builder audit reported six high package entries,
+including transitive findings; these were also recorded in #99. The September
 dependency review below is a historical snapshot. Recurring image scans and the
 final policy are tracked in [#101](https://github.com/flowent59/PaperWrench/issues/101).
 
@@ -92,7 +120,7 @@ dependency tree. No audit overrides or test exclusions were added. No known npm
 advisories remain in this audit snapshot; future advisories may change that result.
 
 The Python environment/image audits identified old pip and setuptools tooling;
-the runtime build upgrades pip to at least 26.2 and setuptools to at least 83.0.0.
+at that review the runtime build upgraded pip to at least 26.2 and setuptools to at least 83.0.0.
 The installed image is audited
 separately in the M13 evidence report. Dependency audits are point-in-time checks,
 not a penetration test or a complete OS-image vulnerability assessment.
