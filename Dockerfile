@@ -80,6 +80,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.lock \
     && pip uninstall -y setuptools wheel \
     && pip check \
     && pip uninstall -y pip \
+    && rm -rf /usr/local/lib/python3.11/ensurepip \
     && rm -f /tmp/*.whl /tmp/requirements.lock
 
 RUN mkdir -p /data /app /run/secrets && chown -R paperwrench:paperwrench /data /app
