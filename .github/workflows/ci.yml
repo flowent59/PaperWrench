@@ -503,6 +503,11 @@ jobs:
           uid=$(docker exec pw id -u)
           test "$uid" != "0" || { echo "::error::container runs as root"; exit 1; }
 
+      - name: No inherited setuid or setgid executables
+        run: |
+          privileged_files=$(docker exec pw find /usr -type f -perm /6000 -print)
+          test -z "$privileged_files" || { echo "::error::unexpected privileged files: $privileged_files"; exit 1; }
+
       - name: Container has no deployment-wide Paperless token
         run: |
           docker exec pw sh -c 'test -z "${PAPERLESS_TOKEN:-}" && test -z "${PAPERLESS_TOKEN_FILE:-}"'
