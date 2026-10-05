@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.1](https://github.com/flowent59/PaperWrench/compare/v0.6.0...v0.6.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** upgrade cryptography and remove unused runtime installers ([#105](https://github.com/flowent59/PaperWrench/issues/105)) ([9f31860](https://github.com/flowent59/PaperWrench/commit/9f3186095100062890c283f5935daa5979ac6ef9))
+* **docker:** migrate build and runtime bases to Debian 13 ([#102](https://github.com/flowent59/PaperWrench/issues/102)) ([14a4dc4](https://github.com/flowent59/PaperWrench/commit/14a4dc4be55cbb365b9b2e5ee74917f112194f1b))
+* **security:** triage residual image findings and remove privilege bits ([#106](https://github.com/flowent59/PaperWrench/issues/106)) ([1cfb40c](https://github.com/flowent59/PaperWrench/commit/1cfb40cbf6187acc499f491fa24b7a56ae35efd6))
+
 ## [0.6.0](https://github.com/flowent59/PaperWrench/compare/v0.5.0...v0.6.0) (2026-10-02)
 
 
