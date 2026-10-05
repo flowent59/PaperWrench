@@ -18,6 +18,7 @@ import pytest
 import scan_image
 from image_security import AuditError
 from image_security import evaluate
+from image_security import reviewed_runtime_trees
 from scan_image import BOOTSTRAP
 from scan_image import approved_policy
 from scan_image import write_result
@@ -463,3 +464,10 @@ def test_additional_scope_does_not_relax_package_or_expiry_checks(audit: Audit) 
     assert evaluate(*audit, NOW)["exit_code"] == 1
     audit[3]["records"][0]["expires_at"] = NOW.isoformat()
     assert evaluate(*audit, NOW)["exit_code"] == 2
+
+
+def test_proposed_release_snapshot_does_not_approve_itself() -> None:
+    approval, _ = approved_policy("60e8277377d63edf5d9bdaa965502e0f3c0679a8")
+    trees = reviewed_runtime_trees(approval, NOW)
+    assert trees == {"76a9cf53894fd5ea4404d237580cb412cfff80bc4062cf34141bb85a8941125a"}
+    assert "57a348818ef99c4ba6c88da640e30df048d8f8ff7ff9ee744793dc5d05c559ee" not in trees
