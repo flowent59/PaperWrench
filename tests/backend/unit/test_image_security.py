@@ -15,6 +15,8 @@ from typing import Any
 
 import pytest
 
+import scan_image
+from image_security import AuditError
 from image_security import evaluate
 from scan_image import BOOTSTRAP
 from scan_image import approved_policy
@@ -266,3 +268,83 @@ def test_cli_technical_failure_is_nonzero_and_keeps_evidence(tmp_path: Path) -> 
     assert process.returncode == 2
     assert json.loads((tmp_path / "result.json").read_bytes())["status"] == "technical-error"
     assert (tmp_path / "summary.md").exists() and (tmp_path / "SHA256SUMS").exists()
+
+
+@pytest.mark.parametrize("change", ["owner", "occurrence", "expiry", "alias", "evidence"])
+def test_malformed_decision_is_a_policy_failure(audit: Audit, change: str) -> None:
+    record = audit[3]["records"][0]
+    if change == "owner":
+        record["owner"] = ""
+    elif change == "occurrence":
+        del record["occurrences"][0]["scanner_paths"]
+    elif change == "expiry":
+        record["expires_at"] = "not-a-date"
+    elif change == "alias":
+        record["aliases"].append(audit[3]["records"][1]["id"])
+    else:
+        record["evidence"] = []
+    assert evaluate(*audit, NOW)["exit_code"] == 2
+
+
+def test_unrecognized_severity_cannot_reuse_a_known_unknown_decision(audit: Audit) -> None:
+    match = audit[0]["matches"][0]
+    match["vulnerability"]["severity"] = "Unknown"
+    record = next(
+        record
+        for record in audit[3]["records"]
+        if match["vulnerability"]["id"] in record["aliases"]
+    )
+    for occurrence in record["occurrences"]:
+        if occurrence["scanner"] == "grype":
+            occurrence["severity"] = "Unknown"
+    assert evaluate(*audit, NOW)["findings"][0]["exception"]
+    match["vulnerability"]["severity"] = "unexpected-new-enumeration"
+    result = evaluate(*audit, NOW)
+    row = next(
+        row
+        for row in result["findings"]
+        if row["reported_severity"] == "unexpected-new-enumeration"
+    )
+    assert row["blocking"] and not row["exception"] and result["exit_code"] == 1
+
+
+@pytest.mark.parametrize("change", ["native", "packages", "distribution"])
+def test_missing_inventory_and_distribution_mismatch_fail(audit: Audit, change: str) -> None:
+    if change == "native":
+        audit[2]["probe"]["packages_tsv"] = ""
+    elif change == "packages":
+        for result in audit[1]["Results"]:
+            result.pop("Packages", None)
+    else:
+        audit[1]["Metadata"]["OS"]["Family"] = "unexpected"
+    assert evaluate(*audit, NOW)["exit_code"] == 2
+
+
+def test_unapproved_registry_hash_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    original = scan_image.git_file
+
+    def altered(ref: str, path: str) -> bytes:
+        raw = original(ref, path)
+        if path == ".security/reviewed-runtime.json":
+            policy = json.loads(raw)
+            policy["registry_sha256"] = "unapproved"
+            return json.dumps(policy).encode()
+        return raw
+
+    monkeypatch.setattr(scan_image, "git_file", altered)
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT).decode().strip()
+    # The commit is used only to exercise loading an already present approval file.
+    with pytest.raises(AuditError, match="Unapproved registry"):
+        approved_policy(head)
+
+
+def test_tampered_release_binary_is_rejected_before_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def corrupt_download(url: str, path: Path) -> None:
+        path.write_bytes(b"not the upstream binary")
+
+    monkeypatch.setattr(scan_image, "download", corrupt_download)
+    with pytest.raises(AuditError, match="release checksum"):
+        scan_image.install_tools(tmp_path, tmp_path)

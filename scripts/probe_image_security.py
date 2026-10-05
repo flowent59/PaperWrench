@@ -61,6 +61,7 @@ result = {
     "uid": int(subprocess.check_output(["id", "-u"], text=True)),
     "architecture": platform.machine(),
     "debian": platform.freedesktop_os_release(),
+    "debian_version": Path("/etc/debian_version").read_text().strip(),
     "python": platform.python_version(),
     "libc": platform.libc_ver(),
     "sqlite": sqlite3.sqlite_version,

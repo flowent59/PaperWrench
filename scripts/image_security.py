@@ -50,6 +50,7 @@ class Finding:
     severity: str
     paths: tuple[str, ...]
     fixes: tuple[str, ...]
+    reported_severity: str
 
 
 def severity(value: str) -> str:
@@ -76,6 +77,7 @@ def normalize(grype: dict[str, Any], trivy: dict[str, Any]) -> list[Finding]:
                 severity(vuln["severity"]),
                 tuple(sorted({loc["path"] for loc in artifact.get("locations", [])})),
                 tuple(vuln.get("fix", {}).get("versions", [])),
+                vuln["severity"],
             )
         )
     for result in trivy["Results"]:
@@ -92,6 +94,7 @@ def normalize(grype: dict[str, Any], trivy: dict[str, Any]) -> list[Finding]:
                     severity(vuln["Severity"]),
                     (vuln["PkgPath"],) if vuln.get("PkgPath") else (),
                     (vuln["FixedVersion"],) if vuln.get("FixedVersion") else (),
+                    vuln["Severity"],
                 )
             )
     for finding in findings:
@@ -140,8 +143,11 @@ def validate_reports(
     require(
         grype["distro"]["version"]
         == trivy["Metadata"]["OS"]["Name"]
-        == metadata["probe"]["debian"].get(
-            "DEBIAN_VERSION_FULL", metadata["probe"]["debian"]["VERSION_ID"]
+        == metadata["probe"].get(
+            "debian_version",
+            metadata["probe"]["debian"].get(
+                "DEBIAN_VERSION_FULL", metadata["probe"]["debian"]["VERSION_ID"]
+            ),
         ),
         "Scanner distribution version mismatch",
     )
@@ -341,6 +347,7 @@ def evaluate(
                     and v["package"] == finding.package
                     and v["version"] == finding.version
                     and v["type"] == finding.kind
+                    and finding.reported_severity.title() in RANK
                     and (finding.severity != "Unknown" or v["severity"] == "Unknown")
                     and tuple(sorted(v["scanner_paths"])) == finding.paths
                     for v in record["occurrences"]
