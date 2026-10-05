@@ -466,6 +466,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve the already approved policy revision
+        id: audit-policy
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$PR_BASE" ]; then
+            approved_ref="$PR_BASE"
+          elif [ "$GITHUB_REF" = 'refs/heads/main' ]; then
+            approved_ref=$(git rev-parse HEAD)
+          else
+            approved_ref=$(git rev-parse origin/main)
+          fi
+          echo "sha=$approved_ref" >> "$GITHUB_OUTPUT"
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Build image
@@ -555,7 +569,7 @@ jobs:
         uses: ./.github/actions/image-audit
         with:
           image: ${{ steps.build.outputs.imageid }}
-          approved-ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          approved-ref: ${{ steps.audit-policy.outputs.sha }}
 
       - name: Teardown
         if: always()

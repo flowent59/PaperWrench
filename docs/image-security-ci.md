@@ -93,7 +93,9 @@ disposition; it never exempts High/Critical/Unknown or an expired decision. Use
 retained raw evidence to establish that date; never move it forward on rescan.
 
 On a PR, policy and registry come from `pull_request.base.sha`, **not its modified
-files**. On main/daily runs, they come from the checked-out main commit. The first
+files**. On main/daily runs, they come from the checked-out main commit. Manual CI
+runs on another branch use `origin/main`; manual published scans explicitly check
+out main. Choosing an unmerged branch cannot approve that branch's exceptions. The first
 PR bootstraps only from the immutable reviewed #100 commit
 `1cfb40cbf6187acc499f491fa24b7a56ae35efd6`, requiring the same runtime tree and
 registry checksum. `.security/reviewed-runtime.json` binds the approved registry
