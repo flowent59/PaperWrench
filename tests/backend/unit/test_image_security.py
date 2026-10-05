@@ -360,6 +360,20 @@ def test_unfixed_trivy_high_is_not_exempt(audit: Audit) -> None:
     assert result["exit_code"] == 1 and row["blocking"] and not row["fixes"]
 
 
+def test_new_fix_on_another_branch_still_requires_review(audit: Audit) -> None:
+    match = next(
+        match for match in audit[0]["matches"] if match["vulnerability"]["fix"]["versions"]
+    )
+    match["vulnerability"]["fix"]["versions"].append("new-supported-fix")
+    result = evaluate(*audit, NOW)
+    rows = [row for row in result["findings"] if "new-supported-fix" in row["fixes"]]
+    assert result["exit_code"] == 1 and rows
+    assert all(
+        row["blocking"] and row["reason"] == "new reported correction requires review"
+        for row in rows
+    )
+
+
 @pytest.mark.parametrize("outcome", [0, 1, 2])
 def test_runner_propagates_gate_exits_and_keeps_reports(
     audit: Audit,

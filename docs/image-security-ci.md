@@ -33,6 +33,7 @@ The composite action always uploads `image-security-audit` (CI) or
 - `inventory.json`: Debian packages, Python distributions, package file lists,
   native versions/symbols, installed tooling and relevant scope probes;
 - `container.json`: the inspected deployment controls used for the probe;
+- `image.json`: image inspection retained before source/revision validation;
 - copies of the **approved** policy/decisions, `result.json`, `summary.md`, `SHA256SUMS`.
 
 Files that could not be produced are absent after an early technical failure;
@@ -105,9 +106,11 @@ runtime absence, symbols, installed tools and deployment controls are also probe
 Digest changes from CI labels alone do not renew or broaden exceptions.
 
 To correct an image or reassess #107/#108, preserve raw findings, verify new
-inventory/app/native scope, update exact occurrences/evidence/dispositions and
+inventory/app/native scope, add a new dated registry snapshot with exact
+occurrences/evidence/dispositions and
 remove obsolete decisions. Update the registry checksum and runtime tree hash
-with fresh proof and explicit review. Do not extend expiry automatically. A PR
+with fresh proof and explicit review, pointing `registry_path` at that snapshot.
+Keep historical snapshots as evidence. Do not extend expiry automatically. A PR
 proposing new decisions can remain blocked against its old approved base: its
 candidate policy is only a review proposal. Merge approval is required before
 those decisions can pass an authoritative main/daily gate. Never bypass this

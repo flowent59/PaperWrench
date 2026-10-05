@@ -1,0 +1,44 @@
+{
+  "approved_ref": "1cfb40cbf6187acc499f491fa24b7a56ae35efd6",
+  "published": {
+    "blocked": 594,
+    "errors": [
+      "Approved runtime/deployment scope cannot be verified; revalidation required"
+    ],
+    "exit_code": 2,
+    "identities": 154,
+    "image_id": "sha256:a33a15ee0e9a50fbe7be2c5d9e52b8c9f5dfc29b201f26a3fb071d10d27f538f",
+    "occurrences": 594,
+    "registry_digest": "sha256:01ece472bbf15f6322c80559c576bd3d9aba5582c2e0d46b9efd102d46492265",
+    "scope_valid": false,
+    "source_commit": "4e7e8ea1ece9542397dc6f3d6621d6dfdd80f8fe",
+    "status": "policy-error"
+  },
+  "runs": {
+    "published": 37285362068,
+    "runtime": 37285922052,
+    "technical-failure": 37284111920
+  },
+  "runtime": {
+    "blocked": 0,
+    "errors": [],
+    "exit_code": 0,
+    "identities": 80,
+    "image_id": "sha256:74ab0cded94a76e8fd22d8ea7a68d0f1f8e1ff382821d2d1ee6a36e50f5bb709",
+    "occurrences": 333,
+    "registry_digest": null,
+    "scope_valid": true,
+    "source_commit": "c97ad6f03d8bb0d41ce5dc0971d91f059c2c1a64",
+    "status": "pass"
+  },
+  "technical-failure": {
+    "errors": [
+      "Command '['/tmp/paperwrench-scanners-62ukn1s3/grype', 'version', '--format', 'json']' returned non-zero exit status 1."
+    ],
+    "exit_code": 2,
+    "image_id": "sha256:5e8c1f2998195db16b536ba86892ed567b6345606e1a06700c9e3c2b49a6707d",
+    "registry_digest": null,
+    "source_commit": "21d25747ab02d916bc8b35b86322361e0b2590e9",
+    "status": "technical-error"
+  }
+}

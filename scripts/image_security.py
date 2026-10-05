@@ -375,8 +375,15 @@ def evaluate(
                 and any(
                     v["scanner"] == finding.scanner
                     and v["package"] == finding.package
-                    and not (
-                        v["scanner_fix"].get("versions") or v["scanner_fix"].get("fixed_version")
+                    and v["version"] == finding.version
+                    and set(finding.fixes)
+                    - set(
+                        v["scanner_fix"].get("versions")
+                        or (
+                            [v["scanner_fix"]["fixed_version"]]
+                            if v["scanner_fix"].get("fixed_version")
+                            else []
+                        )
                     )
                     for v in record["occurrences"]
                 )

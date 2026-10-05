@@ -80,14 +80,18 @@ def approved_policy(ref: str) -> tuple[dict[str, Any], dict[str, Any]]:
             "first_seen": {},
         }
     require(
-        approval["schema_version"] == 1 and approval["registry_path"] == REGISTRY,
+        approval["schema_version"] == 1
+        and re.fullmatch(
+            r"docs/security-audits/[a-zA-Z0-9_-]+/dispositions\.json", approval["registry_path"]
+        )
+        is not None,
         "Unsupported approval policy",
     )
     require(
         approval.get("runtime_paths", RUNTIME_PATHS) == RUNTIME_PATHS,
         "Runtime input scope may not be narrowed",
     )
-    raw = git_file(ref, REGISTRY)
+    raw = git_file(ref, approval["registry_path"])
     require(registry_digest(raw) == approval["registry_sha256"], "Unapproved registry modification")
     return approval, json.loads(raw)
 
@@ -256,6 +260,7 @@ def scan(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         registry_digest_value = digest
         command(["docker", "pull", "--platform", "linux/amd64", image])
     inspection = json.loads(command(["docker", "image", "inspect", image]))[0]
+    save(output / "image.json", inspection)
     image = inspection["Id"]
     revision = inspection["Config"]["Labels"].get("org.opencontainers.image.revision", "")
     require(re.fullmatch(r"[a-f0-9]{40}", revision) is not None, "Missing immutable OCI revision")
@@ -391,7 +396,10 @@ def write_result(output: Path, result: dict[str, Any]) -> None:
         lines.append(
             "| "
             + " | ".join(
-                html.escape(value).replace("|", "&#124;").replace("\n", " ") for value in values
+                re.sub(r"([\\`*_{}\[\]()#+.!-])", r"\\\1", html.escape(value))
+                .replace("|", "&#124;")
+                .replace("\n", " ")
+                for value in values
             )
             + " |"
         )
