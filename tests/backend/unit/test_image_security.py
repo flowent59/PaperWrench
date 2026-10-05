@@ -348,3 +348,53 @@ def test_tampered_release_binary_is_rejected_before_execution(
     monkeypatch.setattr(scan_image, "download", corrupt_download)
     with pytest.raises(AuditError, match="release checksum"):
         scan_image.install_tools(tmp_path, tmp_path)
+
+
+def test_unfixed_trivy_high_is_not_exempt(audit: Audit) -> None:
+    vulnerabilities = audit[1]["Results"][0]["Vulnerabilities"]
+    finding = copy.deepcopy(vulnerabilities[0])
+    finding.update(VulnerabilityID="CVE-2099-9999", Severity="HIGH", FixedVersion="")
+    vulnerabilities.append(finding)
+    result = evaluate(*audit, NOW)
+    row = next(row for row in result["findings"] if row["identity"] == "CVE-2099-9999")
+    assert result["exit_code"] == 1 and row["blocking"] and not row["fixes"]
+
+
+@pytest.mark.parametrize("outcome", [0, 1, 2])
+def test_runner_propagates_gate_exits_and_keeps_reports(
+    audit: Audit,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: int,
+) -> None:
+    if outcome == 1:
+        audit[0]["matches"][0]["artifact"]["version"] = "changed"
+    elif outcome == 2:
+        audit[3]["records"][0]["expires_at"] = NOW.isoformat()
+
+    def acquired_reports(args: Any, output: Path) -> dict[str, Any]:
+        # Replay the retained real reports through the real evaluator. Network
+        # acquisition is exercised by CI's Docker/published scans, not this fixture.
+        scan_image.save(output / "grype.json", audit[0])
+        scan_image.save(output / "trivy.json", audit[1])
+        scan_image.save(output / "metadata.json", audit[2])
+        return evaluate(*audit, NOW)
+
+    monkeypatch.setattr(scan_image, "scan", acquired_reports)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "scan_image",
+            "--image",
+            "fixture",
+            "--approved-ref",
+            BOOTSTRAP,
+            "--output",
+            str(tmp_path),
+        ],
+    )
+    assert scan_image.main() == outcome
+    assert json.loads((tmp_path / "result.json").read_bytes())["exit_code"] == outcome
+    assert (tmp_path / "grype.json").exists() and (tmp_path / "trivy.json").exists()
+    assert (tmp_path / "summary.md").exists() and (tmp_path / "SHA256SUMS").exists()
