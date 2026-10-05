@@ -18,6 +18,7 @@ import pytest
 import scan_image
 from image_security import AuditError
 from image_security import evaluate
+from image_security import reviewed_runtime_trees
 from scan_image import BOOTSTRAP
 from scan_image import approved_policy
 from scan_image import write_result
@@ -412,3 +413,61 @@ def test_runner_propagates_gate_exits_and_keeps_reports(
     assert json.loads((tmp_path / "result.json").read_bytes())["exit_code"] == outcome
     assert (tmp_path / "grype.json").exists() and (tmp_path / "trivy.json").exists()
     assert (tmp_path / "summary.md").exists() and (tmp_path / "SHA256SUMS").exists()
+
+
+def scope_snapshot(digest: str) -> dict[str, Any]:
+    return {
+        "runtime_tree_sha256": digest,
+        "source_commit": "1" * 40,
+        "owner": "reviewer",
+        "assessment": "verified release scope",
+        "evidence": ["retained proof"],
+        "expires_at": "2026-10-18T00:00:00Z",
+    }
+
+
+def test_explicit_reviewed_runtime_snapshot_can_pass(audit: Audit) -> None:
+    digest = "1" * 64
+    audit[2]["runtime_tree_sha256"] = digest
+    audit[4]["additional_runtime_trees"] = [scope_snapshot(digest)]
+    assert evaluate(*audit, NOW)["exit_code"] == 0
+    audit[2]["runtime_tree_sha256"] = "2" * 64
+    assert evaluate(*audit, NOW)["exit_code"] == 2
+
+
+@pytest.mark.parametrize(
+    "change", ["fingerprint", "duplicate", "source", "owner", "evidence", "expired", "shape"]
+)
+def test_invalid_additional_runtime_scope_blocks(audit: Audit, change: str) -> None:
+    snapshot = scope_snapshot("1" * 64)
+    if change == "fingerprint":
+        snapshot["runtime_tree_sha256"] = "*"
+    elif change == "duplicate":
+        snapshot["runtime_tree_sha256"] = audit[4]["runtime_tree_sha256"]
+    elif change == "source":
+        snapshot["source_commit"] = "moving-tag"
+    elif change == "owner":
+        snapshot["owner"] = ""
+    elif change == "evidence":
+        snapshot["evidence"] = []
+    elif change == "expired":
+        snapshot["expires_at"] = NOW.isoformat()
+    audit[4]["additional_runtime_trees"] = [snapshot] if change != "shape" else "invalid"
+    assert evaluate(*audit, NOW)["exit_code"] == 2
+
+
+def test_additional_scope_does_not_relax_package_or_expiry_checks(audit: Audit) -> None:
+    digest = "1" * 64
+    audit[2]["runtime_tree_sha256"] = digest
+    audit[4]["additional_runtime_trees"] = [scope_snapshot(digest)]
+    audit[0]["matches"][0]["artifact"]["version"] = "changed"
+    assert evaluate(*audit, NOW)["exit_code"] == 1
+    audit[3]["records"][0]["expires_at"] = NOW.isoformat()
+    assert evaluate(*audit, NOW)["exit_code"] == 2
+
+
+def test_proposed_release_snapshot_does_not_approve_itself() -> None:
+    approval, _ = approved_policy("60e8277377d63edf5d9bdaa965502e0f3c0679a8")
+    trees = reviewed_runtime_trees(approval, NOW)
+    assert trees == {"76a9cf53894fd5ea4404d237580cb412cfff80bc4062cf34141bb85a8941125a"}
+    assert "57a348818ef99c4ba6c88da640e30df048d8f8ff7ff9ee744793dc5d05c559ee" not in trees

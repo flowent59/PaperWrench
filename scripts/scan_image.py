@@ -183,6 +183,8 @@ def database_snapshot(directory: Path, output: Path, env: dict[str, str]) -> dic
             timeout=600,
         )
     trivy = json.loads((directory / "trivy-cache/db/metadata.json").read_bytes())
+    with (directory / "trivy-cache/db/trivy.db").open("rb") as database:
+        trivy["SHA256"] = hashlib.file_digest(database, "sha256").hexdigest()
     require(trivy["Version"] == 2, "Unsupported Trivy DB schema")
     fresh(trivy["UpdatedAt"], datetime.now(UTC))
     metadata = {"grype_db": db, "trivy_db": trivy}
