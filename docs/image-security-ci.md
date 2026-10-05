@@ -105,6 +105,21 @@ backend and frontend. Changes to those inputs invalidate the reviewed runtime;
 runtime absence, symbols, installed tools and deployment controls are also probed.
 Digest changes from CI labels alone do not renew or broaden exceptions.
 
+For a release transition, the approved policy can also contain
+`additional_runtime_trees`: a bounded list of **exact SHA-256 Git tree snapshots**,
+each with its reviewed source commit, assessment, owner, evidence and UTC expiry.
+This allows current main and an independently reviewed release candidate to use
+the same unchanged decisions during preparation. Wildcards, duplicate/invalid
+hashes, missing ownership/evidence and expired scope snapshots block. Package,
+path, severity, native/deployment controls and decision expiry checks still apply.
+
+Prepare and review the new snapshot in a **separate policy PR**, while main's
+existing runtime remains applicable. Its CI reads the already approved base
+policy. After that PR is approved and merged, update the release branch from main
+and run its authoritative gate against the newly approved scope. A release PR
+cannot approve its own new fingerprint by modifying its policy file. Raw reports
+evaluated locally with a proposed snapshot are explicitly labelled review previews.
+
 To correct an image or reassess #107/#108, preserve raw findings, verify new
 inventory/app/native scope, add a new dated registry snapshot with exact
 occurrences/evidence/dispositions and

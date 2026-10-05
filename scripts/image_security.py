@@ -189,7 +189,37 @@ def validate_reports(
     )
 
 
-def scope_matches(metadata: dict[str, Any], approval: dict[str, Any]) -> bool:
+def reviewed_runtime_trees(approval: dict[str, Any], now: datetime) -> set[str]:
+    """Read exact scope snapshots from the approved base policy, never PR files."""
+    primary = approval["runtime_tree_sha256"]
+    require(
+        isinstance(primary, str) and re.fullmatch(r"[a-f0-9]{64}", primary) is not None,
+        "Invalid primary runtime fingerprint",
+    )
+    snapshots = approval.get("additional_runtime_trees", [])
+    require(isinstance(snapshots, list), "Invalid runtime scope snapshots")
+    trees = {primary}
+    for snapshot in snapshots:
+        digest = snapshot["runtime_tree_sha256"]
+        require(
+            isinstance(digest, str) and re.fullmatch(r"[a-f0-9]{64}", digest) is not None,
+            "Invalid additional runtime fingerprint",
+        )
+        require(digest not in trees, "Duplicate reviewed runtime fingerprint")
+        require(
+            re.fullmatch(r"[a-f0-9]{40}", snapshot["source_commit"]) is not None,
+            "Invalid reviewed runtime source",
+        )
+        require(
+            bool(snapshot["assessment"] and snapshot["owner"] and snapshot["evidence"]),
+            "Missing runtime revalidation evidence/ownership",
+        )
+        require(timestamp(snapshot["expires_at"]) > now, "Expired reviewed runtime scope")
+        trees.add(digest)
+    return trees
+
+
+def scope_matches(metadata: dict[str, Any], approval: dict[str, Any], now: datetime) -> bool:
     image, probe, container = metadata["image"], metadata["probe"], metadata["container"]
     flags = container["HostConfig"]
     return bool(
@@ -199,7 +229,7 @@ def scope_matches(metadata: dict[str, Any], approval: dict[str, Any]) -> bool:
         and probe["uid"] == 10001
         and probe["debian"]["ID"] == "debian"
         and probe["debian"]["VERSION_ID"] == "13"
-        and metadata["runtime_tree_sha256"] == approval["runtime_tree_sha256"]
+        and metadata["runtime_tree_sha256"] in reviewed_runtime_trees(approval, now)
         and flags["ReadonlyRootfs"]
         and flags["CapDrop"] == ["ALL"]
         and flags["SecurityOpt"] == ["no-new-privileges"]
@@ -320,7 +350,7 @@ def evaluate(
         validate_reports(grype, trivy, metadata, now)
         findings = normalize(grype, trivy)
         aliases, errors = decisions(registry, now)
-        valid_scope = scope_matches(metadata, approval)
+        valid_scope = scope_matches(metadata, approval, now)
         if valid_scope:
             absence_checks(metadata["probe"])
         else:

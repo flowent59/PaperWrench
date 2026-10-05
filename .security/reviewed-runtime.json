@@ -12,5 +12,18 @@
     "backend",
     "frontend"
   ],
-  "first_seen": {}
+  "first_seen": {},
+  "additional_runtime_trees": [
+    {
+      "runtime_tree_sha256": "57a348818ef99c4ba6c88da640e30df048d8f8ff7ff9ee744793dc5d05c559ee",
+      "source_commit": "03e5e6d5308af1fa8b9961317891ab4c8d9fcdb1",
+      "owner": "PaperWrench maintainer (@flowent59)",
+      "expires_at": "2026-10-18T00:00:00Z",
+      "assessment": "Revalidated 0.6.1 release metadata only: exact version/Compose reference changes, identical affected package versions/paths and native/runtime controls. No new exception or extension of existing dispositions. See dated release evidence before approval.",
+      "evidence": [
+        "docs/security-audits/2026-10-05-release-0.6.1/README.md",
+        "docs/security-audits/2026-10-05-release-0.6.1/audit-evidence.zip"
+      ]
+    }
+  ]
 }
