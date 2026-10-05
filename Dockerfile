@@ -85,6 +85,11 @@ RUN pip install --no-cache-dir -r /tmp/requirements.lock \
 
 RUN mkdir -p /data /app /run/secrets && chown -R paperwrench:paperwrench /data /app
 
+# The application has no privileged helpers. Remove inherited setuid/setgid
+# permissions, including mount/account tools, even outside the hardened Compose
+# deployment. Keep package files and metadata available for vulnerability scans.
+RUN find /usr -type f -perm /6000 -exec chmod a-s {} +
+
 USER paperwrench
 WORKDIR /app
 VOLUME ["/data"]

@@ -54,6 +54,37 @@ recheck the durable owner before using the initiating user's credential and Pape
 re-evaluates document permissions on every read/write. Revoked tokens and changed
 permissions fail the affected targets; they never fall back to a deployment token.
 
+## Residual image review and scan policy (2026-10-04)
+
+After the Debian and installed-dependency corrections, the fresh runtime audit
+contains 167 Grype and 166 Trivy package/advisory entries, zero Critical. The
+80 distinct identities have individual dispositions in the
+[residual review](security-audits/2026-10-04-residual/README.md), with actual file/
+module/symbol evidence, primary sources, exact versions/paths, owner, triggers and
+expiry. Missing components, architecture-specific reports, mitigated privilege
+paths and accepted residual risks are distinguished. All raw findings stay
+visible; Debian no-dsa/wont-fix does not itself accept risk for this project.
+
+The runtime strips 11 inherited SUID/SGID permissions; CI prevents their return.
+The supported deployment remains non-root, read-only, with every capability
+dropped and no-new-privileges. These controls do not patch the vulnerable system
+libraries or cover privileged/root deployments, arbitrary administrator scripts,
+hostile shared filesystems or other architectures. Keep /data, backups and host
+resolver configuration trusted/private.
+
+The proposed decisions are reviewed/approved through PR #106 and expire on
+2026-10-18 at 00:00 UTC, or require review earlier on their listed triggers.
+Debian/provider maintenance is tracked in
+[#108](https://github.com/flowent59/PaperWrench/issues/108); CPython release/branch
+verification and migration in [#107](https://github.com/flowent59/PaperWrench/issues/107).
+The five npm High build entries remain in #104.
+
+The [image scan policy](security-image-policy.md) defines exact exceptions,
+blocking High/Critical and unknown findings, unfixed vulnerabilities, expiry,
+database freshness, technical failures and retained reports.
+[#101](https://github.com/flowent59/PaperWrench/issues/101) implements/tests its
+recurring CI enforcement; this review does not claim the gate is already active.
+
 ## Dependency corrections (2026-10-04)
 
 The runtime lockfile and project metadata now require cryptography 50.0.2,
@@ -79,8 +110,9 @@ Tailwind build dependencies are tracked in
 [#104](https://github.com/flowent59/PaperWrench/issues/104); the
 [upstream advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) lists no
 patched version at this review. The resulting npm report still contains five
-high package entries for that one advisory. System and CPython residual findings
-remain in [#100](https://github.com/flowent59/PaperWrench/issues/100).
+high package entries for that one advisory. The initial system/CPython disposition
+review is recorded in [#100](https://github.com/flowent59/PaperWrench/issues/100),
+with continuing correction/review work in #107 and #108 as described above.
 
 ## Container migration snapshot (2026-10-04)
 
