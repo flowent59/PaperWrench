@@ -103,7 +103,7 @@ def download(url: str, path: Path) -> None:
             dest.write(chunk)
 
 
-def install_tools(directory: Path) -> dict[str, str]:
+def install_tools(directory: Path, output: Path) -> dict[str, str]:
     versions = {}
     for name, (version, repository, asset, checksum) in TOOLS.items():
         archive = directory / asset
@@ -120,8 +120,11 @@ def install_tools(directory: Path) -> dict[str, str]:
                 raise AuditError("Missing scanner binary")
             (directory / name).write_bytes(binary.read())
         (directory / name).chmod(0o755)
-        output = command([str(directory / name), "version", "--format", "json"])
-        data = json.loads(output)
+        flag = "--output" if name == "grype" else "--format"
+        with (output / f"{name}-version.log").open("wb") as log:
+            raw = command([str(directory / name), "version", flag, "json"], stderr=log)
+        (output / f"{name}-version.json").write_bytes(raw)
+        data = json.loads(raw)
         actual = data["version"] if name == "grype" else data["Version"]
         require(actual.removeprefix("v") == version, f"Unexpected {name} binary version")
         versions[name] = version
@@ -284,7 +287,9 @@ def scan(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         )
         (directory / "config.yaml").write_text("{}\n", encoding="utf-8")
         (directory / "ignore").write_text("", encoding="utf-8")
-        metadata["tools"] = install_tools(directory)
+        metadata["tools"] = install_tools(directory, output)
+        metadata["tool_releases"] = TOOLS
+        save(output / "metadata.json", metadata)
         metadata.update(database_snapshot(directory, output, env))
         metadata["scanner_exit_codes"] = {}
         commands = {
@@ -323,16 +328,20 @@ def scan(args: argparse.Namespace, output: Path) -> dict[str, Any]:
                 (output / f"{name}.json").open("wb") as report,
                 (output / f"{name}.log").open("wb") as log,
             ):
-                completed = subprocess.run(
-                    invocation,
-                    cwd=directory,
-                    env=env,
-                    stdout=report,
-                    stderr=log,
-                    check=False,
-                    timeout=900,
-                )
-                metadata["scanner_exit_codes"][name] = completed.returncode
+                try:
+                    completed = subprocess.run(
+                        invocation,
+                        cwd=directory,
+                        env=env,
+                        stdout=report,
+                        stderr=log,
+                        check=False,
+                        timeout=900,
+                    )
+                    metadata["scanner_exit_codes"][name] = completed.returncode
+                except subprocess.TimeoutExpired:
+                    log.write(b"Scanner timed out after 900 seconds\n")
+                    metadata["scanner_exit_codes"][name] = 124
             save(output / "metadata.json", metadata)
         metadata.update(probe_image(image, output))
     save(output / "metadata.json", metadata)
@@ -370,7 +379,7 @@ def write_result(output: Path, result: dict[str, Any]) -> None:
             row["identity"],
             f"{row['scanner']}: {row['package']} {row['version']}",
             row["maximum_severity"],
-            row["reason"],
+            (row["disposition"] + ": " if row["disposition"] else "") + row["reason"],
             row["expires_at"] or "—",
             str(row["followup_issue"] or "—"),
         ]
