@@ -98,7 +98,8 @@ def save(path: Path, value: Any) -> None:
 
 def download(url: str, path: Path) -> None:
     require(url.startswith("https://"), "HTTPS required")
-    with urllib.request.urlopen(url, timeout=120) as response, path.open("wb") as dest:
+    request = urllib.request.Request(url, headers={"User-Agent": "paperwrench-image-audit/1.0"})
+    with urllib.request.urlopen(request, timeout=120) as response, path.open("wb") as dest:
         while chunk := response.read(1024 * 1024):
             dest.write(chunk)
 
@@ -140,7 +141,11 @@ def database_snapshot(directory: Path, output: Path, env: dict[str, str]) -> dic
         "Unsupported Grype DB manifest",
     )
     fresh(db["built"], datetime.now(UTC))
-    require(re.fullmatch(r"[\w.-]+", db["path"]) is not None, "Invalid DB archive path")
+    require(
+        re.fullmatch(r"vulnerability-db_v6\.\d+\.\d+_[0-9TZ:_-]+\.tar\.(gz|zst)", db["path"])
+        is not None,
+        "Invalid DB archive path",
+    )
     archive = directory / "db.tar.gz"
     download("https://grype.anchore.io/databases/v6/" + db["path"], archive)
     require(
@@ -416,6 +421,8 @@ def main() -> int:
         ValueError,
         KeyError,
         TypeError,
+        AttributeError,
+        IndexError,
         subprocess.SubprocessError,
     ) as exc:
         result = {"exit_code": 2, "status": "technical-error", "errors": [str(exc)], "findings": []}

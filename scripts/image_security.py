@@ -123,6 +123,28 @@ def validate_reports(
     revision = image["Config"]["Labels"].get("org.opencontainers.image.revision", "")
     require(re.fullmatch(r"[a-f0-9]{40}", revision) is not None, "Missing immutable OCI revision")
     require(revision == metadata["source_commit"], "Image/source revision mismatch")
+    require(
+        bool(metadata["probe"]["packages_tsv"] and metadata["probe"]["python_packages"]),
+        "Missing installed inventory",
+    )
+    require(
+        any(result.get("Packages") for result in trivy["Results"]),
+        "Missing Trivy package inventory",
+    )
+    require(
+        grype["distro"]["name"]
+        == trivy["Metadata"]["OS"]["Family"]
+        == metadata["probe"]["debian"]["ID"],
+        "Scanner distribution mismatch",
+    )
+    require(
+        grype["distro"]["version"]
+        == trivy["Metadata"]["OS"]["Name"]
+        == metadata["probe"]["debian"].get(
+            "DEBIAN_VERSION_FULL", metadata["probe"]["debian"]["VERSION_ID"]
+        ),
+        "Scanner distribution version mismatch",
+    )
     target = grype["source"]["target"]
     require(grype["source"]["type"] == "image", "Grype did not scan an image")
     require(target["userInput"] in (image_id, "docker:" + image_id), "Grype target mismatch")
@@ -254,6 +276,23 @@ def decisions(
             isinstance(record["occurrences"], list) and bool(record["occurrences"]),
             "Decision must have exact occurrences",
         )
+        require(
+            isinstance(record["evidence"], list) and bool(record["evidence"]),
+            "Missing decision evidence",
+        )
+        for occurrence in record["occurrences"]:
+            require(
+                occurrence["scanner"] in ("grype", "trivy")
+                and occurrence["severity"] in RANK
+                and all(
+                    isinstance(occurrence[key], str) and occurrence[key]
+                    for key in ("package", "version", "type")
+                )
+                and isinstance(occurrence["scanner_paths"], list)
+                and isinstance(occurrence["installed_files"], list)
+                and isinstance(occurrence["scanner_fix"], dict),
+                "Malformed exact occurrence",
+            )
         if timestamp(record["expires_at"]) <= now:
             errors.append("Expired decision: " + record["id"])
         for alias in record["aliases"]:
@@ -361,7 +400,7 @@ def evaluate(
             "identities": len(maximum),
             "findings": rows,
         }
-    except (AuditError, KeyError, TypeError, ValueError) as exc:
+    except (AuditError, KeyError, TypeError, ValueError, AttributeError, IndexError) as exc:
         return {"exit_code": 2, "status": "technical-error", "errors": [str(exc)], "findings": []}
 
 
