@@ -3,9 +3,11 @@
 Defined by [#100](https://github.com/flowent59/PaperWrench/issues/100), approved
 through review/merge of [PR #106](https://github.com/flowent59/PaperWrench/pull/106).
 [#101](https://github.com/flowent59/PaperWrench/issues/101) implements and tests
-the automation. Until it lands, scans are manual and the existing CI does not
-provide this recurring vulnerability gate. Existing functional Docker/release
-checks remain mandatory.
+the automation in [PR #109](https://github.com/flowent59/PaperWrench/pull/109).
+The [execution guide](image-security-ci.md) describes the blocking gate, daily
+published-image scan, retained evidence and local commands. Automation becomes
+active on main when that PR is merged. Existing functional Docker/release checks
+remain mandatory.
 
 ## Scope and severity decisions
 
@@ -24,6 +26,8 @@ severity when scanners disagree. Unknown/TEMP identifiers remain visible.
 - **Medium, Low and Negligible:** preserve and prioritize review; require a
   documented disposition within 30 days of first discovery. Overdue unreviewed
   findings block. Explicit risk/mitigation/absence decisions still expire.
+  New lower-severity identities require an approved initial `first_seen` UTC date;
+  missing classification blocks instead of resetting their deadline each scan.
 - An expired, malformed or unverifiable exception is a **policy error that
   blocks**, including an expired entry for a lower severity. Never silently extend
   dates or fall back to a package/severity exclusion.
@@ -38,8 +42,8 @@ ppc64le or another image.
 ## Exact exceptions and ownership
 
 The initial [register](security-audits/2026-10-04-residual/dispositions.json) has
-80 explicit advisory decisions. It is the proposed input for #101, not an active
-Grype ignore file or Trivy ignore configuration. Every record includes aliases,
+80 explicit advisory decisions. The CI evaluator reads the approved base registry;
+it is never a Grype ignore file or Trivy ignore configuration. Every record includes aliases,
 exact scanner/package/version/type/path occurrences, installed file evidence,
 primary sources, disposition/rationale, priority, owner, expiry and follow-up.
 
@@ -88,7 +92,7 @@ only as labeled evidence, never as a current passing security gate.
 
 ## CI, periodic scans and retained evidence
 
-#101 must scan PRs and main builds and perform a **daily** scan of the published
+#101 scans PRs and main builds and performs a **daily** scan of the published
 image resolved to its immutable registry digest. Record both registry digest and
 image/config identity, matching OCI revision and architecture. A scan does not
 publish or deploy an image. Fork PRs run with read-only permissions and no

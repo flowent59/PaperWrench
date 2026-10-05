@@ -80,6 +80,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -433,21 +435,62 @@ jobs:
       - run: npx vite build
 
   # ------------------------------------------------------------ docker
-  docker:
-    name: Docker image
+  image-security-policy:
+    name: Security / image policy regressions
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python -m pip install pytest pytest-asyncio
+      - name: Verify pass, findings, technical failures and exception boundaries
+        run: pytest tests/backend/unit/test_image_security.py --noconftest --junitxml=image-policy-tests.xml
+      - name: Retain blocking regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-security-policy-regressions
+          path: image-policy-tests.xml
+          if-no-files-found: error
+          retention-days: 90
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the already approved policy revision
+        id: audit-policy
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$PR_BASE" ]; then
+            approved_ref="$PR_BASE"
+          elif [ "$GITHUB_REF" = 'refs/heads/main' ]; then
+            approved_ref=$(git rev-parse HEAD)
+          else
+            approved_ref=$(git rev-parse origin/main)
+          fi
+          echo "sha=$approved_ref" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
       - name: Build image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           push: false
           load: true
           tags: paperwrench:ci
+          build-args: VCS_REF=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -520,6 +563,13 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Audit the exact runtime image from this build
+        if: always() && steps.build.outcome == 'success'
+        uses: ./.github/actions/image-audit
+        with:
+          image: ${{ steps.build.outputs.imageid }}
+          approved-ref: ${{ steps.audit-policy.outputs.sha }}
 
       - name: Teardown
         if: always()
