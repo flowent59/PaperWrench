@@ -1,0 +1,30 @@
+name: Published image security
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: published-image-security
+  cancel-in-progress: false
+
+jobs:
+  published-image:
+    name: Published runtime (immutable digest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@v3
+      - uses: ./.github/actions/image-audit
+        with:
+          image: ghcr.io/flowent59/paperwrench:latest
+          approved-ref: ${{ github.sha }}
+          published: 'true'
+          artifact-name: published-image-security-${{ github.run_id }}

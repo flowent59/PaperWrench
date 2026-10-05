@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "approved_source": "1cfb40cbf6187acc499f491fa24b7a56ae35efd6",
+  "runtime_tree_sha256": "76a9cf53894fd5ea4404d237580cb412cfff80bc4062cf34141bb85a8941125a",
+  "registry_path": "docs/security-audits/2026-10-04-residual/dispositions.json",
+  "registry_sha256": "5a88d3e8b9f69364cf41de8655a9b7997c670b3dd660b275fab6a712a9a2dad6",
+  "review_pr": "https://github.com/flowent59/PaperWrench/pull/106",
+  "runtime_paths": [
+    "Dockerfile",
+    ".dockerignore",
+    "docker-compose.yml",
+    "backend",
+    "frontend"
+  ],
+  "first_seen": {}
+}

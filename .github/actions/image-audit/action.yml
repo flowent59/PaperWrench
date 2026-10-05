@@ -1,0 +1,49 @@
+name: Runtime image audit
+description: Scan one immutable runtime image and retain evidence on all outcomes
+inputs:
+  image:
+    description: Locally built image or published latest reference
+    required: true
+  approved-ref:
+    description: Immutable approved base commit (PR base, or main)
+    required: true
+  published:
+    description: Resolve and pull the published image by registry digest
+    default: 'false'
+  artifact-name:
+    description: Name of the retained audit evidence
+    default: image-security-audit
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Scan and evaluate
+      shell: bash
+      env:
+        AUDIT_IMAGE: ${{ inputs.image }}
+        APPROVED_REF: ${{ inputs.approved-ref }}
+        PUBLISHED: ${{ inputs.published }}
+      run: |
+        args=()
+        if [ "$PUBLISHED" = 'true' ]; then args+=(--published); fi
+        python scripts/scan_image.py --image "$AUDIT_IMAGE" --approved-ref "$APPROVED_REF" "${args[@]}"
+    - name: Publish audit summary
+      if: always()
+      shell: bash
+      run: |
+        if [ -f image-audit/summary.md ]; then
+          cat image-audit/summary.md >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo '::error::Audit summary was not produced'
+          exit 2
+        fi
+    - name: Retain raw reports, metadata and inventory
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: image-audit/
+        if-no-files-found: error
+        retention-days: 90
