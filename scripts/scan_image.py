@@ -150,7 +150,7 @@ def database_snapshot(directory: Path, output: Path, env: dict[str, str]) -> dic
         is not None,
         "Invalid DB archive path",
     )
-    archive = directory / "db.tar.gz"
+    archive = directory / db["path"]
     download("https://grype.anchore.io/databases/v6/" + db["path"], archive)
     require(
         "sha256:" + hashlib.sha256(archive.read_bytes()).hexdigest() == db["checksum"],
