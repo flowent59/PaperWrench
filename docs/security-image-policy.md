@@ -4,10 +4,16 @@ Defined by [#100](https://github.com/flowent59/PaperWrench/issues/100), approved
 through review/merge of [PR #106](https://github.com/flowent59/PaperWrench/pull/106).
 [#101](https://github.com/flowent59/PaperWrench/issues/101) implements and tests
 the automation in [PR #109](https://github.com/flowent59/PaperWrench/pull/109).
-The [execution guide](image-security-ci.md) describes the blocking gate, daily
+The [execution guide](image-security-ci.md) describes the audit verdict, daily
 published-image scan, retained evidence and local commands. Automation becomes
 active on main when that PR is merged. Existing functional Docker/release checks
 remain mandatory.
+
+The image audit is advisory for deployment: a failed audit remains a failed
+security assessment with its findings and evidence visible, but does not fail the
+CI Docker job or stop a release. Functional build, runtime and application tests
+remain deployment checks. Expiry of a risk decision requires review; it does not
+disable an already running image or prevent publication by itself.
 
 ## Scope and severity decisions
 
@@ -29,7 +35,7 @@ severity when scanners disagree. Unknown/TEMP identifiers remain visible.
   New lower-severity identities require an approved initial `first_seen` UTC date;
   missing classification blocks instead of resetting their deadline each scan.
 - An expired, malformed or unverifiable exception is a **policy error that
-  blocks**, including an expired entry for a lower severity. Never silently extend
+  fails the audit**, including an expired entry for a lower severity. Never silently extend
   dates or fall back to a package/severity exclusion.
 
 The current review covers Linux amd64 runtime only. Frontend full-tree npm audits

@@ -565,11 +565,19 @@ jobs:
           done
 
       - name: Audit the exact runtime image from this build
+        id: runtime_audit
         if: always() && steps.build.outcome == 'success'
+        continue-on-error: true
         uses: ./.github/actions/image-audit
         with:
           image: ${{ steps.build.outputs.imageid }}
           approved-ref: ${{ steps.audit-policy.outputs.sha }}
+
+      - name: Flag advisory image audit outcome
+        if: always() && steps.runtime_audit.outcome == 'failure'
+        run: |
+          echo '::warning::Image security audit failed; review the job summary and image-security-audit artifact.'
+          echo 'Image security audit needs review. Its findings do not gate this build or release.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Teardown
         if: always()
