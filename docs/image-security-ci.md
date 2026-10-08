@@ -8,13 +8,17 @@
 after the startup, installed-release, native TLS, SQLite restore and hardening
 checks. `VCS_REF` records the exact checkout revision, including GitHub's PR merge
 commit. The audit still executes when a functional check fails after a successful
-build. It never pushes an image.
+build. Its step is advisory: an audit failure remains visible in the job summary
+and retained artifact but does not fail the Docker job. The functional checks
+still fail that job when broken. The audit never pushes an image.
 
 `Published image security` runs daily at **05:23 UTC** and on manual dispatch.
 It resolves `ghcr.io/flowent59/paperwrench:latest` once, pulls the immutable registry
 digest for Linux amd64, then scans its local image ID. Both identities and the OCI
 revision are retained. The published revision's Git tree is fetched if necessary;
 it is never treated as the current main revision just because a tag says latest.
+This separate monitoring workflow may fail to flag findings or technical errors;
+the release workflow does not depend on it.
 
 Both workflows use `contents: read`, without registry login, publication tokens,
 application credentials or `pull_request_target`. Fork PRs run the Docker build
@@ -79,6 +83,12 @@ digests and dates, rather than a moving release tag, identify each snapshot.
 | `0` | Verified scan; every occurrence has an applicable decision or current review deadline |
 | `1` | Unexcepted threshold finding, overdue review or newly reported correction |
 | `2` | Technical failure or invalid/expired/unverifiable policy |
+
+These exit codes describe the security assessment. In CI, the image audit step
+uses `continue-on-error`, so exit `1` or `2` does not fail the Docker job or
+prevent deployment. The published-image workflow reports the audit exit code as
+its own status and retains its evidence. Expiry requires a new risk review but
+does not automatically block a release.
 
 Critical/High/Unknown findings block without an exact current approved decision,
 including findings with no fix. The highest reported severity is used across
