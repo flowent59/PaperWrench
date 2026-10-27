@@ -16,13 +16,38 @@ Trivy also newly reports `5.8.1-1+deb13u2` as a correction for the existing `TEM
 
 ## Remediation in progress
 
-This review accompanies a source change that pins `certifi 2026.10.23` and requests the supported Debian security upgrades for `ca-certificates` and `liblzma5` during the image build. A local Linux amd64 Docker build completed on 2026-10-27. A non-root, network-disabled, read-only container with dropped capabilities reported UID 10001, `certifi 2026.10.23`, `ca-certificates 20250419+deb13u1`, `liblzma5 5.8.1-1+deb13u2` and `libpcre2-8-0 10.46-1~deb13u3`. This is package-installation evidence, not a fresh vulnerability verdict. The candidate still needs an exact-source CI image scan with fresh databases, full inventory, native probes and functional gates. The old published image remains affected until a corrected release is built and published.
+This review accompanies a source change that pins `certifi 2026.10.23` and requests the supported Debian security upgrades for `ca-certificates` and `liblzma5` during the image build. A local Linux amd64 Docker build completed on 2026-10-27. A non-root, network-disabled, read-only container with dropped capabilities reported UID 10001, `certifi 2026.10.23`, `ca-certificates 20250419+deb13u1`, `liblzma5 5.8.1-1+deb13u2` and `libpcre2-8-0 10.46-1~deb13u3`. This is package-installation evidence; the exact-source CI scan is recorded below. The old published image remains affected until a corrected release is built and published.
 
 A separate full frontend dependency-tree `npm audit` initially found seven
 entries (three High and four Moderate). Compatible lockfile updates, including
 Vite 6.4.5, Zod 4.6.7 and Vitest 5.0.5, reduced that report to zero known
 findings. This is a build/development dependency audit and does not replace the
-runtime image scan; the updated lockfile must be verified by `npm ci` and the
-frontend test/build gates.
+runtime image scan. The updated lockfile passed the CI frontend test/build gates.
+
+## Candidate CI evidence
+
+[PR #113 CI run 40579067334](https://github.com/flowent59/PaperWrench/actions/runs/40579067334)
+built the changed source and retained the `image-security-audit` artifact. Its
+image/config ID is `sha256:8da9dd971af3ee1cdba7c5e858440e27de3ab0a121238ab16be0b870b9930d43`,
+OCI/source revision `75b77b3ddc33fa8cb80928daed193b43c046056f` (the PR
+merge checkout), and runtime tree hash
+`165ecc412b1460a54b1a9386cf8cfd5210adc26ba0fa387f53bedbbaf9feb037`.
+The Docker functional checks passed: startup, installed release, TLS/credentials,
+SQLite restore, non-root user, privilege-bit and token checks. The exact image
+audit still returned exit 2, `Expired reviewed runtime scope`; this is the
+correct policy outcome and is advisory for the Docker job.
+
+The candidate's unfiltered Grype and Trivy reports contain **330 occurrences
+and 78 raw advisory identifiers**. Relative to the published-image reports
+above, there are no added normalized occurrences and five absent ones: the
+two Critical `certifi` occurrences, the two new Debian DSA occurrences, and
+the previous `liblzma5` TEMP occurrence. One Unknown-severity occurrence remains
+(`CVE-2026-82560` on `perl-base`), alongside 99 High-severity scanner
+occurrences. The Grype DB build timestamp matches between these two runs;
+Trivy refreshed from `2026-10-27T07:13:33Z` to `2026-10-27T19:17:44Z`.
+Consequently this is an observed report comparison, **not** a controlled
+same-database before/after test. Package versions and the corresponding
+upstream/Debian corrections support the specific fixes, but the remaining
+decisions still require a fresh individual review.
 
 The existing policy must continue to report an error while its reviewed runtime scope and decisions are expired. A new dated decision register needs individual reassessments, exact occurrences, owner, expiry, evidence, and review through a separate policy PR. No exception is extended or scanner finding suppressed by this report.

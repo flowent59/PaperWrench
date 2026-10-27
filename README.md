@@ -169,8 +169,9 @@ What this means concretely:
 - **The token is as powerful as the user it belongs to.** Create a dedicated
   Paperless user with only the permissions you are willing to delegate, rather
   than using an administrator token.
-- **Back up your Paperless library.** M5 edits have no durable rollback.
-  `/data` holds durable Job history and write provenance. M8 cannot restore data.
+- **Back up your Paperless library.** Immediate Inspector edits have no durable
+  rollback. `/data` holds Job history and write provenance; eligible Job writes
+  have a guarded rollback workflow, subject to conflict and ambiguity checks.
 - **Keep TLS verification on for HTTPS connections.**
   `PAPERWRENCH_PAPERLESS_VERIFY_SSL=false` exists for self-signed certificates
   on a LAN, and it removes protection against an active network attacker.
