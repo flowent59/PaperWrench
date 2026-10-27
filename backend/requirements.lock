@@ -1,4 +1,4 @@
-# Exact runtime dependencies resolved for Linux amd64 / Python 3.11.
+# Exact runtime dependencies validated for Linux amd64 / Python 3.14.
 # The application wheel is built from the tagged checkout and installed with --no-deps.
 alembic==1.20.0
 argon2-cffi==25.1.0

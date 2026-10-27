@@ -26,6 +26,8 @@ runtime image scan. The updated lockfile passed the CI frontend test/build gates
 
 ## Candidate CI evidence
 
+**Follow-up on 2026-10-27:** [Python 3.14.10](https://www.python.org/downloads/release/python-31410/) was published on 2026-10-25 with security corrections, including rejection of compromised eMudhra intermediate CA keys by `ssl`. The official Linux amd64 `python:3.14-slim-trixie` image identifies itself as `3.14.10-slim-trixie` (OCI revision `01dcc3d31fcd879f9af36e097bd96328a457f4bd`). The source change migrates both Python stages from 3.11.17 to this image at index digest `sha256:82abc9f53600280b0757126f83c5a7d47088592d2acb6b4c0b9e97f76865508c`. The candidate scan below predates this base update and does not describe the final candidate. Review the subsequent CI artifact for exact installed versions, findings, and controls before assessing residual decisions. The PaperWrench release and review are scoped to Linux amd64.
+
 [PR #113 CI run 40579067334](https://github.com/flowent59/PaperWrench/actions/runs/40579067334)
 built the changed source and retained the `image-security-audit` artifact. Its
 image/config ID is `sha256:8da9dd971af3ee1cdba7c5e858440e27de3ab0a121238ab16be0b870b9930d43`,

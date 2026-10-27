@@ -28,7 +28,7 @@ RUN npx tsc -b && npx vite build --outDir /build/dist --emptyOutDir
 # ---------------------------------------------------------------------------
 # Stage 2 - build the Python wheel
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim-trixie@sha256:bab1b7ef4b450c81002278d035eff85ebe394ae94df904f7a3ba14f7e16e487b AS backend
+FROM python:3.14-slim-trixie@sha256:82abc9f53600280b0757126f83c5a7d47088592d2acb6b4c0b9e97f76865508c AS backend
 
 WORKDIR /build
 
@@ -42,7 +42,7 @@ RUN python -m build --wheel --outdir /wheels
 # ---------------------------------------------------------------------------
 # Stage 3 - runtime
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim-trixie@sha256:bab1b7ef4b450c81002278d035eff85ebe394ae94df904f7a3ba14f7e16e487b AS runtime
+FROM python:3.14-slim-trixie@sha256:82abc9f53600280b0757126f83c5a7d47088592d2acb6b4c0b9e97f76865508c AS runtime
 
 # Apply supported Debian security updates released after the pinned base:
 # PCRE2, the emSign CA removal, and the xz/liblzma correction.
@@ -82,7 +82,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.lock \
     && pip uninstall -y setuptools wheel \
     && pip check \
     && pip uninstall -y pip \
-    && rm -rf /usr/local/lib/python3.11/ensurepip \
+    && rm -rf /usr/local/lib/python3.14/ensurepip \
     && rm -f /tmp/*.whl /tmp/requirements.lock
 
 RUN mkdir -p /data /app /run/secrets && chown -R paperwrench:paperwrench /data /app
