@@ -44,9 +44,11 @@ RUN python -m build --wheel --outdir /wheels
 # ---------------------------------------------------------------------------
 FROM python:3.11-slim-trixie@sha256:bab1b7ef4b450c81002278d035eff85ebe394ae94df904f7a3ba14f7e16e487b AS runtime
 
-# The pinned base predates the PCRE2 fix for CVE-2026-103111.
+# Apply supported Debian security updates released after the pinned base:
+# PCRE2, the emSign CA removal, and the xz/liblzma correction.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 \
+    && apt-get install -y --no-install-recommends --only-upgrade \
+        libpcre2-8-0 ca-certificates liblzma5 \
     && rm -rf /var/lib/apt/lists/*
 
 ARG VCS_REF

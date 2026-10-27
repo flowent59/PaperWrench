@@ -1,5 +1,10 @@
 # Image vulnerability scan policy
 
+**Current status (2026-10-27):** The initial decisions and release runtime
+snapshot expired on 2026-10-18. The [latest published-image review](security-audits/2026-10-27-published-image-review.md)
+records the resulting audit error and newly reported fixable advisories. This
+policy description does not renew any exception.
+
 Defined by [#100](https://github.com/flowent59/PaperWrench/issues/100), approved
 through review/merge of [PR #106](https://github.com/flowent59/PaperWrench/pull/106).
 [#101](https://github.com/flowent59/PaperWrench/issues/101) implements and tests

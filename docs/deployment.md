@@ -1,14 +1,17 @@
-# Install, upgrade, back up and restore v0.2.0
+# Install, upgrade, back up and restore PaperWrench
 
 This guide covers fresh multi-user installations and upgrades from PaperWrench
-v0.1.x. Use the Compose files from the release you are installing: their default
+v0.1.x. The current published release is 0.6.1; its image security decisions
+expired on 2026-10-18 and a [current review](security-audits/2026-10-27-published-image-review.md)
+records new fixable advisories. Use the Compose files from the release you are installing: their default
 `PAPERWRENCH_IMAGE` is updated with each published version. CI exercises the
 current stable Paperless-ngx `latest` image and records its digest and reported
 version for each run. PaperWrench uses only the Paperless REST API; it never reads the
 Paperless database or document files.
 
-PaperWrench has no local user database and no bootstrap administrator. Every
-person signs in with their own Paperless API token. A fresh v0.2 deployment needs
+PaperWrench has no bootstrap administrator. Every person initially signs in
+with their own Paperless API token; optional local accounts can remember an
+individually encrypted token. A fresh deployment needs
 `PAPERLESS_URL`, but must not configure `PAPERLESS_TOKEN` or
 `PAPERLESS_TOKEN_FILE`.
 

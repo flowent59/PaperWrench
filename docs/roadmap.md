@@ -295,7 +295,7 @@ a job's target document ids (that belongs with the Job Engine, M8).
 - Keep unavailable members by ID only, without cached document metadata
 - Dynamic collections, duplicate detection and guided resolution are outside M12
 
-## M13 - MVP hardening and release - Implemented, release pending
+## M13 - MVP hardening and release - Done
 
 - Hardening pass across the full stack; closing debt logged by earlier
   milestones
@@ -305,8 +305,10 @@ a job's target document ids (that belongs with the Job Engine, M8).
 ---
 
 M13 evidence, remaining limits and verification classes are recorded in
-[m13-verification.md](m13-verification.md). Proposed version: **0.1.0**.
-Publication and PR merge require a separate operator decision.
+[m13-verification.md](m13-verification.md). The resulting **0.1.0** release
+was published; the current published version is **0.6.1**. Subsequent changes
+are recorded in the [changelog](../CHANGELOG.md). The current runtime-image
+review is tracked in the [2026-10-27 audit](security-audits/2026-10-27-published-image-review.md).
 
 ## Vision beyond M13 (not scheduled)
 

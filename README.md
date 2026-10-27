@@ -80,16 +80,23 @@ See [ADR-0014](docs/decisions/0014-durable-jobs-and-write-provenance.md).
 
 ## Status
 
-Schemas, Data Quality and static Collections complete the workflow. Read the
-[release overview](docs/releases/0.1.0.md), [generated changelog](CHANGELOG.md),
-[installation/upgrade/backup guide](docs/deployment.md)
-and [M13 evidence and limits](docs/m13-verification.md). The reference Compose
-file pulls `ghcr.io/flowent59/paperwrench:0.1.0` after the generated release PR
-is merged and the package is made public. See [the release process](docs/releasing.md).
+**Latest published release: 0.6.1.** The reference Compose file pulls
+`ghcr.io/flowent59/paperwrench:0.6.1`. Releases since the 0.1.0 MVP added
+per-user accounts with optional encrypted saved credentials, English/French UI,
+dynamic collections and saved Explorer views, analytics, selected-document
+rollback, and scheduled reusable rules. See the [changelog](CHANGELOG.md),
+[installation/upgrade/backup guide](docs/deployment.md) and
+[release process](docs/releasing.md). The [0.1.0 release overview](docs/releases/0.1.0.md)
+and [M13 verification](docs/m13-verification.md) are historical records.
 
-**MVP 0.1.0.** Compatibility is verified
-with Paperless-ngx 3.2.1; its `latest` tag resolved to the same image digest in
-the recorded CI run. Explorer uses the Dataset/FilterSet
+The published 0.6.1 image has an unresolved security review: the approved image
+decisions expired on 2026-10-18, and a [2026-10-27 scan](docs/security-audits/2026-10-27-published-image-review.md)
+found new advisories with available corrections. Review that report before a new
+deployment. The last full application CI run on main passed on 2026-10-08;
+the daily image audit currently fails.
+
+The original MVP was verified with Paperless-ngx 3.2.1 in its recorded CI run.
+Explorer uses the Dataset/FilterSet
 engine and can send selected IDs or all matching documents to Transformations.
 Dry Run shows paginated before/intended values and changed/unchanged/error
 counts without writing to Paperless. **Confirm and apply** atomically creates a
@@ -119,10 +126,9 @@ PAPERLESS_DOCKER_NETWORK=paperless_default docker compose -f docker-compose.pape
 Replace `paperless_default` with the Docker network used by your Paperless
 service. Open `http://IP_DU_SERVEUR:8000` (or set `PAPERWRENCH_HTTP_PORT`).
 For a differently named Paperless service, set `PAPERLESS_SERVICE` too.
-See the [installation and v0.1-to-v0.2 migration guide](docs/deployment.md) for
-exact steps, session settings, permission behavior and troubleshooting.
-These commands work once the versioned GHCR image is published. Until then,
-the guide gives the local-build override for a reviewed checkout.
+See the [installation and migration guide](docs/deployment.md) for exact steps,
+session settings, permission behavior and troubleshooting. The guide also gives
+the local-build override for a reviewed checkout.
 
 See [Threat model](#threat-model) before making the port reachable beyond a
 trusted LAN.
