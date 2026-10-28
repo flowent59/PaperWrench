@@ -5,6 +5,13 @@ snapshot expired on 2026-10-18. The [latest published-image review](security-aud
 records the resulting audit error and newly reported fixable advisories. This
 policy description does not renew any exception.
 
+A [separate proposed review](security-audits/2026-10-27-python314/README.md)
+now covers the Python 3.14.10 candidate's 73 residual advisory identities and
+325 exact scanner occurrences. Its new registry and runtime scope remain
+**unapproved** until independent PR review and merge. The evaluator must use
+the approved base branch during that review; the proposal does not approve
+its own exceptions.
+
 Defined by [#100](https://github.com/flowent59/PaperWrench/issues/100), approved
 through review/merge of [PR #106](https://github.com/flowent59/PaperWrench/pull/106).
 [#101](https://github.com/flowent59/PaperWrench/issues/101) implements and tests
