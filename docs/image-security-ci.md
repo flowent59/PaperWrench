@@ -172,6 +172,16 @@ PYTHONPATH=scripts python -c 'from scan_image import runtime_tree; import subpro
 git show HEAD:docs/security-audits/2026-10-04-residual/dispositions.json | sha256sum
 ```
 
+Compute `registry_sha256` from the committed Git blob. On Windows, checkout
+line endings can differ from the blob; hashing the working file with
+`Get-FileHash` produces the wrong value. A cross-platform command is:
+
+```bash
+python -c "import hashlib,subprocess; p='docs/security-audits/2026-10-27-python314/dispositions.json'; print(hashlib.sha256(subprocess.check_output(['git','show','HEAD:'+p])).hexdigest())"
+```
+
+CI checks this binding directly before the image-policy regression tests.
+
 Use separate output directories for comparisons and check package inventories
 before attributing a vulnerability delta to a correction. Each normal invocation
 acquires fresh DBs, so compare recorded DB dates/digests as well. For a controlled
