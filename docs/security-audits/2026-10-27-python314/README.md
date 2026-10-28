@@ -8,10 +8,10 @@ unchanged.
 
 ## Exact scope and proof
 
-- Candidate CI: [run 40585860572](https://github.com/flowent59/PaperWrench/actions/runs/40585860572), all 15 functional jobs green; the image audit correctly returned `technical-error` against the expired approved base.
-- Image/config ID: `sha256:d78a8d48fef745bdf6e3717dd7bef0a7c5d63ab5d8920968d478e054e0aafa68`; OCI/source revision: `393a72613211f20d5aa5e112df8f7007e30f8942` (PR merge checkout); runtime tree: `d91211d9044f4cc2dae7813056ef41f5f18c7f3107497c9da201d8460a17dc52`.
-- Scope: Debian 13, Linux amd64, UID 10001, read-only root, all capabilities dropped, `no-new-privileges`, private `/tmp` tmpfs, trusted `/data` and backup inputs, no privileged host mounts or authorized fstab entry. The probe and container configuration are inside [audit-evidence.zip](audit-evidence.zip) (`sha256:f7a528f159ae68c344739480c7556f4250d700a0454edec335b3ae4dd0729f29`).
-- Scanner/DB versions: Grype 0.120.0 (DB built 2026-10-27 06:30:41 UTC); Trivy 0.75.0 (DB updated 2026-10-27 19:17:44 UTC). Unfiltered raw reports, inventory, metadata and checksums are in the archive.
+- Candidate CI: [run 40648884080](https://github.com/flowent59/PaperWrench/actions/runs/40648884080), with fresh scanner databases; the image audit correctly returned `technical-error` against the expired approved base. Its 325 occurrences and 73 identities exactly match the preceding #113 scan.
+- Image/config ID: `sha256:8c347d82905e7e09161fe17380ff34891822f0d948f1f6d1be0145db70effc8a`; OCI/source revision: `423502506cbfa609d347e8cb2914aab57483f11b` (PR merge checkout); runtime tree: `d91211d9044f4cc2dae7813056ef41f5f18c7f3107497c9da201d8460a17dc52`.
+- Scope: Debian 13, Linux amd64, UID 10001, read-only root, all capabilities dropped, `no-new-privileges`, private `/tmp` tmpfs, trusted `/data` and backup inputs, no privileged host mounts or authorized fstab entry. The probe and container configuration are inside [audit-evidence.zip](audit-evidence.zip) (`sha256:2a0df4ec7dc552c5f4f8dd6db26b3356fc29d2a4fe8fb12678e0584565ce121c`).
+- Scanner/DB versions: Grype 0.120.0 (DB built 2026-10-28 06:23:30 UTC); Trivy 0.75.0 (DB updated 2026-10-28 01:21:08 UTC). Unfiltered raw reports, inventory, metadata and checksums are in the archive.
 - Probes compared with the prior 3.11 candidate changed only Python version/stdlib/loaded Python libraries and Debian `tzdata` (`2026c` to `2026e`). The 71 non-Python advisory identities retained exact scanner/package/version/path matches. `CVE-2026-102473` severity decreased from Medium to Low at identity level; no severity increased.
 
 The reports contain **325 scanner occurrences and 73 advisory identities**: 99
@@ -27,7 +27,7 @@ scanner ignore rule or package/severity-wide exclusion is added.
 
 An `apt-get update` and `apt list --upgradable` on the candidate returned no
 available Debian package upgrade. The official Debian tracker snapshot of
-2026-10-27 21:10:37 GMT was checked for all 71 package/advisory pairs in the
+2026-10-28 06:06:21 GMT was checked for all 71 package/advisory pairs in the
 prior register: all remain open for Trixie. Seventeen entries gained a `no-dsa`,
 `next_point_update`, or urgency qualifier, captured exactly in
 [debian-tracker-subset.json](debian-tracker-subset.json). None records a

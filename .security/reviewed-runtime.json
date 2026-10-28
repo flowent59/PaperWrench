@@ -3,7 +3,7 @@
   "approved_source": "9fbdce134ff7df7c7962630efbe8f26ca901deb1",
   "runtime_tree_sha256": "d91211d9044f4cc2dae7813056ef41f5f18c7f3107497c9da201d8460a17dc52",
   "registry_path": "docs/security-audits/2026-10-27-python314/dispositions.json",
-  "registry_sha256": "c0f2c410bd9494fc3feb2ed36da5d9fffd49fd836edbeba129c3d1ff5ba39940",
+  "registry_sha256": "928dd485ddd28194d5d4bfc51f028b20c18292ef70547abd8dc6fecd31173d53",
   "review_pr": "https://github.com/flowent59/PaperWrench/pull/114",
   "runtime_paths": [
     "Dockerfile",

@@ -6,8 +6,8 @@
     "os": "linux",
     "architecture": "amd64",
     "distribution": "debian:13",
-    "source_commit": "393a72613211f20d5aa5e112df8f7007e30f8942",
-    "image_config_id": "sha256:d78a8d48fef745bdf6e3717dd7bef0a7c5d63ab5d8920968d478e054e0aafa68",
+    "source_commit": "423502506cbfa609d347e8cb2914aab57483f11b",
+    "image_config_id": "sha256:8c347d82905e7e09161fe17380ff34891822f0d948f1f6d1be0145db70effc8a",
     "required_deployment_controls": [
       "UID 10001 (non-root)",
       "read-only root filesystem",
