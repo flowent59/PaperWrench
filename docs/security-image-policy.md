@@ -51,8 +51,10 @@ severity when scanners disagree. Unknown/TEMP identifiers remain visible.
   dates or fall back to a package/severity exclusion.
 
 The current review covers Linux amd64 runtime only. Frontend full-tree npm audits
-must have separate findings/decisions; [#104](https://github.com/flowent59/PaperWrench/issues/104)
-tracks the five unpatched braces build entries. “Not in the runtime” is not a
+must have separate findings/decisions. The [2026-10-28 frontend recheck](security-audits/2026-10-28-frontend-audit.md)
+found zero vulnerabilities in the current lockfile after the `braces` advisory
+was withdrawn; [#104](https://github.com/flowent59/PaperWrench/issues/104)
+records that outcome. “Not in the runtime” is not a
 blanket acceptance of builder/CI vulnerabilities. Published architectures and
 new dependency scopes need separate evidence; do not reuse amd64 exceptions on
 ppc64le or another image.
