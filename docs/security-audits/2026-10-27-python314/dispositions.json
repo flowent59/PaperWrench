@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "review_pr": "PENDING_SEPARATE_REVIEW_PR",
+  "review_pr": "https://github.com/flowent59/PaperWrench/pull/114",
   "approval": "Proposed bounded decisions. Separate code review and merge are required; this PR does not approve itself or suppress scanner findings.",
   "scope": {
     "os": "linux",
