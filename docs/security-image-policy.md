@@ -1,9 +1,17 @@
 # Image vulnerability scan policy
 
-**Current status (2026-10-27):** The initial decisions and release runtime
-snapshot expired on 2026-10-18. The [latest published-image review](security-audits/2026-10-27-published-image-review.md)
+The initial decisions and release runtime snapshot expired on 2026-10-18. The
+[published-image review](security-audits/2026-10-27-published-image-review.md)
 records the resulting audit error and newly reported fixable advisories. This
 policy description does not renew any exception.
+
+A [separate review](security-audits/2026-10-27-python314/README.md) in
+[PR #114](https://github.com/flowent59/PaperWrench/pull/114) covers the Python
+3.14.10 runtime's 73 residual advisory identities and 325 exact scanner
+occurrences. Its registry and runtime scope take effect only after the named
+maintainer records an explicit decision on the PR and merges it. The evaluator
+must use the approved base branch during review; the proposal does not approve
+its own exceptions.
 
 Defined by [#100](https://github.com/flowent59/PaperWrench/issues/100), approved
 through review/merge of [PR #106](https://github.com/flowent59/PaperWrench/pull/106).
@@ -44,8 +52,10 @@ severity when scanners disagree. Unknown/TEMP identifiers remain visible.
   dates or fall back to a package/severity exclusion.
 
 The current review covers Linux amd64 runtime only. Frontend full-tree npm audits
-must have separate findings/decisions; [#104](https://github.com/flowent59/PaperWrench/issues/104)
-tracks the five unpatched braces build entries. “Not in the runtime” is not a
+must have separate findings/decisions. The [2026-10-28 frontend recheck](security-audits/2026-10-28-frontend-audit.md)
+found zero vulnerabilities in the current lockfile after the `braces` advisory
+was withdrawn; [#104](https://github.com/flowent59/PaperWrench/issues/104)
+records that outcome. “Not in the runtime” is not a
 blanket acceptance of builder/CI vulnerabilities. Published architectures and
 new dependency scopes need separate evidence; do not reuse amd64 exceptions on
 ppc64le or another image.
@@ -68,8 +78,11 @@ An implementation must match **all** of these, not just a CVE substring or packa
 3. Severity at or below the recorded maximum; a raised severity needs review.
 4. A future UTC expiry, named responsible maintainer, evidence/rationale and an
    open/visible follow-up when correction or maintenance is deferred.
-5. Approval through code review/merge. New exceptions proposed in a PR cannot
-   automatically approve themselves by making a scanner exit zero.
+5. Approval through a separate PR, an explicit risk decision recorded by the
+   named maintainer, and merge. In a repository with one maintainer, a second
+   reviewer is not required; record the absence of independent review in the
+   PR. New exceptions proposed in a PR cannot automatically approve themselves
+   by making a scanner exit zero.
 
 Code absence, incorrect version/architecture matching, mitigation and accepted
 risk are distinct dispositions. Debian `no-dsa`, `ignored`, scanner `wont-fix`, a
