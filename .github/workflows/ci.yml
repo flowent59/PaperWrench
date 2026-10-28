@@ -445,6 +445,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: Verify committed registry checksum and policy binding
+        run: |
+          PYTHONPATH=scripts python - <<'PY'
+          import subprocess
+
+          from scan_image import approved_policy
+
+          revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          approved_policy(revision)
+          PY
       - run: python -m pip install pytest pytest-asyncio
       - name: Verify pass, findings, technical failures and exception boundaries
         run: pytest tests/backend/unit/test_image_security.py --noconftest --junitxml=image-policy-tests.xml
