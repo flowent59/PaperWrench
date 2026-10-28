@@ -1,5 +1,10 @@
 # Runtime image security audits
 
+**Current status (2026-10-27):** The [published 0.6.1 audit](security-audits/2026-10-27-published-image-review.md)
+fails because the approved runtime snapshot expired. The initial 80 decisions
+also expired; the descriptions below are historical until a new register is
+reviewed and approved.
+
 [Policy](security-image-policy.md) · [initial reviewed decisions](security-audits/2026-10-04-residual/dispositions.json)
 
 ## Execution and evidence
