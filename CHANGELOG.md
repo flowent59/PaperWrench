@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.2](https://github.com/flowent59/PaperWrench/compare/v0.6.1...v0.6.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* **security:** refresh runtime and migrate to Python 3.14 ([5bb29cf](https://github.com/flowent59/PaperWrench/commit/5bb29cfa9bee7d418f3ad1ec83cd295352ab85d2))
+* **security:** verify committed registry checksum ([dc59652](https://github.com/flowent59/PaperWrench/commit/dc59652b08117dddab398fb3758ab1b438c25f79))
+
 ## [0.6.1](https://github.com/flowent59/PaperWrench/compare/v0.6.0...v0.6.1) (2026-10-05)
 
 
