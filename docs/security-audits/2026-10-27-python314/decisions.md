@@ -1,6 +1,6 @@
 # Proposed residual decisions for Python 3.14.10
 
-Review date: 2026-10-27. Proposed expiry: 2026-11-10 00:00 UTC. Owner: PaperWrench maintainer (@flowent59). These decisions require separate code review and merge; the image scan remains advisory/failed until approval.
+Review date: 2026-10-27. Proposed expiry: 2026-11-10 00:00 UTC. Owner: PaperWrench maintainer (@flowent59). These decisions require explicit sole-maintainer acceptance recorded on PR #114 and merge; the image scan remains advisory/failed until then. No independent reviewer is available in this repository.
 
 Exact scanner/package/version/path occurrences, primary sources and evidence are in [dispositions.json](dispositions.json).
 

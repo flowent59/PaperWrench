@@ -1,10 +1,13 @@
 # Proposed Linux amd64 runtime review, 2026-10-27
 
-**Status: proposed, not approved.** This is a separate review of the Python
+**Status: effective only after the maintainer's recorded decision and PR merge.**
+This is a separate review of the Python
 3.14.10 runtime merged in [PR #113](https://github.com/flowent59/PaperWrench/pull/113)
 as `5bb29cfa9bee7d418f3ad1ec83cd295352ab85d2`.
 It does not approve itself. The approved base policy remains expired until this
-review has been independently checked and merged. The published 0.6.1 image is
+review is accepted by the sole maintainer and merged. Independent review is not
+available in this single-collaborator repository; that limitation is recorded in
+the PR. The published 0.6.1 image is
 unchanged.
 
 ## Exact scope and proof
@@ -56,8 +59,8 @@ Review the 73 records, especially the 17 changed Debian qualifications and two
 new Python occurrences, against the raw evidence and sources. The previous
 [2026-10-04 register](../2026-10-04-residual/dispositions.json) provides the
 original code-path rationale; this review records the current exact scope and
-reassessment in every record. A maintainer must approve the bounded register
-in this separate PR. The CI evaluator reads
+reassessment in every record. The named maintainer must record acceptance of
+the bounded register in this separate PR before merging it. The CI evaluator reads
 the approved base branch, so changing this proposed register in its own PR
 cannot turn its scan green. After approval, rebuild/publish the release image,
 scan its exact registry digest, and review any resulting identity or scope

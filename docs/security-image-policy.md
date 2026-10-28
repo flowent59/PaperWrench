@@ -1,15 +1,16 @@
 # Image vulnerability scan policy
 
-**Current status (2026-10-27):** The initial decisions and release runtime
-snapshot expired on 2026-10-18. The [latest published-image review](security-audits/2026-10-27-published-image-review.md)
+The initial decisions and release runtime snapshot expired on 2026-10-18. The
+[published-image review](security-audits/2026-10-27-published-image-review.md)
 records the resulting audit error and newly reported fixable advisories. This
 policy description does not renew any exception.
 
-A [separate proposed review](security-audits/2026-10-27-python314/README.md)
-now covers the Python 3.14.10 candidate's 73 residual advisory identities and
-325 exact scanner occurrences. Its new registry and runtime scope remain
-**unapproved** until independent PR review and merge. The evaluator must use
-the approved base branch during that review; the proposal does not approve
+A [separate review](security-audits/2026-10-27-python314/README.md) in
+[PR #114](https://github.com/flowent59/PaperWrench/pull/114) covers the Python
+3.14.10 runtime's 73 residual advisory identities and 325 exact scanner
+occurrences. Its registry and runtime scope take effect only after the named
+maintainer records an explicit decision on the PR and merges it. The evaluator
+must use the approved base branch during review; the proposal does not approve
 its own exceptions.
 
 Defined by [#100](https://github.com/flowent59/PaperWrench/issues/100), approved
@@ -77,8 +78,11 @@ An implementation must match **all** of these, not just a CVE substring or packa
 3. Severity at or below the recorded maximum; a raised severity needs review.
 4. A future UTC expiry, named responsible maintainer, evidence/rationale and an
    open/visible follow-up when correction or maintenance is deferred.
-5. Approval through code review/merge. New exceptions proposed in a PR cannot
-   automatically approve themselves by making a scanner exit zero.
+5. Approval through a separate PR, an explicit risk decision recorded by the
+   named maintainer, and merge. In a repository with one maintainer, a second
+   reviewer is not required; record the absence of independent review in the
+   PR. New exceptions proposed in a PR cannot automatically approve themselves
+   by making a scanner exit zero.
 
 Code absence, incorrect version/architecture matching, mitigation and accepted
 risk are distinct dispositions. Debian `no-dsa`, `ignored`, scanner `wont-fix`, a

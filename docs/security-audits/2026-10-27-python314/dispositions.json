@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "review_pr": "https://github.com/flowent59/PaperWrench/pull/114",
-  "approval": "Proposed bounded decisions. Separate code review and merge are required; this PR does not approve itself or suppress scanner findings.",
+  "approval": "Bounded decisions require the sole maintainer's explicit acceptance recorded on PR #114 and merge. No independent reviewer is available. This PR does not approve itself or suppress scanner findings before merge.",
   "scope": {
     "os": "linux",
     "architecture": "amd64",
