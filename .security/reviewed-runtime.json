@@ -13,5 +13,17 @@
     "frontend"
   ],
   "first_seen": {},
-  "additional_runtime_trees": []
+  "additional_runtime_trees": [
+    {
+      "runtime_tree_sha256": "b1cb7bee4822beda43c2236b8192caede2dd9a161b2d1f4412b574ccd8971fe1",
+      "source_commit": "8144bd0f6afccb8573b9f625b7725437701cbe21",
+      "owner": "PaperWrench maintainer (@flowent59)",
+      "expires_at": "2026-11-10T00:00:00Z",
+      "assessment": "Revalidated the proposed 0.6.2 release in PR #115: the reviewed runtime-path diff is version and Compose image-reference metadata only; 325 exact scanner occurrences, third-party installed component versions, runtime probes and deployment controls match the Python 3.14.10 register. PaperWrench itself changes from 0.6.1 to 0.6.2. This bounds the release candidate tree, not an unverified published digest.",
+      "evidence": [
+        "docs/security-audits/2026-10-28-release-0.6.2/README.md",
+        "docs/security-audits/2026-10-28-release-0.6.2/audit-evidence.zip"
+      ]
+    }
+  ]
 }
