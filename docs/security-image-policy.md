@@ -5,13 +5,15 @@ The initial decisions and release runtime snapshot expired on 2026-10-18. The
 records the resulting audit error and newly reported fixable advisories. This
 policy description does not renew any exception.
 
-A [separate review](security-audits/2026-10-27-python314/README.md) in
-[PR #114](https://github.com/flowent59/PaperWrench/pull/114) covers the Python
-3.14.10 runtime's 73 residual advisory identities and 325 exact scanner
-occurrences. Its registry and runtime scope take effect only after the named
-maintainer records an explicit decision on the PR and merges it. The evaluator
-must use the approved base branch during review; the proposal does not approve
-its own exceptions.
+A [separate review](security-audits/2026-10-29-python315/README.md) in
+[PR #119](https://github.com/flowent59/PaperWrench/pull/119) proposes the Python
+3.15.2 runtime's 71 residual advisory identities and 323 exact scanner
+occurrences, including the 0.6.3 release candidate. Its registry and runtime
+scope take effect only after the named maintainer records an explicit decision
+on the PR and merges it. The evaluator must use the approved base branch during
+review; the proposal does not approve its own exceptions. The earlier
+[Python 3.14 review](security-audits/2026-10-27-python314/README.md) remains
+historical evidence.
 
 Defined by [#100](https://github.com/flowent59/PaperWrench/issues/100), approved
 through review/merge of [PR #106](https://github.com/flowent59/PaperWrench/pull/106).
@@ -91,8 +93,8 @@ Keep exceptions and their matching findings in summaries, not only an exit code.
 Remove exceptions when a supported correction is applied; never delete package
 metadata/SBOMs to suppress a result.
 
-Current owner is the PaperWrench maintainer (@flowent59); expiry is
-**2026-10-18 00:00 UTC** for every initial record. Reassess sooner on a released
+Current owner is the PaperWrench maintainer (@flowent59); the proposed carried
+decisions retain their **2026-11-10 00:00 UTC** expiry. Reassess sooner on a released
 fix, new exploit/affected-range evidence or its specific input/deployment change
 trigger. [#107](https://github.com/flowent59/PaperWrench/issues/107) and
 [#108](https://github.com/flowent59/PaperWrench/issues/108) track CPython and Debian
