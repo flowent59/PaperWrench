@@ -304,9 +304,18 @@ def decisions(
                 and record["assessment"]
                 and record["sources"]
                 and record["review_triggers"]
-                and record["followup_issue"]
             ),
             "Incomplete decision ownership/evidence",
+        )
+        followup_issue = record.get("followup_issue")
+        require(
+            followup_issue is None
+            or (
+                isinstance(followup_issue, int)
+                and not isinstance(followup_issue, bool)
+                and followup_issue > 0
+            ),
+            "Invalid optional follow-up issue",
         )
         require(
             isinstance(record["occurrences"], list) and bool(record["occurrences"]),
@@ -429,7 +438,7 @@ def evaluate(
                 exception=matched,
                 disposition=record["disposition"] if record and matched else None,
                 expires_at=record["expires_at"] if record and matched else None,
-                followup_issue=record["followup_issue"] if record else None,
+                followup_issue=record.get("followup_issue") if record else None,
                 blocking=blocking,
                 reason=reason,
             )

@@ -21,9 +21,8 @@ passes against the current policy. The earlier
 The #108 Debian recheck binds the current exact Linux amd64 runtime after
 removing unused mount and account utilities. It retains 71 identities on 306
 scanner occurrences, with no supported Trixie fix newly available. The
-decisions still expire on **2026-11-10 00:00 UTC**;
-[#123](https://github.com/flowent59/PaperWrench/issues/123)
-tracks the next recheck.
+decisions still expire on **2026-11-10 00:00 UTC**; no scheduled review ticket
+is required.
 
 Defined by [#100](https://github.com/flowent59/PaperWrench/issues/100), approved
 through review/merge of [PR #106](https://github.com/flowent59/PaperWrench/pull/106).
@@ -78,7 +77,8 @@ The initial [register](security-audits/2026-10-04-residual/dispositions.json) ha
 80 explicit advisory decisions. The CI evaluator reads the approved base registry;
 it is never a Grype ignore file or Trivy ignore configuration. Every record includes aliases,
 exact scanner/package/version/type/path occurrences, installed file evidence,
-primary sources, disposition/rationale, priority, owner, expiry and follow-up.
+primary sources, disposition/rationale, priority, owner and expiry. Follow-up
+issue tracking is optional.
 
 An implementation must match **all** of these, not just a CVE substring or package:
 
@@ -88,8 +88,8 @@ An implementation must match **all** of these, not just a CVE substring or packa
    package version, architecture, native/app input behavior or deployment scope
    invalidates the decision; an image digest/code change requires revalidation.
 3. Severity at or below the recorded maximum; a raised severity needs review.
-4. A future UTC expiry, named responsible maintainer, evidence/rationale and an
-   open/visible follow-up when correction or maintenance is deferred.
+4. A future UTC expiry, named responsible maintainer and evidence/rationale.
+   Follow-up issue tracking is optional and does not change the expiry.
 5. Approval through a separate PR, an explicit risk decision recorded by the
    named maintainer, and merge. In a repository with one maintainer, a second
    reviewer is not required; record the absence of independent review in the
@@ -107,10 +107,11 @@ Current owner is the PaperWrench maintainer (@flowent59); the approved carried
 decisions retain their **2026-11-10 00:00 UTC** expiry. Reassess sooner on a released
 fix, new exploit/affected-range evidence or its specific input/deployment change
 trigger. [#107](https://github.com/flowent59/PaperWrench/issues/107) and
-[#108](https://github.com/flowent59/PaperWrench/issues/108) track CPython and Debian
-maintenance respectively; [#123](https://github.com/flowent59/PaperWrench/issues/123)
-continues Debian monitoring after #108. An issue remaining open does not renew
-its exceptions.
+[#108](https://github.com/flowent59/PaperWrench/issues/108) recorded CPython and
+Debian maintenance. The maintainer has removed the scheduled follow-up for the
+current Debian decisions; their **2026-11-10 00:00 UTC** expiry still applies.
+If no new decision exists at expiry, the audit reports a policy error. There is
+no automatic renewal or required issue tracking.
 
 ## Database freshness and technical failures
 
