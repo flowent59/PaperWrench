@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/flowent59/PaperWrench/compare/v0.6.3...v0.6.4) (2026-10-29)
+
+
+### Bug Fixes
+
+* remove unused mount and account utilities from runtime ([#121](https://github.com/flowent59/PaperWrench/issues/121)) ([a1dbfbe](https://github.com/flowent59/PaperWrench/commit/a1dbfbed51a6e6600eb1ed2b64263ea495e2407d))
+
 ## [0.6.3](https://github.com/flowent59/PaperWrench/compare/v0.6.2...v0.6.3) (2026-10-29)
 
 
