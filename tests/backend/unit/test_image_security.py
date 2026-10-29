@@ -67,7 +67,7 @@ def test_reviewed_real_reports_pass_without_hiding_findings(
     assert result["exit_code"] == 0, result
     assert result["identities"] == 80 and result["occurrences"] == 333
     assert all(
-        row["exception"] and row["expires_at"] and row["followup_issue"]
+        row["exception"] and row["expires_at"]
         for row in result["findings"]
     )
     assert {row["disposition"] for row in result["findings"]} == {
@@ -76,6 +76,22 @@ def test_reviewed_real_reports_pass_without_hiding_findings(
         "mitigated",
         "accepted-risk",
     }
+
+
+def test_issue_tracking_is_optional_but_decision_expiry_remains_enforced(
+    audit: Audit,
+) -> None:
+    grype, trivy, metadata, registry, approval = audit
+    for record in registry["records"]:
+        record.pop("followup_issue", None)
+    result = evaluate(grype, trivy, metadata, registry, approval, NOW)
+    assert result["exit_code"] == 0, result
+    assert all(row["followup_issue"] is None for row in result["findings"])
+
+    registry["records"][0]["expires_at"] = NOW.isoformat()
+    expired = evaluate(grype, trivy, metadata, registry, approval, NOW)
+    assert expired["exit_code"] == 2
+    assert any("Expired decision" in error for error in expired["errors"])
 
 
 @pytest.mark.parametrize("severity", ["Critical", "High", "Unknown", "UNRECOGNIZED"])

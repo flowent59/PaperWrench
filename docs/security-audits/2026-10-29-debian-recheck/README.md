@@ -1,9 +1,16 @@
-# Debian runtime recheck — issue #108
+# Debian runtime recheck â€” issue #108
 
 This review takes effect only after the [sole maintainer's explicit bounded decision](https://github.com/flowent59/PaperWrench/pull/124#issuecomment-6494863333)
 and merge of [PR #124](https://github.com/flowent59/PaperWrench/pull/124).
 No independent reviewer is available. The review keeps the existing
-**2026-11-10 00:00 UTC** expiry and hands the next check to [#123](https://github.com/flowent59/PaperWrench/issues/123).
+**2026-11-10 00:00 UTC** expiry. At the maintainer's request, no scheduled
+follow-up review or tracking issue is required. If the decisions expire, the
+image audit will report a policy error until a new decision is recorded; there
+is no automatic extension.
+
+The optional follow-up issue tracking change is recorded in
+[PR #126](https://github.com/flowent59/PaperWrench/pull/126); the expiry and
+all security decisions remain unchanged.
 
 ## Exact images and comparison
 
@@ -59,7 +66,7 @@ The 17 absent occurrences were removed from their records. The evaluator was
 run against the current raw main reports with the proposed runtime tree and
 registry in memory: `pass`, 306 occurrences, 71 identities, zero blocked,
 zero errors. The PR audit deliberately uses the earlier approved base policy;
-the new registry and trees become authoritative only after PR #124 merges.
+the new registry and trees became authoritative after PR #124 merged.
 
 For [zlib CVE-2026-85091](https://security-tracker.debian.org/tracker/CVE-2026-85091),
 Debian still marks Trixie 1.3.1 vulnerable; a corrected 1.3.2 package is only

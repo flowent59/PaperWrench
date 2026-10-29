@@ -13,8 +13,9 @@ in [PR #124](https://github.com/flowent59/PaperWrench/pull/124) binds the curren
 runtime scope after supported removal of unused tools: 306 occurrences, still
 71 identities, against the same Grype/Trivy DB snapshots as the published
 baseline. The separate policy PR is merged.
-[#123](https://github.com/flowent59/PaperWrench/issues/123)
-tracks the next Debian review before the unchanged expiry.
+The maintainer has removed the scheduled follow-up review. The existing
+2026-11-10 expiry still applies; expired decisions will appear as policy errors
+until a new maintainer decision is recorded.
 
 [Policy](security-image-policy.md) · [initial reviewed decisions](security-audits/2026-10-04-residual/dispositions.json)
 
@@ -146,7 +147,7 @@ and run its authoritative gate against the newly approved scope. A release PR
 cannot approve its own new fingerprint by modifying its policy file. Raw reports
 evaluated locally with a proposed snapshot are explicitly labelled review previews.
 
-To correct an image or reassess #107/#108/#123, preserve raw findings, verify new
+To correct an image or reassess #107/#108, preserve raw findings, verify new
 inventory/app/native scope, add a new dated registry snapshot with exact
 occurrences/evidence/dispositions and
 remove obsolete decisions. Update the registry checksum and runtime tree hash

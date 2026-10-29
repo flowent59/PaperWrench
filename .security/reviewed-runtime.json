@@ -3,8 +3,8 @@
   "approved_source": "a1dbfbed51a6e6600eb1ed2b64263ea495e2407d",
   "runtime_tree_sha256": "89e9dceda661849b445a19c0d4290174585e65fcb135f63bb1b4920faa162397",
   "registry_path": "docs/security-audits/2026-10-29-debian-recheck/dispositions.json",
-  "registry_sha256": "a56cf5848c860167c952bae0a43c211c8bb8b9980860ca180c43fa7e29d9e1eb",
-  "review_pr": "https://github.com/flowent59/PaperWrench/pull/124",
+  "registry_sha256": "a8ed4f567e82d3814eecf5227f3be878f970772705c45410e0612fa8158227ff",
+  "review_pr": "https://github.com/flowent59/PaperWrench/pull/126",
   "runtime_paths": [
     "Dockerfile",
     ".dockerignore",
