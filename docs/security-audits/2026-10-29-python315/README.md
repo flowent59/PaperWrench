@@ -1,9 +1,9 @@
 # Python 3.15.2 runtime review — issue #107
 
-This review proposes the exact Linux amd64 runtime scope for PR #119. It does not
-approve itself. The sole maintainer must record the bounded decision on that PR
-before merge; no independent reviewer is available. The 2026-11-10 00:00 UTC
-expiry of the previous decisions is unchanged.
+This review approved the exact Linux amd64 runtime scope in [PR #119](https://github.com/flowent59/PaperWrench/pull/119),
+after the [sole maintainer's bounded decision](https://github.com/flowent59/PaperWrench/pull/119#issuecomment-6492969317)
+and merge. No independent reviewer was available. The 2026-11-10 00:00 UTC
+expiry of the previous decisions was unchanged.
 
 ## Exact evidence
 
@@ -48,3 +48,16 @@ applicable), each with its existing owner, evidence, exact occurrences, follow-u
 and expiry. The two Python records are removed. Debian follow-up remains #108.
 Any new scanner evidence, package/path/severity change or released fix requires
 fresh review before the unchanged expiry.
+
+## Published 0.6.3 image
+
+The [release workflow](https://github.com/flowent59/PaperWrench/actions/runs/40850331351)
+published and validated the tagged image. The `0.6.3` and `latest` tags resolved
+to `sha256:adbf3c69f3bd2a984a4034e58838c34e97136915cbf42d74b4040ee58ed74dbd`.
+The [published-image scan](https://github.com/flowent59/PaperWrench/actions/runs/40850662320)
+resolved that digest, verified source commit
+`bde1fde824d9f519641a74670a387cdc0bbe8af5` and the approved candidate
+runtime tree `2fd41831bfb99b071f5f085d7b2b7c99852dfb745832a5dd125351e10d043ac5`,
+and returned **exit 0, zero blocked findings, zero errors** for 323 occurrences.
+Its raw reports, inventory, metadata and checksums are retained in
+`published-audit-evidence.zip`.
