@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "review_pr": "PENDING_REVIEW_PR",
+  "review_pr": "https://github.com/flowent59/PaperWrench/pull/124",
   "approval": "Sole maintainer must explicitly approve the 71 current Debian decisions and exact runtime scope on the separate review PR before merge. No independent reviewer is available. The prior 2026-11-10 expiry is retained; this proposal cannot approve itself.",
   "scope": {
     "os": "linux",
@@ -19908,8 +19908,7 @@
         "https://github.com/madler/zlib/issues/1310",
         "https://github.com/madler/zlib/issues/1310#issuecomment-5979623265",
         "https://github.com/madler/zlib/pull/1317",
-        "https://security-tracker.debian.org/tracker/CVE-2026-85091",
-        "https://github.com/madler/zlib/issues/1310"
+        "https://security-tracker.debian.org/tracker/CVE-2026-85091"
       ],
       "occurrences": [
         {

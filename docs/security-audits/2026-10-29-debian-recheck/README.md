@@ -12,6 +12,7 @@ independent reviewer is available. This review keeps the existing
 | Published 0.6.3 before | [published scan 40850662320](https://github.com/flowent59/PaperWrench/actions/runs/40850662320), digest `sha256:adbf3c69f3bd2a984a4034e58838c34e97136915cbf42d74b4040ee58ed74dbd` | See [prior evidence](../2026-10-29-python315/README.md) | 323 occurrences, 71 identities, pass under prior approval |
 | PR #121 candidate | `9b27d8ddb34a03966db1997651094c6212f866de`, [scan 40859615523](https://github.com/flowent59/PaperWrench/actions/runs/40859615523) | `sha256:3d064c8f323f85ea74e61ccba269ad63c782dfc269c8fc0e82df5b0dafcf2736` | 306 occurrences, 71 identities; scope review required |
 | Merged main | `a1dbfbed51a6e6600eb1ed2b64263ea495e2407d`, [scan 40860804635](https://github.com/flowent59/PaperWrench/actions/runs/40860804635) | `sha256:e946ef20b802be482b65967652af1ae3d65808ce75000c44d438efccaa959da5` | 306 occurrences, 71 identities; scope review required |
+| 0.6.4 release candidate, PR #122 | `371f1a514d4222dc049c22be21114acfd756d64c` (CI merge revision `cb6177819aead34749e48cbd83661c9fcc865298`), [scan 40860846758](https://github.com/flowent59/PaperWrench/actions/runs/40860846758) | `sha256:380f0fd2f99d556fd3e1678f2ec017cc2fa7804caf597e2afdd210bf432f0aa4` | 306 occurrences, 71 identities; scope review required |
 
 The merged runtime tree is `89e9dceda661849b445a19c0d4290174585e65fcb135f63bb1b4920faa162397`.
 The two current scans and the published comparison used the **same** Grype DB
@@ -22,6 +23,10 @@ checksum `sha256:a5ad3344d964e4d1472fa615b0e70f87c27cd21470fede2a8fbf6e4c6c32c90
 tool/DB metadata, execution logs, result and checksums are retained in the
 [candidate](candidate-audit-evidence.zip) and [main](main-audit-evidence.zip)
 ZIP files. The published baseline is retained in the [prior ZIP](../2026-10-29-python315/published-audit-evidence.zip).
+The [release candidate ZIP](release-candidate-audit-evidence.zip) retains the
+same raw evidence. Its exact runtime tree is
+`ff505e5f28c74906df9ef185efd8eec41ac4438289f63925a67bf584fbfce2bb`;
+its installed Debian inventory and all 306 finding keys match merged main.
 
 The supported `apt-get purge` after account creation removed `mount`, `passwd`
 and its `adduser` dependency. The installed Debian inventory lost exactly these
