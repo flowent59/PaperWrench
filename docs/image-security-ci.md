@@ -1,17 +1,18 @@
 # Runtime image security audits
 
-**Current status (2026-10-29):** [PR #119](https://github.com/flowent59/PaperWrench/pull/119)
-approved a Python 3.15.2 runtime register with 71 decisions and 323 exact
-occurrences. The [published 0.6.3 image](security-audits/2026-10-29-python315/README.md)
-passes the [digest-pinned scan](https://github.com/flowent59/PaperWrench/actions/runs/40850662320)
+**Current status (2026-10-29):** [PR #124](https://github.com/flowent59/PaperWrench/pull/124)
+approved the Python 3.15.2/Debian 13 runtime with 71 decisions and 306 exact
+occurrences after supported removal of unused utilities. The
+[published 0.6.4 image](security-audits/2026-10-29-debian-recheck/README.md)
+passes the [digest-pinned scan](https://github.com/flowent59/PaperWrench/actions/runs/40867749746)
 with zero blocked findings and zero errors. Raw main, candidate and published
 image evidence is versioned in that review.
 
 The [#108 Debian recheck](security-audits/2026-10-29-debian-recheck/README.md)
-in [PR #124](https://github.com/flowent59/PaperWrench/pull/124) binds a new
+in [PR #124](https://github.com/flowent59/PaperWrench/pull/124) binds the current
 runtime scope after supported removal of unused tools: 306 occurrences, still
 71 identities, against the same Grype/Trivy DB snapshots as the published
-baseline. It becomes effective when the separate policy PR merges.
+baseline. The separate policy PR is merged.
 [#123](https://github.com/flowent59/PaperWrench/issues/123)
 tracks the next Debian review before the unchanged expiry.
 

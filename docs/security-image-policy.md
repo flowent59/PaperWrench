@@ -7,21 +7,21 @@ policy description does not renew any exception.
 
 A [separate review](security-audits/2026-10-29-python315/README.md) in
 [PR #119](https://github.com/flowent59/PaperWrench/pull/119) approved the Python
-3.15.2 runtime's 71 residual advisory identities and 323 exact scanner
-occurrences, including the 0.6.3 release candidate. The named maintainer
-recorded an explicit bounded decision before merge. The
-[published 0.6.3 scan](https://github.com/flowent59/PaperWrench/actions/runs/40850662320)
-passes against this policy. The evaluator used the approved base branch during
-review; the proposal did not approve its own exceptions. The earlier
-[Python 3.14 review](security-audits/2026-10-27-python314/README.md) remains
-historical evidence.
+3.15.2 runtime's earlier 71 residual identities and 323 occurrences. The
+[issue #108 review](security-audits/2026-10-29-debian-recheck/README.md) in
+[PR #124](https://github.com/flowent59/PaperWrench/pull/124) approved the
+current 306 exact occurrences after unused mount/account tools were removed.
+The named maintainer recorded explicit bounded decisions before each merge;
+the evaluator used the approved base during each PR. The
+[published 0.6.4 digest scan](https://github.com/flowent59/PaperWrench/actions/runs/40867749746)
+passes against the current policy. The earlier
+[Python 3.14 review](security-audits/2026-10-27-python314/README.md) and
+0.6.3 scan remain historical evidence.
 
-The [issue #108 Debian recheck](security-audits/2026-10-29-debian-recheck/README.md)
-in [PR #124](https://github.com/flowent59/PaperWrench/pull/124) binds the next
-exact Linux amd64 runtime scope after removing unused mount and account
-utilities. It retains 71 identities on 306 scanner occurrences, with no
-supported Trixie fix newly available. The updated register becomes effective
-on PR #124 merge. The decisions still expire on **2026-11-10 00:00 UTC**;
+The #108 Debian recheck binds the current exact Linux amd64 runtime after
+removing unused mount and account utilities. It retains 71 identities on 306
+scanner occurrences, with no supported Trixie fix newly available. The
+decisions still expire on **2026-11-10 00:00 UTC**;
 [#123](https://github.com/flowent59/PaperWrench/issues/123)
 tracks the next recheck.
 

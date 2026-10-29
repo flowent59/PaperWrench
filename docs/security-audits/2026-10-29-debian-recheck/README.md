@@ -83,3 +83,24 @@ entries or privileged host mounts, absent Perl modules/tools and absent SQLite
 symbols used by the specific code-absence decisions. These controls do not
 extend the review to root, privileged, hostile filesystem or another
 architecture deployments.
+
+## Published 0.6.4 image
+
+The [release workflow](https://github.com/flowent59/PaperWrench/actions/runs/40867276364)
+published `v0.6.4` from `6882c3fe8a1fc0d2766a1fa74a2f2404e6674cd5`
+and verified the registry image on disposable Paperless. Both `0.6.4` and
+`latest` resolve to the immutable index digest
+`sha256:64025d617d198205f888ad5f854de71df31c3d0e22623e972edf068d90bcd9b3`
+(Linux amd64 manifest `sha256:6e2fd3af99f766d9420514de6bf7bfa0f442d518785d4a6d9de642ecf3e3349d`).
+The [published-image audit](https://github.com/flowent59/PaperWrench/actions/runs/40867749746)
+pulled that digest, checked the tagged source commit and the approved release
+tree, and returned **pass, exit 0, zero blocked findings and zero errors** for
+the same 306 occurrences / 71 identities. Its image config ID is
+`sha256:87afd39248547c66de7275f7c0c76c35164332796ccc8e029ac038c807df1064`.
+Raw scanner reports, inventory, DB/tool metadata, logs, summary and checksums
+are retained in [published-audit-evidence.zip](published-audit-evidence.zip).
+The Grype and Trivy DB checksums match the before/after comparison above.
+
+The daily scan of the old published 0.6.3 digest between policy merge and the
+0.6.4 publication correctly reported the 17 obsolete occurrences as unapproved.
+The current published digest has the expected passing assessment.
