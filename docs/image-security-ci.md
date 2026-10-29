@@ -1,12 +1,11 @@
 # Runtime image security audits
 
 **Current status (2026-10-29):** [PR #119](https://github.com/flowent59/PaperWrench/pull/119)
-proposes a Python 3.15.2 runtime register with 71 decisions and 323 exact
-occurrences. Its [main and release-candidate raw evidence](security-audits/2026-10-29-python315/README.md)
-remains a review proposal until the maintainer records a decision and merges it.
-The [published 0.6.2 image](security-audits/2026-10-27-published-image-review.md)
-still uses Python 3.14 until a new release is published; its scan must use the
-approved policy for that published revision.
+approved a Python 3.15.2 runtime register with 71 decisions and 323 exact
+occurrences. The [published 0.6.3 image](security-audits/2026-10-29-python315/README.md)
+passes the [digest-pinned scan](https://github.com/flowent59/PaperWrench/actions/runs/40850662320)
+with zero blocked findings and zero errors. Raw main, candidate and published
+image evidence is versioned in that review.
 
 [Policy](security-image-policy.md) · [initial reviewed decisions](security-audits/2026-10-04-residual/dispositions.json)
 
@@ -101,8 +100,8 @@ does not automatically block a release.
 Critical/High/Unknown findings block without an exact current approved decision,
 including findings with no fix. The highest reported severity is used across
 verified aliases. Every scanner/package/version/type/path occurrence must match.
-All initial decisions expire on **2026-10-18 at 00:00 UTC**, including Low entries;
-an expired entry anywhere in the register is a policy error.
+The current 71 decisions expire on **2026-11-10 at 00:00 UTC**, including Low
+entries; an expired entry anywhere in the register is a policy error.
 
 For new Medium/Low/Negligible identities, a maintainer must first record the actual
 earliest discovery time in the approved policy's `first_seen` map. Until that
