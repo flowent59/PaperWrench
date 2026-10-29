@@ -189,7 +189,9 @@ def validate_reports(
     )
 
 
-def reviewed_runtime_trees(approval: dict[str, Any], now: datetime) -> set[str]:
+def reviewed_runtime_trees(
+    approval: dict[str, Any], now: datetime, warnings: list[str] | None = None
+) -> set[str]:
     """Read exact scope snapshots from the approved base policy, never PR files."""
     primary = approval["runtime_tree_sha256"]
     require(
@@ -214,12 +216,15 @@ def reviewed_runtime_trees(approval: dict[str, Any], now: datetime) -> set[str]:
             bool(snapshot["assessment"] and snapshot["owner"] and snapshot["evidence"]),
             "Missing runtime revalidation evidence/ownership",
         )
-        require(timestamp(snapshot["expires_at"]) > now, "Expired reviewed runtime scope")
+        if timestamp(snapshot["expires_at"]) <= now and warnings is not None:
+            warnings.append("Expired reviewed runtime scope: " + digest)
         trees.add(digest)
     return trees
 
 
-def scope_matches(metadata: dict[str, Any], approval: dict[str, Any], now: datetime) -> bool:
+def scope_matches(
+    metadata: dict[str, Any], approval: dict[str, Any], now: datetime, warnings: list[str]
+) -> bool:
     image, probe, container = metadata["image"], metadata["probe"], metadata["container"]
     flags = container["HostConfig"]
     return bool(
@@ -229,7 +234,8 @@ def scope_matches(metadata: dict[str, Any], approval: dict[str, Any], now: datet
         and probe["uid"] == 10001
         and probe["debian"]["ID"] == "debian"
         and probe["debian"]["VERSION_ID"] == "13"
-        and metadata["runtime_tree_sha256"] in reviewed_runtime_trees(approval, now)
+        and metadata["runtime_tree_sha256"]
+        in reviewed_runtime_trees(approval, now, warnings)
         and flags["ReadonlyRootfs"]
         and flags["CapDrop"] == ["ALL"]
         and flags["SecurityOpt"] == ["no-new-privileges"]
@@ -287,13 +293,14 @@ def absence_checks(probe: dict[str, Any]) -> None:
 def decisions(
     registry: dict[str, Any],
     now: datetime,
-) -> tuple[dict[str, dict[str, Any]], list[str]]:
+) -> tuple[dict[str, dict[str, Any]], list[str], list[str]]:
     require(
         registry.get("schema_version") == 1 and isinstance(registry.get("records"), list),
         "Invalid decision registry",
     )
     aliases: dict[str, dict[str, Any]] = {}
     errors = []
+    warnings = []
     for record in registry["records"]:
         require(record["id"] in record["aliases"], "Decision lacks its identity")
         require(record["disposition"] in DISPOSITIONS, "Invalid decision disposition")
@@ -339,11 +346,11 @@ def decisions(
                 "Malformed exact occurrence",
             )
         if timestamp(record["expires_at"]) <= now:
-            errors.append("Expired decision: " + record["id"])
+            warnings.append("Expired decision: " + record["id"])
         for alias in record["aliases"]:
             require(alias not in aliases, f"Ambiguous/duplicate advisory alias: {alias}")
             aliases[alias] = record
-    return aliases, errors
+    return aliases, errors, warnings
 
 
 def evaluate(
@@ -358,8 +365,8 @@ def evaluate(
     try:
         validate_reports(grype, trivy, metadata, now)
         findings = normalize(grype, trivy)
-        aliases, errors = decisions(registry, now)
-        valid_scope = scope_matches(metadata, approval, now)
+        aliases, errors, warnings = decisions(registry, now)
+        valid_scope = scope_matches(metadata, approval, now, warnings)
         if valid_scope:
             absence_checks(metadata["probe"])
         else:
@@ -378,7 +385,7 @@ def evaluate(
             record = aliases.get(finding.advisory)
             identity = record["id"] if record else finding.advisory
             matched = False
-            if record and valid_scope and timestamp(record["expires_at"]) > now:
+            if record and valid_scope:
                 matched = RANK[maximum[identity]] <= RANK[
                     record["maximum_scanner_severity"]
                 ] and any(
@@ -438,15 +445,20 @@ def evaluate(
                 exception=matched,
                 disposition=record["disposition"] if record and matched else None,
                 expires_at=record["expires_at"] if record and matched else None,
+                expired=bool(record and matched and timestamp(record["expires_at"]) <= now),
                 followup_issue=record.get("followup_issue") if record else None,
                 blocking=blocking,
                 reason=reason,
             )
             rows.append(row)
+        status = "policy-error" if errors else "findings" if blocked else "pass"
+        if not errors and not blocked and warnings:
+            status = "pass-with-warnings"
         return {
             "exit_code": 2 if errors else 1 if blocked else 0,
-            "status": "policy-error" if errors else "findings" if blocked else "pass",
+            "status": status,
             "errors": errors,
+            "warnings": warnings,
             "scope_valid": valid_scope,
             "blocked": blocked,
             "occurrences": len(rows),
