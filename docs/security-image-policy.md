@@ -16,6 +16,14 @@ review; the proposal did not approve its own exceptions. The earlier
 [Python 3.14 review](security-audits/2026-10-27-python314/README.md) remains
 historical evidence.
 
+The [issue #108 Debian recheck](security-audits/2026-10-29-debian-recheck/README.md)
+proposes the next exact Linux amd64 runtime scope after removing unused mount
+and account utilities. It retains 71 identities on 306 scanner occurrences,
+with no supported Trixie fix newly available. Its separate review PR must be
+approved and merged before the updated register becomes effective. The
+decisions still expire on **2026-11-10 00:00 UTC**; [#123](https://github.com/flowent59/PaperWrench/issues/123)
+tracks the next recheck.
+
 Defined by [#100](https://github.com/flowent59/PaperWrench/issues/100), approved
 through review/merge of [PR #106](https://github.com/flowent59/PaperWrench/pull/106).
 [#101](https://github.com/flowent59/PaperWrench/issues/101) implements and tests
@@ -99,7 +107,9 @@ decisions retain their **2026-11-10 00:00 UTC** expiry. Reassess sooner on a rel
 fix, new exploit/affected-range evidence or its specific input/deployment change
 trigger. [#107](https://github.com/flowent59/PaperWrench/issues/107) and
 [#108](https://github.com/flowent59/PaperWrench/issues/108) track CPython and Debian
-maintenance; an issue remaining open does not renew its exceptions.
+maintenance respectively; [#123](https://github.com/flowent59/PaperWrench/issues/123)
+continues Debian monitoring after #108. An issue remaining open does not renew
+its exceptions.
 
 ## Database freshness and technical failures
 

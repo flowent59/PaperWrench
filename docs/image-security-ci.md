@@ -7,6 +7,13 @@ passes the [digest-pinned scan](https://github.com/flowent59/PaperWrench/actions
 with zero blocked findings and zero errors. Raw main, candidate and published
 image evidence is versioned in that review.
 
+The [#108 Debian recheck](security-audits/2026-10-29-debian-recheck/README.md)
+proposes a new runtime scope after supported removal of unused tools: 306
+occurrences, still 71 identities, against the same Grype/Trivy DB snapshots as
+the published baseline. The separate policy PR must approve the new tree before
+this becomes the effective register. [#123](https://github.com/flowent59/PaperWrench/issues/123)
+tracks the next Debian review before the unchanged expiry.
+
 [Policy](security-image-policy.md) · [initial reviewed decisions](security-audits/2026-10-04-residual/dispositions.json)
 
 ## Execution and evidence
@@ -137,7 +144,7 @@ and run its authoritative gate against the newly approved scope. A release PR
 cannot approve its own new fingerprint by modifying its policy file. Raw reports
 evaluated locally with a proposed snapshot are explicitly labelled review previews.
 
-To correct an image or reassess #107/#108, preserve raw findings, verify new
+To correct an image or reassess #107/#108/#123, preserve raw findings, verify new
 inventory/app/native scope, add a new dated registry snapshot with exact
 occurrences/evidence/dispositions and
 remove obsolete decisions. Update the registry checksum and runtime tree hash
