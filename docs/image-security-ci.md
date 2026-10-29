@@ -1,9 +1,12 @@
 # Runtime image security audits
 
-**Current status (2026-10-27):** The [published 0.6.1 audit](security-audits/2026-10-27-published-image-review.md)
-fails because the approved runtime snapshot expired. The initial 80 decisions
-also expired; the descriptions below are historical until a new register is
-reviewed and approved.
+**Current status (2026-10-29):** [PR #119](https://github.com/flowent59/PaperWrench/pull/119)
+proposes a Python 3.15.2 runtime register with 71 decisions and 323 exact
+occurrences. Its [main and release-candidate raw evidence](security-audits/2026-10-29-python315/README.md)
+remains a review proposal until the maintainer records a decision and merges it.
+The [published 0.6.2 image](security-audits/2026-10-27-published-image-review.md)
+still uses Python 3.14 until a new release is published; its scan must use the
+approved policy for that published revision.
 
 [Policy](security-image-policy.md) · [initial reviewed decisions](security-audits/2026-10-04-residual/dispositions.json)
 
