@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/flowent59/PaperWrench/compare/v0.6.2...v0.6.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* migrate runtime and CI to Python 3.15.2 ([#117](https://github.com/flowent59/PaperWrench/issues/117)) ([5bc74cf](https://github.com/flowent59/PaperWrench/commit/5bc74cf6855b10b4e02f4acb697f372c6e12d02b))
+
 ## [0.6.2](https://github.com/flowent59/PaperWrench/compare/v0.6.1...v0.6.2) (2026-10-28)
 
 
