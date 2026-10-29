@@ -283,7 +283,7 @@ means inspect History, never automatically submit again. The original
 
 ## Debian 13 container base
 
-The Dockerfile builds the frontend with Node 22 on Trixie and uses Python 3.14
+The Dockerfile builds the frontend with Node 22 on Trixie and uses Python 3.15
 on Trixie for the backend and runtime. The language major/minor versions, port,
 UID/GID 10001 and `/data` layout are unchanged. The pinned runtime includes a
 PCRE2 security update installed from Debian during the build.

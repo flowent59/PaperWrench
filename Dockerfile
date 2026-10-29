@@ -28,7 +28,7 @@ RUN npx tsc -b && npx vite build --outDir /build/dist --emptyOutDir
 # ---------------------------------------------------------------------------
 # Stage 2 - build the Python wheel
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-trixie@sha256:82abc9f53600280b0757126f83c5a7d47088592d2acb6b4c0b9e97f76865508c AS backend
+FROM python:3.15.2-slim-trixie@sha256:c4158543ecb725b99e57d129dfd43d761d4c43e4577b5e23326aabb223cf7f4e AS backend
 
 WORKDIR /build
 
@@ -42,7 +42,7 @@ RUN python -m build --wheel --outdir /wheels
 # ---------------------------------------------------------------------------
 # Stage 3 - runtime
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-trixie@sha256:82abc9f53600280b0757126f83c5a7d47088592d2acb6b4c0b9e97f76865508c AS runtime
+FROM python:3.15.2-slim-trixie@sha256:c4158543ecb725b99e57d129dfd43d761d4c43e4577b5e23326aabb223cf7f4e AS runtime
 
 # Apply supported Debian security updates released after the pinned base:
 # PCRE2, the emSign CA removal, and the xz/liblzma correction.
@@ -77,12 +77,12 @@ COPY backend/requirements.lock /tmp/requirements.lock
 # and migrations run on boot without any extra files. Installation tools are
 # unused at runtime. Check the installed application's dependencies after removing
 # setuptools/wheel, then remove pip and its vulnerable vendored libraries too.
-RUN pip install --no-cache-dir -r /tmp/requirements.lock \
+RUN pip install --no-cache-dir --only-binary=:all: -r /tmp/requirements.lock \
     && pip install --no-cache-dir --no-deps /tmp/*.whl \
     && pip uninstall -y setuptools wheel \
     && pip check \
     && pip uninstall -y pip \
-    && rm -rf /usr/local/lib/python3.14/ensurepip \
+    && rm -rf /usr/local/lib/python3.15/ensurepip \
     && rm -f /tmp/*.whl /tmp/requirements.lock
 
 RUN mkdir -p /data /app /run/secrets && chown -R paperwrench:paperwrench /data /app
