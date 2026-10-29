@@ -68,8 +68,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Non-root by default. The UID is fixed so a bind-mounted /data can be
 # chowned predictably on the host.
+# Account creation precedes a dpkg purge of unused mount/account utilities;
+# package metadata remains available for vulnerability scans.
 RUN groupadd --gid 10001 paperwrench \
-    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin paperwrench
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin paperwrench \
+    && apt-get purge -y mount passwd
 
 COPY --from=backend /wheels/*.whl /tmp/
 COPY backend/requirements.lock /tmp/requirements.lock
@@ -88,8 +91,8 @@ RUN pip install --no-cache-dir --only-binary=:all: -r /tmp/requirements.lock \
 RUN mkdir -p /data /app /run/secrets && chown -R paperwrench:paperwrench /data /app
 
 # The application has no privileged helpers. Remove inherited setuid/setgid
-# permissions, including mount/account tools, even outside the hardened Compose
-# deployment. Keep package files and metadata available for vulnerability scans.
+# permissions, including any remaining system tools, even outside the hardened
+# Compose deployment. Keep package files and metadata for vulnerability scans.
 RUN find /usr -type f -perm /6000 -exec chmod a-s {} +
 
 USER paperwrench
