@@ -555,6 +555,24 @@ jobs:
         run: |
           uid=$(docker exec pw id -u)
           test "$uid" != "0" || { echo "::error::container runs as root"; exit 1; }
+          docker exec pw id paperwrench
+
+      - name: Unused mount and account utilities are absent
+        run: |
+          docker exec pw sh -c '
+            for tool in mount umount passwd useradd adduser; do
+              if command -v "$tool" >/dev/null 2>&1; then
+                echo "unexpected runtime utility: $tool" >&2
+                exit 1
+              fi
+            done
+            for package in mount passwd adduser; do
+              if dpkg-query -W -f="${Status}" "$package" 2>/dev/null | grep -q "install ok installed"; then
+                echo "unexpected installed package: $package" >&2
+                exit 1
+              fi
+            done
+          '
 
       - name: No inherited setuid or setgid executables
         run: |
