@@ -554,7 +554,7 @@ The properties it does guarantee:
 
 | Layer | Choice | Why |
 | --- | --- | --- |
-| Backend | FastAPI, Python 3.11 | Async HTTP client, typed models, OpenAPI for free |
+| Backend | FastAPI, Python 3.15 | Async HTTP client, typed models, OpenAPI for free |
 | Validation | Pydantic v2 | Same models validate input and generate the schema |
 | HTTP client | httpx (async) | Bounded-concurrency fan-out with real timeouts |
 | ORM | SQLAlchemy 2.0 typed | `mypy --strict` catches model misuse |

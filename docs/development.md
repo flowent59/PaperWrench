@@ -445,7 +445,7 @@ it must never be repurposed for a real library. Operator quiescence is ASSUMED.
 `make check` does not replace the guarded live, migration and Docker CI jobs.
 CI's complete gate list in `.github/workflows/ci.yml` remains mandatory.
 On Windows, the runtime instance ID uses portable `platform.node()`; Linux
-Python 3.11 CI remains authoritative for the production environment.
+Python 3.15 CI remains authoritative for the production environment.
 
 
 ## M9 rollback verification

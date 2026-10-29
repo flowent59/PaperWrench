@@ -117,7 +117,7 @@ with continuing correction/review work in #107 and #108 as described above.
 ## Container migration snapshot (2026-10-04)
 
 The Docker build uses Debian 13 (Trixie) for the Node 22 frontend builder and
-Python 3.11 backend/runtime. Bases are pinned by digest; the runtime also installs
+Python 3.15 backend/runtime. Bases are pinned by digest; the runtime also installs
 the available PCRE2 security update from Debian. The installed image, native TLS,
 Fernet/Argon2 credentials and a populated Bookworm SQLite backup are verified.
 See the [Debian 13 audit evidence](security-audits/2026-10-04-debian13/README.md)
