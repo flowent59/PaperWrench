@@ -9,7 +9,7 @@
 
 services:
   paperwrench:
-    image: ${PAPERWRENCH_IMAGE:-ghcr.io/flowent59/paperwrench:0.6.3} # x-release-please-version
+    image: ${PAPERWRENCH_IMAGE:-ghcr.io/flowent59/paperwrench:0.6.4} # x-release-please-version
     pull_policy: always
     container_name: paperwrench
     restart: unless-stopped
