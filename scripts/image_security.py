@@ -299,8 +299,8 @@ def decisions(
         "Invalid decision registry",
     )
     aliases: dict[str, dict[str, Any]] = {}
-    errors = []
-    warnings = []
+    errors: list[str] = []
+    warnings: list[str] = []
     for record in registry["records"]:
         require(record["id"] in record["aliases"], "Decision lacks its identity")
         require(record["disposition"] in DISPOSITIONS, "Invalid decision disposition")
