@@ -8,10 +8,11 @@ with zero blocked findings and zero errors. Raw main, candidate and published
 image evidence is versioned in that review.
 
 The [#108 Debian recheck](security-audits/2026-10-29-debian-recheck/README.md)
-proposes a new runtime scope after supported removal of unused tools: 306
-occurrences, still 71 identities, against the same Grype/Trivy DB snapshots as
-the published baseline. The separate policy PR must approve the new tree before
-this becomes the effective register. [#123](https://github.com/flowent59/PaperWrench/issues/123)
+in [PR #124](https://github.com/flowent59/PaperWrench/pull/124) binds a new
+runtime scope after supported removal of unused tools: 306 occurrences, still
+71 identities, against the same Grype/Trivy DB snapshots as the published
+baseline. It becomes effective when the separate policy PR merges.
+[#123](https://github.com/flowent59/PaperWrench/issues/123)
 tracks the next Debian review before the unchanged expiry.
 
 [Policy](security-image-policy.md) · [initial reviewed decisions](security-audits/2026-10-04-residual/dispositions.json)

@@ -17,11 +17,12 @@ review; the proposal did not approve its own exceptions. The earlier
 historical evidence.
 
 The [issue #108 Debian recheck](security-audits/2026-10-29-debian-recheck/README.md)
-proposes the next exact Linux amd64 runtime scope after removing unused mount
-and account utilities. It retains 71 identities on 306 scanner occurrences,
-with no supported Trixie fix newly available. Its separate review PR must be
-approved and merged before the updated register becomes effective. The
-decisions still expire on **2026-11-10 00:00 UTC**; [#123](https://github.com/flowent59/PaperWrench/issues/123)
+in [PR #124](https://github.com/flowent59/PaperWrench/pull/124) binds the next
+exact Linux amd64 runtime scope after removing unused mount and account
+utilities. It retains 71 identities on 306 scanner occurrences, with no
+supported Trixie fix newly available. The updated register becomes effective
+on PR #124 merge. The decisions still expire on **2026-11-10 00:00 UTC**;
+[#123](https://github.com/flowent59/PaperWrench/issues/123)
 tracks the next recheck.
 
 Defined by [#100](https://github.com/flowent59/PaperWrench/issues/100), approved
