@@ -68,7 +68,7 @@ function DynamicCollectionCreator({ name, onCreated }: {
 
   return <Card><CardContent className="space-y-3 p-4">
     <p className="text-sm text-muted-foreground">{m.dynamicHelp}</p>
-    <FilterBuilder filters={filters} onChange={change} fields={localized?.fields ?? []}
+    <FilterBuilder embeddedPreview filters={filters} onChange={change} fields={localized?.fields ?? []}
       grouping={localized?.grouping} issues={validation.data?.issues ?? []}
       referenceOptions={referenceOptions} />
     <div className="flex items-center gap-2">

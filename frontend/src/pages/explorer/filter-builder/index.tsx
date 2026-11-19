@@ -236,6 +236,7 @@ function AdvancedFilters({
           }
 
           const group: FilterGroup = child
+          const alternativeField = group.operator === 'or' ? firstGroupField : firstField
           return (
             <div key={path} className="flex items-start gap-2">
               <span className="mt-2 w-10 shrink-0 text-xs font-medium uppercase text-muted-foreground">
@@ -277,13 +278,13 @@ function AdvancedFilters({
                     )
                   })}
                 </div>
-                {(group.operator === 'or' ? firstGroupField : firstField) !== undefined && (
+                {alternativeField !== undefined && (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="mt-2"
                     onClick={() =>
-                      onChange(addToGroup(filters, index, conditionFor((group.operator === 'or' ? firstGroupField : firstField)!)))
+                      onChange(addToGroup(filters, index, conditionFor(alternativeField)))
                     }
                   >
                     <Plus className="h-3.5 w-3.5" aria-hidden="true" />
