@@ -81,6 +81,28 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
   }
   const explorer = (query: unknown) => `/documents?quality_query=${encodeURIComponent(JSON.stringify(query))}`
   try {
+    // Use the same simple criteria before and after switching the signed-in language.
+    await page.goto(explorer(scope))
+    await page.getByRole('button', { name: 'Filters', exact: true }).click()
+    await page.getByRole('combobox', { name: 'Add a custom field' }).selectOption(`custom_field:${period.id}`)
+    await page.getByLabel(period.name, { exact: true }).selectOption('unfilled')
+    const pageSelection = page.getByRole('link', { name: 'Prepare current page' })
+    await expect(pageSelection).toBeVisible()
+    await page.getByRole('button', { name: 'Advanced filters', exact: true }).click()
+    await page.getByRole('button', { name: 'Simple filters', exact: true }).click()
+    await expect(page.getByLabel(period.name, { exact: true })).toHaveValue('unfilled')
+    await page.getByLabel('Language', { exact: true }).selectOption('fr')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    await expect(page.getByRole('option', { name: 'Non renseigné' })).toBeVisible()
+    const frenchSelection = page.getByRole('link', { name: 'Préparer la page actuelle' })
+    await frenchSelection.focus()
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(/\/transformations$/)
+    await page.goBack()
+    await expect(page.getByLabel(period.name, { exact: true })).toHaveValue('unfilled')
+    await page.getByLabel('Langue', { exact: true }).selectOption('en')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+
     const savedViewResponse = await app.post('/api/v1/views', { headers: writeHeaders, data: {
       name: 'M13 saved Explorer view', is_default: true,
       definition: {
