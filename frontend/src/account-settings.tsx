@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { errorMessage } from '@/i18n/errors'
 import { messages } from '@/i18n/messages'
 
-export function AccountSettings() {
+export function AccountSettings({ inline = false }: { inline?: boolean }) {
   const { session } = useAuth()
   const [available, setAvailable] = useState(false)
   const [remembered, setRemembered] = useState(session.remembered ?? false)
@@ -42,11 +42,7 @@ export function AccountSettings() {
     finally { setBusy(false) }
   }
 
-  return <details className="relative shrink-0" onToggle={(event) => {
-    if (!event.currentTarget.open) { setToken(''); setPassword(''); setError(null); setSaved(false) }
-  }}>
-    <summary className="cursor-pointer whitespace-nowrap text-sm">{messages.auth.account}</summary>
-    <div className="absolute right-0 top-8 z-50 w-80 space-y-3 rounded border bg-background p-4 shadow-lg">
+  const form = <div className="space-y-3">
       <p className="break-words text-sm">{messages.auth.username}: {session.username}</p>
       <p className="text-xs text-muted-foreground">{remembered ? messages.auth.isRemembered : messages.auth.storage}</p>
       {available && <form className="space-y-3" onSubmit={save}>
@@ -61,15 +57,23 @@ export function AccountSettings() {
             onChange={(event) => setPassword(event.target.value)} />
         </label>
         <Button type="submit" disabled={busy}>{messages.auth.saveCredentials}</Button>
+        {inline && <Button type="button" variant="ghost" disabled={busy}
+          onClick={() => { setToken(''); setPassword(''); setError(null) }}>{messages.system.cancelEdit}</Button>}
       </form>}
       {remembered && <>
         <p className="text-xs text-muted-foreground">{messages.auth.deleteHelp}</p>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => void remove()}>
+        <Button type="button" variant="outline" disabled={busy} onClick={() => { if (!inline || window.confirm(messages.auth.deleteHelp)) void remove() }}>
           {messages.auth.deleteCredentials}
         </Button>
       </>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {saved && <p role="status" className="text-sm">{messages.auth.saved}</p>}
-    </div>
+  </div>
+  if (inline) return form
+  return <details className="relative shrink-0" onToggle={(event) => {
+    if (!event.currentTarget.open) { setToken(''); setPassword(''); setError(null); setSaved(false) }
+  }}>
+    <summary className="cursor-pointer whitespace-nowrap text-sm">{messages.auth.account}</summary>
+    <div className="absolute right-0 top-8 z-50 w-80 rounded border bg-background p-4 shadow-lg">{form}</div>
   </details>
 }
