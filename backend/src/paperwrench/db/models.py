@@ -472,6 +472,19 @@ class SavedExplorerView(Base):
     )
 
 
+class SavedFilterSet(Base):
+    """A private snapshot of criteria, independent of its consumers."""
+
+    __tablename__ = "saved_filter_sets"
+    __table_args__ = (UniqueConstraint("owner_id", "name", name="saved_filter_owner_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    definition_json: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class SavedRule(Base):
     """Private reusable transformation definition; documents remain in Paperless."""
 
@@ -519,6 +532,7 @@ __all__ = [
     "OperationStatus",
     "RuntimeLock",
     "SavedExplorerView",
+    "SavedFilterSet",
     "SavedRule",
     "SavedRuleRevision",
     "UserPreference",

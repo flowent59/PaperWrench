@@ -58,6 +58,7 @@ import {
   withOperator,
   withValue,
 } from './model'
+import { FilterLibraryPicker } from './library-picker'
 import { canEditSimply, SimpleFilters } from './simple'
 import { ValueInput, type ReferenceOption } from './value-input'
 
@@ -71,6 +72,7 @@ export interface FilterBuilderProps {
   grouping: GroupingCapabilities | undefined
   issues: FilterIssue[]
   embeddedPreview?: boolean
+  library?: boolean
   /** Metadata options per `reference_kind`, for reference-valued conditions. */
   referenceOptions: Record<string, ReferenceOption[]>
 }
@@ -156,6 +158,7 @@ function ConditionRow({
         )}
 
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           onClick={onRemove}
@@ -280,6 +283,7 @@ function AdvancedFilters({
                 </div>
                 {alternativeField !== undefined && (
                   <Button
+          type="button"
                     variant="ghost"
                     size="sm"
                     className="mt-2"
@@ -302,6 +306,7 @@ function AdvancedFilters({
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
+          type="button"
           variant="outline"
           size="sm"
           disabled={firstField === undefined}
@@ -317,6 +322,7 @@ function AdvancedFilters({
 
         {orGroups && filters.root.operator === 'and' && (
           <Button
+          type="button"
             variant="outline"
             size="sm"
             disabled={firstGroupField === undefined}
@@ -424,6 +430,7 @@ export function FilterBuilder(props: FilterBuilderProps) {
       {props.issues.map((issue) => <p key={issue.code + issue.path} className="text-sm text-destructive">
         {issueMessage(issue)}</p>)}
     </>}
+    {props.library !== false && <FilterLibraryPicker filters={props.filters} onChange={props.onChange} />}
     {!props.embeddedPreview && <>
       <Button type="button" variant="outline" size="sm" aria-expanded={previewOpen}
         onClick={() => setPreviewOpen(!previewOpen)}>{messages.filters.previewResults}</Button>

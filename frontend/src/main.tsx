@@ -17,6 +17,7 @@ import { QualityPageView } from '@/pages/quality'
 import { CollectionsPage, CollectionPage } from '@/pages/collections'
 import { AnalyticsPage } from '@/pages/analytics'
 
+import { FilterLibraryPage } from '@/pages/filter-library'
 import { SettingsPage } from '@/pages/settings'
 
 import './index.css'
@@ -56,6 +57,7 @@ createRoot(container).render(
               <Route path="collections" element={<CollectionsPage />} />
               <Route path="collections/:collectionId" element={<CollectionPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="filters" element={<FilterLibraryPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>

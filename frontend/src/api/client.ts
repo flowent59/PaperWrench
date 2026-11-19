@@ -440,3 +440,18 @@ export const schedulesApi = {
   runs: (id: number, before?: number) => apiFetch<import('./types').ScheduleRun[]>(
     `/schedules/${id}/runs${before ? `?before=${before}` : ''}`),
 }
+
+export const filterLibraryApi = {
+  list: () => apiFetch<import('./types').FilterLibraryEntry[]>('/filter-library'),
+  criteria: (id: number, signal: AbortSignal) =>
+    apiFetch<import('./types').FilterLibraryInput['definition']>(`/filter-library/${id}/criteria`, { signal }),
+  create: (data: import('./types').FilterLibraryInput) =>
+    apiFetch<import('./types').FilterLibraryEntry>('/filter-library', {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  update: (id: number, data: import('./types').FilterLibraryInput) =>
+    apiFetch<import('./types').FilterLibraryEntry>(`/filter-library/${id}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  remove: (id: number) => apiFetch<void>(`/filter-library/${id}`, { method: 'DELETE' }),
+}

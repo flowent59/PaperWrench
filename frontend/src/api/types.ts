@@ -844,3 +844,13 @@ export interface ScheduleRun {
   error_code: string | null
   job_id: number | null
 }
+
+export interface FilterLibraryInput {
+  name: string
+  description: string
+  definition: { version: 1; filters: FilterSet }
+}
+
+export interface FilterLibraryEntry extends FilterLibraryInput {
+  id: number
+}

@@ -43,7 +43,7 @@ function getNavSections(): NavSection[] { return [
     items: [
       { to: '/', label: messages.nav.dashboard, icon: LayoutDashboard, available: true },
       { to: '/documents', label: messages.nav.documents, icon: FileText, available: true },
-      { to: '/filters', label: messages.nav.filters, icon: Filter, available: false },
+      { to: '/filters', label: messages.nav.filters, icon: Filter, available: true },
       { to: '/collections', label: messages.nav.collections, icon: FolderTree, available: true },
     ],
   },
