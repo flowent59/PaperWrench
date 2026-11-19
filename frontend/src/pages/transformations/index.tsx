@@ -212,7 +212,7 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
           </select>
         </label>
         <details open={!isEmpty(filters)}>
-          <summary className="cursor-pointer text-sm font-medium">{m.advancedFilters}</summary>
+          <summary className="cursor-pointer text-sm font-medium">{messages.filters.title}</summary>
           <FilterBuilder filters={filters} onChange={setFilters}
             fields={localizedCapabilities?.fields ?? []} grouping={localizedCapabilities?.grouping}
             issues={validation.data?.issues ?? []}
