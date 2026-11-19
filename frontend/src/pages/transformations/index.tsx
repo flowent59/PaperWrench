@@ -7,7 +7,7 @@ import {
   useCorrespondents, useCustomFields, useDocumentTypes, useFilterCapabilities,
   useFilterValidation, useStoragePaths, useTags,
 } from '@/api/queries'
-import type { EvaluationResult, FilterSet, SearchSpec, TransformationTarget } from '@/api/types'
+import type { EvaluationResult, FilterSet, SearchSpec, Normalization, TransformationTarget } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { messages } from '@/i18n/messages'
 import { errorMessage, issueMessage } from '@/i18n/errors'
@@ -16,7 +16,7 @@ import { FilterBuilder } from '@/pages/explorer/filter-builder'
 import { emptyFilterSet, isEmpty } from '@/pages/explorer/filter-builder/model'
 
 import {
-  emptyOperation, placeholders, serializeTransformation,
+  copyType, emptyOperation, fillStates, placeholders, serializeTransformation,
   type OperationDraft, type OperationKind,
 } from './model'
 import { DryRun } from './dry-run'
@@ -235,18 +235,32 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
         const canReplace = draft.fieldKey === 'core:title' ||
           definition?.data_type === 'string' || definition?.data_type === 'longtext'
         const canTemplate = canReplace
+        const states = fillStates(draft.fieldKey, fields)
+        const copySources = targets.filter(([key]) => key !== draft.fieldKey
+          && copyType(key, fields) === copyType(draft.fieldKey, fields))
         const referenceOptions = draft.fieldKey === 'core:correspondent' ? correspondents.data
           : draft.fieldKey === 'core:document_type' ? documentTypes.data
             : draft.fieldKey === 'core:storage_path' ? storagePaths.data : undefined
         return <div key={index} className="space-y-3 rounded-lg border p-4">
           <div className="flex flex-wrap gap-2">
             <select aria-label={`${m.operation} ${index + 1}`} className={INPUT} value={draft.operation}
-              onChange={(event) => update(index, { operation: event.target.value as OperationKind })}>
-              {(['set', 'clear', 'replace', 'template'] as const).map((kind) =>
+              onChange={(event) => {
+                const operation = event.target.value as OperationKind
+                update(index, {
+                  operation,
+                  ...(operation === 'tags_delta' ? { fieldKey: 'core:tags' } : {}),
+                  ...(operation === 'fill' ? { when: states } : {}),
+                })
+              }}>
+              {(['set', 'clear', 'replace', 'template', 'tags_delta', 'normalize', 'copy', 'fill'] as const).map((kind) =>
                 <option key={kind} value={kind}>{m.actionNames[kind]}</option>)}
             </select>
             <select aria-label={`${m.field} ${index + 1}`} className={INPUT} value={draft.fieldKey}
-              onChange={(event) => update(index, { fieldKey: event.target.value })}>
+              disabled={draft.operation === 'tags_delta'}
+              onChange={(event) => update(index, {
+                fieldKey: event.target.value, copySource: '',
+                when: fillStates(event.target.value, fields),
+              })}>
               {targets.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
             </select>
             <Button type="button" variant="outline" disabled={drafts.length === 1}
@@ -254,7 +268,7 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
               {m.remove}
             </Button>
           </div>
-          {draft.operation === 'set' && <label className="block text-sm">{m.value}
+          {(draft.operation === 'set' || draft.operation === 'fill') && <label className="block text-sm">{m.value}
             {referenceOptions?.length ? <select className={`${INPUT} ml-2`} value={draft.value}
               onChange={(event) => update(index, { value: event.target.value })}>
               <option value="">{m.choose}</option>
@@ -274,6 +288,41 @@ export function TransformationsPage({ initialTargets }: { initialTargets?: Trans
                 : <input className={`${INPUT} ml-2`} value={draft.value}
                   type={definition?.data_type === 'date' || draft.fieldKey === 'core:created' ? 'date' : 'text'}
                   onChange={(event) => update(index, { value: event.target.value })} />}
+          </label>}
+          {draft.operation === 'fill' && <fieldset className="space-y-1 text-sm">
+            <legend>{m.fillWhen}</legend>
+            {states.length === 0 && <p role="alert">{m.noMissingStates}</p>}
+            {states.map((state) => <label key={state} className="flex items-center gap-2">
+              <input type="checkbox" checked={draft.when.includes(state)} onChange={(event) =>
+                update(index, { when: event.target.checked
+                  ? [...draft.when, state] : draft.when.filter((value) => value !== state) })} />
+              {m.missingStates[state]}
+            </label>)}
+          </fieldset>}
+          {draft.operation === 'tags_delta' && <div className="grid gap-2 sm:grid-cols-2">
+            {(['addTags', 'removeTags'] as const).map((key) => <label key={key} className="block text-sm">
+              {m[key]}
+              <select multiple className="block w-full rounded border bg-background p-2" value={draft[key].map(String)}
+                onChange={(event) => update(index, { [key]: Array.from(event.target.selectedOptions,
+                  (option) => Number(option.value)) })}>
+                {tags.data?.map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
+              </select>
+            </label>)}
+          </div>}
+          {draft.operation === 'normalize' && <label className="block text-sm">
+            {m.normalization}<select className={`${INPUT} ml-2`} value={draft.normalize}
+              onChange={(event) => update(index, { normalize: event.target.value as Normalization })}>
+              {(['trim', 'spaces', 'lower', 'upper', 'casefold'] as const).map((mode) =>
+                <option key={mode} value={mode}>{m.normalizationModes[mode]}</option>)}
+            </select>
+            {!canReplace && <span role="alert" className="block">{m.textOnly}</span>}
+          </label>}
+          {draft.operation === 'copy' && <label className="block text-sm">
+            {m.chooseSource}<select className={`${INPUT} ml-2`} value={draft.copySource}
+              onChange={(event) => update(index, { copySource: event.target.value })}>
+              <option value="">{m.choose}</option>
+              {copySources.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
           </label>}
           {draft.operation === 'clear' && draft.fieldKey.startsWith('custom_field:') &&
             <label className="block text-sm">{m.clearState}<select className={`${INPUT} ml-2`}

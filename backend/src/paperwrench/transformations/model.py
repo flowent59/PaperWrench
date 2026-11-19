@@ -80,8 +80,54 @@ class TemplateOperation(BaseModel):
     bindings: dict[str, FieldRef]
 
 
+TagId = Annotated[int, Field(gt=0)]
+MissingState = Literal["absent", "null", "empty_text", "no_tags"]
+Normalization = Literal["trim", "spaces", "lower", "upper", "casefold"]
+
+
+class TagOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    operation: Literal["tags_delta"]
+    field: FieldRef
+    add: list[TagId] = Field(default_factory=list, max_length=1000)
+    remove: list[TagId] = Field(default_factory=list, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_delta(self) -> TagOperation:
+        if not (self.add or self.remove) or set(self.add) & set(self.remove):
+            raise ValueError("Supply tags to add or remove, with no overlap.")
+        return self
+
+
+class NormalizeOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    operation: Literal["normalize"]
+    field: FieldRef
+    mode: Normalization
+
+
+class CopyOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    operation: Literal["copy"]
+    field: FieldRef
+    source_field: FieldRef
+
+
+class FillOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    operation: Literal["fill"]
+    field: FieldRef
+    value: Any
+    when: list[MissingState] = Field(min_length=1, max_length=4)
+
+
 Operation = Annotated[
-    Union[SetOperation, ClearOperation, ReplaceOperation, TemplateOperation],  # noqa: UP007
+    SetOperation | ClearOperation | ReplaceOperation | TemplateOperation
+    | TagOperation | NormalizeOperation | CopyOperation | FillOperation,
     Field(discriminator="operation"),
 ]
 

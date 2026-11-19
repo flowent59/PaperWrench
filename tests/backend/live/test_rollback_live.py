@@ -126,3 +126,64 @@ async def test_rollback_later_title_or_removed_document_live(
     assert operation.attempts == 0 and operation.written is None
     if not removed:
         assert (await live_client.get_document(scratch_document)).title == "Later external title"
+
+
+async def test_clean_copy_fill_and_tag_delta_round_trip(
+    live_client: PaperlessClient,
+    raw_live: httpx.AsyncClient,
+    live_settings: Settings,
+    session: Session,
+    scratch_document: int,
+) -> None:
+    registry = MetadataRegistry(live_client)
+    period = await registry.custom_field_by_name("Période concernée")
+    resources: list[str] = []
+    try:
+        for endpoint, name in (
+            ("tags", "pw-clean-old"), ("tags", "pw-clean-new"),
+            ("correspondents", "pw-clean-correspondent"),
+        ):
+            result = await raw_live.post(
+                f"/api/{endpoint}/", json={"name": name, "matching_algorithm": 0},
+            )
+            result.raise_for_status()
+            resources.append(f"/api/{endpoint}/{result.json()['id']}/")
+        old_tag, new_tag, correspondent = [int(path.split("/")[-2]) for path in resources]
+        response = await raw_live.patch(
+            f"/api/documents/{scratch_document}/",
+            json={
+                "title": "ÉTÉ  2026", "tags": [old_tag],
+                "correspondent": None, "custom_fields": [],
+            },
+        )
+        response.raise_for_status()
+        before = await live_client.get_document(scratch_document)
+        job = await confirm(live_client, spec(
+            {"operation": "normalize", "field": core("title"), "mode": "spaces"},
+            {"operation": "copy", "field": custom(period.id), "source_field": core("title")},
+            {"operation": "tags_delta", "field": core("tags"), "add": [new_tag], "remove": []},
+            {
+                "operation": "fill", "field": core("correspondent"),
+                "when": ["null"], "value": correspondent,
+            },
+            ids=[scratch_document],
+        ))
+        await execute(live_client, live_settings, session)
+        assert job_view(job).status == "completed"
+        written = await live_client.get_document(scratch_document)
+        assert written.title == "ÉTÉ 2026"
+        assert written.custom_field_map[period.id] == before.title
+        assert set(written.tags) == {old_tag, new_tag}
+        assert written.correspondent == correspondent
+
+        restored = await rollback(live_client, job)
+        await execute(live_client, live_settings, session)
+        assert job_view(restored).status == "completed"
+        current = await live_client.get_document(scratch_document)
+        assert current.title == before.title
+        assert current.custom_field_map == before.custom_field_map
+        assert current.tags == before.tags
+        assert current.correspondent == before.correspondent
+    finally:
+        for path in reversed(resources):
+            await raw_live.delete(path)
