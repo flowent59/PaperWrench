@@ -329,7 +329,9 @@ export function ExplorerPage() {
     [customFieldsQuery.data],
   )
 
-  const rows = filtersRunnable && !documentsQuery.isPlaceholderData ? documentsQuery.data?.items ?? [] : []
+  const currentPage = filtersRunnable && !documentsQuery.isPlaceholderData ? documentsQuery.data : undefined
+  const waitingForPage = documentsQuery.isPending || documentsQuery.isPlaceholderData
+  const rows = currentPage?.items ?? []
 
   const table = useReactTable({
     data: rows,
@@ -343,8 +345,8 @@ export function ExplorerPage() {
     enableMultiSort: false,
   })
 
-  const total = documentsQuery.data?.total ?? 0
-  const pageCount = documentsQuery.data?.page_count ?? 0
+  const total = currentPage?.total ?? 0
+  const pageCount = currentPage?.page_count ?? 0
 
   const currentPageIds = rows.map((row) => row.id)
   const allCurrentPageSelected =
@@ -467,7 +469,7 @@ export function ExplorerPage() {
           <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
           {filtersOpen ? messages.filters.hide : messages.filters.show}
           {!filtersEmpty && (
-            <span className="ml-1 rounded-full bg-primary/20 px-1.5 text-xs tabular">
+            <span aria-hidden="true" className="ml-1 rounded-full bg-primary/20 px-1.5 text-xs tabular">
               {filters.root.children.length}
             </span>
           )}
@@ -669,8 +671,8 @@ export function ExplorerPage() {
                 {messages.explorer.retry}
               </Button>
             </div>
-          ) : documentsQuery.isPending ? (
-            <div className="p-10 text-center text-sm text-muted-foreground">
+          ) : waitingForPage ? (
+            <div role="status" className="p-10 text-center text-sm text-muted-foreground">
               {messages.explorer.loading}
             </div>
           ) : rows.length === 0 ? (
@@ -753,7 +755,7 @@ export function ExplorerPage() {
       {/* Pagination footer - always server-side, never a client-side slice. */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
         <span className="text-muted-foreground">
-          {messages.explorer.showingCount
+          {currentPage && messages.explorer.showingCount
             .replace('{count}', String(rows.length))
             .replace('{total}', String(total))}
         </span>
