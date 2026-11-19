@@ -381,6 +381,7 @@ def write_result(output: Path, result: dict[str, Any]) -> None:
         "",
     ]
     lines.extend(html.escape(error) for error in result.get("errors", []))
+    lines.extend("Warning: " + html.escape(warning) for warning in result.get("warnings", []))
     lines += [
         "",
         "| Advisory | Scanner/package/version | Severity | Decision | Expiry | Follow-up |",

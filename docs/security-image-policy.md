@@ -2,8 +2,9 @@
 
 The initial decisions and release runtime snapshot expired on 2026-10-18. The
 [published-image review](security-audits/2026-10-27-published-image-review.md)
-records the resulting audit error and newly reported fixable advisories. This
-policy description does not renew any exception.
+records that audit and newly reported fixable advisories. Expiry is reported as
+a warning; it does not hide findings or turn an otherwise verified scan into an
+error.
 
 A [separate review](security-audits/2026-10-29-python315/README.md) in
 [PR #119](https://github.com/flowent59/PaperWrench/pull/119) approved the Python
@@ -48,19 +49,22 @@ Trivy raw reports remain separate; summaries group only verified advisory aliase
 and retain each scanner/package/version/path occurrence. Use the highest reported
 severity when scanners disagree. Unknown/TEMP identifiers remain visible.
 
-- **Critical and High:** block unless an exact current reviewed exception matches.
+- **Critical and High:** block unless an exact reviewed decision matches.
   Lack of a vendor fix does not exempt a finding. Fix available vulnerabilities
   rather than renewing an exception to avoid an available supported correction.
 - **Unknown or unrecognized severity:** block for manual classification, unless
   that exact identifier/occurrence already has a current explicit decision.
 - **Medium, Low and Negligible:** preserve and prioritize review; require a
   documented disposition within 30 days of first discovery. Overdue unreviewed
-  findings block. Explicit risk/mitigation/absence decisions still expire.
+  findings block. Explicit risk/mitigation/absence decisions retain their expiry
+  dates and produce a warning after those dates pass.
   New lower-severity identities require an approved initial `first_seen` UTC date;
   missing classification blocks instead of resetting their deadline each scan.
-- An expired, malformed or unverifiable exception is a **policy error that
-  fails the audit**, including an expired entry for a lower severity. Never silently extend
-  dates or fall back to a package/severity exclusion.
+- An expired exact decision or reviewed runtime snapshot is a visible warning.
+  Its recorded date remains unchanged; the exact identity, package, version,
+  paths, severity and runtime scope must still match. Malformed or unverifiable
+  policy remains an error. New or changed findings keep their normal blocking
+  behavior. Never fall back to a package/severity exclusion.
 
 The current review covers Linux amd64 runtime only. Frontend full-tree npm audits
 must have separate findings/decisions. The [2026-10-28 frontend recheck](security-audits/2026-10-28-frontend-audit.md)
@@ -88,7 +92,7 @@ An implementation must match **all** of these, not just a CVE substring or packa
    package version, architecture, native/app input behavior or deployment scope
    invalidates the decision; an image digest/code change requires revalidation.
 3. Severity at or below the recorded maximum; a raised severity needs review.
-4. A future UTC expiry, named responsible maintainer and evidence/rationale.
+4. A recorded UTC expiry, named responsible maintainer and evidence/rationale.
    Follow-up issue tracking is optional and does not change the expiry.
 5. Approval through a separate PR, an explicit risk decision recorded by the
    named maintainer, and merge. In a repository with one maintainer, a second
@@ -110,8 +114,9 @@ trigger. [#107](https://github.com/flowent59/PaperWrench/issues/107) and
 [#108](https://github.com/flowent59/PaperWrench/issues/108) recorded CPython and
 Debian maintenance. The maintainer has removed the scheduled follow-up for the
 current Debian decisions; their **2026-11-10 00:00 UTC** expiry still applies.
-If no new decision exists at expiry, the audit reports a policy error. There is
-no automatic renewal or required issue tracking.
+If no new decision exists at expiry, the audit reports a warning and keeps the
+finding visible under its exact recorded decision. There is no automatic date
+renewal or required issue tracking.
 
 ## Database freshness and technical failures
 

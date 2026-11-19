@@ -78,7 +78,7 @@ def test_reviewed_real_reports_pass_without_hiding_findings(
     }
 
 
-def test_issue_tracking_is_optional_but_decision_expiry_remains_enforced(
+def test_issue_tracking_is_optional_and_expiry_is_warning_only(
     audit: Audit,
 ) -> None:
     grype, trivy, metadata, registry, approval = audit
@@ -90,8 +90,13 @@ def test_issue_tracking_is_optional_but_decision_expiry_remains_enforced(
 
     registry["records"][0]["expires_at"] = NOW.isoformat()
     expired = evaluate(grype, trivy, metadata, registry, approval, NOW)
-    assert expired["exit_code"] == 2
-    assert any("Expired decision" in error for error in expired["errors"])
+    assert expired["exit_code"] == 0
+    assert expired["status"] == "pass-with-warnings"
+    assert any("Expired decision" in warning for warning in expired["warnings"])
+    expired_row = next(
+        row for row in expired["findings"] if row["identity"] == registry["records"][0]["id"]
+    )
+    assert expired_row["exception"] and expired_row["expired"]
 
 
 @pytest.mark.parametrize("severity", ["Critical", "High", "Unknown", "UNRECOGNIZED"])
@@ -215,7 +220,7 @@ def test_technical_failures_are_distinct_from_findings(
     assert result["errors"]
 
 
-def test_expired_lower_severity_decision_is_global_policy_error(
+def test_expired_lower_severity_decision_is_warning_only(
     audit: Audit,
 ) -> None:
     record = next(
@@ -223,8 +228,8 @@ def test_expired_lower_severity_decision_is_global_policy_error(
     )
     record["expires_at"] = NOW.isoformat()
     result = evaluate(*audit, NOW)
-    assert result["exit_code"] == 2 and result["status"] == "policy-error"
-    assert any(record["id"] in error for error in result["errors"])
+    assert result["exit_code"] == 0 and result["status"] == "pass-with-warnings"
+    assert any(record["id"] in warning for warning in result["warnings"])
 
 
 @pytest.mark.parametrize("age,expected", [(None, 1), (0, 0), (29, 0), (30, 1), (-1, 2)])
@@ -401,7 +406,7 @@ def test_runner_propagates_gate_exits_and_keeps_reports(
     if outcome == 1:
         audit[0]["matches"][0]["artifact"]["version"] = "changed"
     elif outcome == 2:
-        audit[3]["records"][0]["expires_at"] = NOW.isoformat()
+        audit[3]["records"][0]["expires_at"] = "not-a-date"
 
     def acquired_reports(args: Any, output: Path) -> dict[str, Any]:
         # Replay the retained real reports through the real evaluator. Network
@@ -452,7 +457,7 @@ def test_explicit_reviewed_runtime_snapshot_can_pass(audit: Audit) -> None:
 
 
 @pytest.mark.parametrize(
-    "change", ["fingerprint", "duplicate", "source", "owner", "evidence", "expired", "shape"]
+    "change", ["fingerprint", "duplicate", "source", "owner", "evidence", "shape"]
 )
 def test_invalid_additional_runtime_scope_blocks(audit: Audit, change: str) -> None:
     snapshot = scope_snapshot("1" * 64)
@@ -466,20 +471,31 @@ def test_invalid_additional_runtime_scope_blocks(audit: Audit, change: str) -> N
         snapshot["owner"] = ""
     elif change == "evidence":
         snapshot["evidence"] = []
-    elif change == "expired":
-        snapshot["expires_at"] = NOW.isoformat()
     audit[4]["additional_runtime_trees"] = [snapshot] if change != "shape" else "invalid"
     assert evaluate(*audit, NOW)["exit_code"] == 2
 
 
-def test_additional_scope_does_not_relax_package_or_expiry_checks(audit: Audit) -> None:
+def test_expired_additional_runtime_scope_is_warning_only(audit: Audit) -> None:
+    digest = "1" * 64
+    audit[2]["runtime_tree_sha256"] = digest
+    snapshot = scope_snapshot(digest)
+    snapshot["expires_at"] = NOW.isoformat()
+    audit[4]["additional_runtime_trees"] = [snapshot]
+    result = evaluate(*audit, NOW)
+    assert result["exit_code"] == 0
+    assert result["scope_valid"]
+    assert any("Expired reviewed runtime scope" in warning for warning in result["warnings"])
+
+
+def test_additional_scope_does_not_relax_package_or_decision_checks(audit: Audit) -> None:
     digest = "1" * 64
     audit[2]["runtime_tree_sha256"] = digest
     audit[4]["additional_runtime_trees"] = [scope_snapshot(digest)]
     audit[0]["matches"][0]["artifact"]["version"] = "changed"
     assert evaluate(*audit, NOW)["exit_code"] == 1
     audit[3]["records"][0]["expires_at"] = NOW.isoformat()
-    assert evaluate(*audit, NOW)["exit_code"] == 2
+    expired = evaluate(*audit, NOW)
+    assert expired["exit_code"] == 1 and expired["warnings"]
 
 
 def test_proposed_release_snapshot_does_not_approve_itself() -> None:

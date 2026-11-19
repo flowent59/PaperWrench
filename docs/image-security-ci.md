@@ -14,8 +14,8 @@ runtime scope after supported removal of unused tools: 306 occurrences, still
 71 identities, against the same Grype/Trivy DB snapshots as the published
 baseline. The separate policy PR is merged.
 The maintainer has removed the scheduled follow-up review. The existing
-2026-11-10 expiry still applies; expired decisions will appear as policy errors
-until a new maintainer decision is recorded.
+2026-11-10 expiry remains recorded; after that date the scan reports a warning
+while retaining the findings and exact decision matches.
 
 [Policy](security-image-policy.md) · [initial reviewed decisions](security-audits/2026-10-04-residual/dispositions.json)
 
@@ -99,7 +99,7 @@ digests and dates, rather than a moving release tag, identify each snapshot.
 | --- | --- |
 | `0` | Verified scan; every occurrence has an applicable decision or current review deadline |
 | `1` | Unexcepted threshold finding, overdue review or newly reported correction |
-| `2` | Technical failure or invalid/expired/unverifiable policy |
+| `2` | Technical failure or invalid/unverifiable policy |
 
 These exit codes describe the security assessment. In CI, the image audit step
 uses `continue-on-error`, so exit `1` or `2` does not fail the Docker job or
@@ -107,17 +107,18 @@ prevent deployment. The published-image workflow reports the audit exit code as
 its own status and retains its evidence. Expiry requires a new risk review but
 does not automatically block a release.
 
-Critical/High/Unknown findings block without an exact current approved decision,
+Critical/High/Unknown findings block without an exact approved decision,
 including findings with no fix. The highest reported severity is used across
 verified aliases. Every scanner/package/version/type/path occurrence must match.
 The current 71 decisions expire on **2026-11-10 at 00:00 UTC**, including Low
-entries; an expired entry anywhere in the register is a policy error.
+entries. Expired decisions appear in the audit warnings and remain visible in
+the occurrence table. Expiry does not suppress new or changed findings.
 
 For new Medium/Low/Negligible identities, a maintainer must first record the actual
 earliest discovery time in the approved policy's `first_seen` map. Until that
 initial classification is approved the gate blocks, so repeated scans cannot
 reset the 30-day deadline. A first-seen date grants at most 30 days for a documented
-disposition; it never exempts High/Critical/Unknown or an expired decision. Use
+disposition; it never exempts High/Critical/Unknown or an unmatched decision. Use
 retained raw evidence to establish that date; never move it forward on rescan.
 
 On a PR, policy and registry come from `pull_request.base.sha`, **not its modified
@@ -137,8 +138,8 @@ For a release transition, the approved policy can also contain
 each with its reviewed source commit, assessment, owner, evidence and UTC expiry.
 This allows current main and an independently reviewed release candidate to use
 the same unchanged decisions during preparation. Wildcards, duplicate/invalid
-hashes, missing ownership/evidence and expired scope snapshots block. Package,
-path, severity, native/deployment controls and decision expiry checks still apply.
+hashes and missing ownership/evidence block. Expired scope snapshots are
+warnings; package, path, severity and native/deployment controls still apply.
 
 Prepare and review the new snapshot in a **separate policy PR**, while main's
 existing runtime remains applicable. Its CI reads the already approved base
