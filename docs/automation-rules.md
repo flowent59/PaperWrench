@@ -34,3 +34,25 @@ audit. Rollback uses the same preview and rollback engine as manual jobs.
 Manual repetition requires a new preview and explicit confirmation. Issue #51
 adds opt-in [scheduled execution](automation-schedules.md), with approval tied
 to the rule revision and the approving user's active session.
+
+## Cleaning and copying metadata
+
+- **Add or remove tags** changes the selected tags and retains the others.
+  A request may add and remove different tags in the same operation.
+- **Normalize text** targets titles and writable text fields. Trimming and
+  collapsing use Unicode whitespace. Lowercase, uppercase and case folding
+  use Python’s Unicode mappings without locale-specific rules.
+- **Copy a field** supports matching data types. Titles and short/long
+  text are compatible, as are creation dates and custom dates, and archive
+  numbers and custom integers. Text and numbers are separate types.
+  Monetary values carry their original decimal string and currency.
+  Select option IDs must resolve in the destination definition.
+- **Fill if not filled in** checks the selected states on each document.
+  Custom fields can be absent or null. Text fields can also contain an empty
+  string. Optional core fields can be null, and tag sets can be empty.
+  Zero and false count as filled.
+
+Each destination accepts one operation. All operations read the same original
+document, so copying from a field edited by another operation uses its
+original value. Preview captures the proposed values. Jobs re-read each
+document and verify the reviewed changes before writing.

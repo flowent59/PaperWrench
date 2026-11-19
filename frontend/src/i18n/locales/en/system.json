@@ -12,5 +12,19 @@
   "paperlessVersion": "Paperless version",
   "documents": "Documents",
   "maxApiVersion": "Highest API version",
-  "url": "URL"
+  "url": "URL",
+  "preferences": "Preferences",
+  "languageScope": "Saved to your PaperWrench account.",
+  "theme": "Theme",
+  "light": "Light",
+  "dark": "Dark",
+  "themeScope": "Saved in this browser.",
+  "operatorScope": "The operator configures the server address and credential storage.",
+  "retryBackend": "PaperWrench is unreachable. Check your connection and try again.",
+  "configurePaperless": "Paperless is unconfigured. Ask the operator to set its address.",
+  "checkCredentials": "Paperless rejected authentication. Check your token in Account or sign in again.",
+  "checkPaperless": "Paperless is unreachable. Check that it is running, then retry.",
+  "checkVersion": "The Paperless API is incompatible. Ask the operator to check the installed version.",
+  "checkAgain": "Check connection again",
+  "cancelEdit": "Cancel"
 }

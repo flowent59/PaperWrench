@@ -1,10 +1,10 @@
 import type {
-  CustomFieldDefinition, FieldRef, FilterSet, SearchSpec, Transformation,
+  CustomFieldDefinition, FillState, Normalization, FieldRef, FilterSet, SearchSpec, Transformation,
   TransformationOperation,
 } from '@/api/types'
 import { messages } from '@/i18n/messages'
 
-export type OperationKind = 'set' | 'clear' | 'replace' | 'template'
+export type OperationKind = TransformationOperation['operation']
 
 export interface OperationDraft {
   operation: OperationKind
@@ -15,11 +15,17 @@ export interface OperationDraft {
   replacement: string
   template: string
   bindings: Record<string, string>
+  normalize: Normalization
+  copySource: string
+  when: FillState[]
+  addTags: number[]
+  removeTags: number[]
 }
 
 export function emptyOperation(fieldKey = 'core:title'): OperationDraft {
   return { operation: 'set', fieldKey, value: '', clearState: 'absent', find: '',
-    replacement: '', template: '', bindings: {} }
+    replacement: '', template: '', bindings: {}, normalize: 'spaces', copySource: '',
+    when: [], addTags: [], removeTags: [] }
 }
 
 export function fieldRef(key: string, fields: CustomFieldDefinition[]): FieldRef {
@@ -72,6 +78,14 @@ export function serializeOperation(
     }
     return { operation: 'template', field, template: draft.template, bindings }
   }
+  if (draft.operation === 'normalize') return { operation: 'normalize', field, mode: draft.normalize }
+  if (draft.operation === 'copy') {
+    if (!draft.copySource) throw new Error(messages.transformations.chooseSource)
+    return { operation: 'copy', field, source_field: fieldRef(draft.copySource, fields) }
+  }
+  if (draft.operation === 'tags_delta') {
+    return { operation: 'tags_delta', field, add: draft.addTags, remove: draft.removeTags }
+  }
   let value: unknown = draft.value
   if (definition) value = parseSetValue(draft, definition)
   if (field.source === 'core') {
@@ -90,6 +104,10 @@ export function serializeOperation(
       })
     }
   }
+  if (draft.operation === 'fill') {
+    if (!draft.when.length) throw new Error(messages.transformations.chooseMissing)
+    return { operation: 'fill', field, value, when: draft.when }
+  }
   return { operation: 'set', field, value }
 }
 
@@ -105,4 +123,19 @@ export function serializeTransformation(
     (id) => !Number.isSafeInteger(id) || id <= 0,
   ))) throw new Error(messages.transformations.enterDocumentIds)
   return { targets, operations: drafts.map((draft) => serializeOperation(draft, fields)) }
+}
+
+export function copyType(key: string, fields: CustomFieldDefinition[]): string {
+  const type = key.startsWith('custom_field:')
+    ? fields.find((field) => key === `custom_field:${field.id}`)?.data_type
+    : ({ 'core:title': 'text', 'core:created': 'date', 'core:archive_serial_number': 'integer' } as Record<string, string>)[key]
+  return type === 'string' || type === 'longtext' ? 'text' : type ?? key
+}
+
+export function fillStates(key: string, fields: CustomFieldDefinition[]): FillState[] {
+  if (key.startsWith('custom_field:')) return copyType(key, fields) === 'text'
+    ? ['absent', 'null', 'empty_text'] : ['absent', 'null']
+  if (key === 'core:tags') return ['no_tags']
+  return ['core:correspondent', 'core:document_type', 'core:storage_path', 'core:archive_serial_number'].includes(key)
+    ? ['null'] : []
 }

@@ -161,15 +161,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
     session,
     locale,
     changeLocale: async (next) => {
-      const previous = locale
+      await authApi.updateLocale(next)
       applyLocale(next)
       setSession((current) => current ? { ...current, locale: next } : current)
-      try {
-        await authApi.updateLocale(next)
-      } catch {
-        applyLocale(previous)
-        setSession((current) => current ? { ...current, locale: previous } : current)
-      }
     },
     logout: async () => {
       try { await authApi.logout() } finally {

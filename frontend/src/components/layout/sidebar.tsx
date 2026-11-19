@@ -68,7 +68,7 @@ function getNavSections(): NavSection[] { return [
   {
     title: messages.nav.sectionSystem,
     items: [
-      { to: '/settings', label: messages.nav.settings, icon: Settings, available: false },
+      { to: '/settings', label: messages.nav.settings, icon: Settings, available: true },
     ],
   },
 ] }

@@ -1,4 +1,5 @@
-import { LogOut, Moon, Sun } from 'lucide-react'
+import { LogOut, Moon, Settings, Sun } from 'lucide-react'
+import { Link } from 'react-router'
 import { AccountSettings } from '@/account-settings'
 
 import { useHealth, usePaperlessStatus } from '@/api/queries'
@@ -65,18 +66,22 @@ export function Header() {
 
       <div className="flex items-center gap-3">
         <span className="hidden text-sm text-muted-foreground md:inline">{session.display_name}</span>
-        <AccountSettings />
+        <Link to="/settings" aria-label={messages.nav.settings} title={messages.nav.settings}
+          className="rounded p-2 hover:bg-muted md:hidden">
+          <Settings className="h-4 w-4" aria-hidden="true" />
+        </Link>
+        <div className="hidden sm:block"><AccountSettings /></div>
         <select aria-label={messages.locale.language}
           className="rounded border border-input bg-background px-2 py-1 text-xs"
-          onChange={(event) => void changeLocale(event.target.value as Locale)} value={locale}>
+          onChange={(event) => void changeLocale(event.target.value as Locale).catch(() => {})} value={locale}>
           <option value="en">{messages.locale.english}</option>
           <option value="fr">{messages.locale.french}</option>
         </select>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="hidden items-center gap-1.5 text-xs text-muted-foreground lg:flex">
           <span>{messages.system.backend}</span>
           <BackendStatus />
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="hidden items-center gap-1.5 text-xs text-muted-foreground lg:flex">
           <span>{messages.system.paperless}</span>
           <PaperlessStatus />
         </div>

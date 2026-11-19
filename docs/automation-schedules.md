@@ -75,3 +75,8 @@ Approval accepts `rule_id`, `recurrence` (`timezone`, `frequency`, `hour`, `minu
 `weekday`), `acknowledge_unattended: true`, and `preview` containing the normal
 `CreateJob` confirmation. No write occurs during approval. Reusing the preview,
 changing its transformation, or approving another owner's rule is rejected.
+
+Open **Settings → Account** to manage a remembered token. **Settings** also
+reports the Paperless connection result and provides a manual retry.
+Language follows your signed-in account. Theme follows the browser.
+The Paperless address and credential vault are configured by the operator.
