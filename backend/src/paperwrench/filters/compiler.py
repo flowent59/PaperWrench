@@ -127,7 +127,7 @@ class PaperlessQuery(BaseModel):
 
 
 def _normalise(
-    node: FilterCondition | FilterGroup | FilterNot,
+    node: FilterCondition | FilterGroup | FilterNot, path: str, paths: dict[int, str],
 ) -> FilterCondition | FilterGroup | FilterNot:
     """Rewrite a subtree into its simplest equivalent form.
 
@@ -142,26 +142,28 @@ def _normalise(
     refused for a shape difference the user never intended, and it is applied
     to a fixed point so the two rewrites can enable each other.
     """
-    if isinstance(node, FilterCondition):
-        return node
-    if isinstance(node, FilterNot):
-        return FilterNot(child=_normalise(node.child))
+    if isinstance(node, FilterCondition | FilterNot):
+        # A NOT is refused as a whole. Its children need no normalization.
+        result = node.model_copy()
+        paths[id(result)] = path
+        return result
 
-    children = [_normalise(child) for child in node.children]
-
-    flattened: list[Any] = []
-    for child in children:
+    flattened: list[FilterCondition | FilterGroup | FilterNot] = []
+    for index, original in enumerate(node.children):
+        child = _normalise(original, f"{path}.children[{index}]", paths)
         if isinstance(child, FilterGroup) and child.operator is node.operator:
             flattened.extend(child.children)
         else:
             flattened.append(child)
 
     if len(flattened) == 1:
-        return _normalise(flattened[0])
-    return FilterGroup(operator=node.operator, children=flattened)
+        return flattened[0]
+    group = FilterGroup(operator=node.operator, children=flattened)
+    paths[id(group)] = path
+    return group
 
 
-def _leaf_sources(node: FilterCondition | FilterGroup | FilterNot) -> set[bool]:
+def leaf_sources(node: FilterCondition | FilterGroup | FilterNot) -> set[bool]:
     """The set of ``is_custom`` flags of every leaf under ``node``.
 
     ``{True}`` = custom fields only, ``{False}`` = core only, both = mixed.
@@ -172,10 +174,10 @@ def _leaf_sources(node: FilterCondition | FilterGroup | FilterNot) -> set[bool]:
     if isinstance(node, FilterCondition):
         return {node.field.source.value == "custom_field"}
     if isinstance(node, FilterNot):
-        return _leaf_sources(node.child)
+        return leaf_sources(node.child)
     found: set[bool] = set()
     for child in node.children:
-        found |= _leaf_sources(child)
+        found |= leaf_sources(child)
     return found
 
 
@@ -399,7 +401,8 @@ def _expression_atoms(expr: Any) -> int:
 
 
 class _Compiler:
-    def __init__(self, catalog: FieldCatalog) -> None:
+    def __init__(self, catalog: FieldCatalog, paths: dict[int, str]) -> None:
+        self.paths = paths
         self._catalog = catalog
         self.issues: list[FilterIssue] = []
         self.params: dict[str, str] = {}
@@ -456,10 +459,10 @@ class _Compiler:
             )
 
     # ------------------------------------------------------------- walking
-    def and_group(self, group: FilterGroup, path: str) -> None:
+    def and_group(self, group: FilterGroup) -> None:
         """Compile the children of an AND node into params + custom atoms."""
-        for index, child in enumerate(group.children):
-            self.node_under_and(child, f"{path}.children[{index}]")
+        for child in group.children:
+            self.node_under_and(child, self.paths[id(child)])
 
     def node_under_and(
         self, node: FilterCondition | FilterGroup | FilterNot, path: str
@@ -475,12 +478,12 @@ class _Compiler:
         if node.operator is GroupOperator.AND:
             # AND is associative: a nested AND is the same as its children
             # sitting directly in the parent, whatever mix of sources it has.
-            self.and_group(node, path)
+            self.and_group(node)
             return
 
         # A nested OR. Compilable only if every leaf under it is a custom
         # field, in which case it becomes one custom_field_query subtree.
-        sources = _leaf_sources(node)
+        sources = leaf_sources(node)
         if sources == {True}:
             expression = self.custom_subtree(node, path)
             if expression is not None:
@@ -554,8 +557,8 @@ class _Compiler:
             return _custom_atom(node, self._catalog.resolve(node.field))
 
         operands: list[Any] = []
-        for index, child in enumerate(node.children):
-            compiled = self.custom_subtree(child, f"{path}.children[{index}]")
+        for child in node.children:
+            compiled = self.custom_subtree(child, self.paths[id(child)])
             if compiled is None:
                 return None
             operands.append(compiled)
@@ -570,25 +573,26 @@ def compile_filterset(filterset: FilterSet, catalog: FieldCatalog) -> PaperlessQ
     has no exact server-side form. **No HTTP request is made either way**;
     this function is pure.
     """
-    root = _normalise(filterset.root)
-
-    compiler = _Compiler(catalog)
+    paths: dict[int, str] = {}
+    root = _normalise(filterset.root, "root", paths)
+    root_path = paths[id(root)]
+    compiler = _Compiler(catalog, paths)
 
     if isinstance(root, FilterGroup) and not root.children:
         return PaperlessQuery()
 
     if isinstance(root, FilterGroup) and root.operator is GroupOperator.OR:
-        sources = _leaf_sources(root)
+        sources = leaf_sources(root)
         if sources == {True}:
-            compiled_root = compiler.custom_subtree(root, "root")
+            compiled_root = compiler.custom_subtree(root, root_path)
             if compiled_root is not None:
                 compiler.custom.append(compiled_root)
         else:
-            compiler.refuse_or(root, sources, "root")
+            compiler.refuse_or(root, sources, root_path)
     else:
         # A single condition, a NOT, or an AND group: all handled by the
         # AND path, since a lone node is an AND of one.
-        compiler.node_under_and(root, "root")
+        compiler.node_under_and(root, root_path)
 
     expression: Any = None
     if compiler.custom:

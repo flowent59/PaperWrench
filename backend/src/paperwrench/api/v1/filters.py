@@ -47,6 +47,8 @@ from paperwrench.filters import compile_filterset
 from paperwrench.filters import validate_filterset
 from paperwrench.filters.capabilities import FilterCapabilities
 from paperwrench.filters.capabilities import build_capabilities
+from paperwrench.filters.catalog import FieldCatalog
+from paperwrench.filters.model import GroupOperator
 from paperwrench.paperless import MetadataRegistry
 from paperwrench.paperless import PaperlessClient
 from paperwrench.paperless.models import CustomFieldDataType
@@ -140,7 +142,7 @@ async def get_capabilities(
     """
     definitions = await registry.all_custom_fields()
     return build_capabilities(
-        await build_catalog(registry),
+        FieldCatalog(definitions),
         select_labels={
             definition.id: {
                 str(option["id"]): str(option.get("label", option["id"]))
@@ -169,9 +171,11 @@ async def validate_filters(
     builder can therefore call this on every keystroke without generating
     upstream traffic.
     """
-    catalog = await build_catalog(registry)
+    return _verdict(request.filters, await build_catalog(registry, request.filters))
 
-    issues: list[FilterIssue] = validate_filterset(request.filters, catalog)
+
+def _verdict(filters: FilterSet, catalog: FieldCatalog) -> FilterValidationResponse:
+    issues: list[FilterIssue] = validate_filterset(filters, catalog)
     if issues:
         # Not compilable, and deliberately not *attempted*: compiling an
         # expression whose fields or values are unsound would produce a
@@ -180,7 +184,7 @@ async def validate_filters(
         return FilterValidationResponse(valid=False, compilable=False, issues=issues)
 
     try:
-        compiled = compile_filterset(request.filters, catalog)
+        compiled = compile_filterset(filters, catalog)
     except FilterNotCompilable as exc:
         return FilterValidationResponse(valid=True, compilable=False, issues=exc.issues)
 
@@ -192,6 +196,21 @@ async def validate_filters(
             custom_field_expression=compiled.custom_field_expression,
         ),
     )
+
+
+@router.post("/group-options")
+async def group_options(
+    request: FilterValidationRequest,
+    registry: MetadataRegistry = Depends(get_metadata_registry),
+) -> dict[GroupOperator, FilterValidationResponse]:
+    """Check all/any with the proposed children, including conflicting parameter values."""
+    catalog = await build_catalog(registry, request.filters)
+    return {
+        mode: _verdict(
+            FilterSet(root=request.filters.root.model_copy(update={"operator": mode})), catalog
+        )
+        for mode in GroupOperator
+    }
 
 
 @router.post(

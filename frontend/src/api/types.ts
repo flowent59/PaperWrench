@@ -530,6 +530,12 @@ export interface SelectOptionCapability {
 }
 
 export interface FieldCapability {
+  /** Canonical subtree for the simple “not filled in” intent. */
+  unfilled?: {
+    states: ('absent' | 'null' | 'empty_text' | 'no_tags')[]
+    expression: FilterCondition | FilterGroup | null
+    unavailable_reason: 'NO_EXACT_OPERATOR' | null
+  }
   key: string
   label: string
   field_type: FieldType

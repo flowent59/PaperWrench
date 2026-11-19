@@ -15,6 +15,7 @@ from __future__ import annotations
 from paperwrench.filters.catalog import FieldCatalog
 from paperwrench.filters.compiler import PaperlessQuery
 from paperwrench.filters.compiler import compile_filterset
+from paperwrench.filters.compiler import leaf_sources
 from paperwrench.filters.issues import FilterIssue
 from paperwrench.filters.issues import FilterNotCompilable
 from paperwrench.filters.issues import FilterValidationError
@@ -23,13 +24,17 @@ from paperwrench.filters.validation import validate_filterset
 from paperwrench.paperless.registry import MetadataRegistry
 
 
-async def build_catalog(registry: MetadataRegistry) -> FieldCatalog:
+async def build_catalog(
+    registry: MetadataRegistry, filters: FilterSet | None = None,
+) -> FieldCatalog:
     """Snapshot the currently-known custom fields into a catalog.
 
     Reads through the registry's TTL cache, so a page of the Explorer that
     validates a filter and then lists documents does not refetch the custom
     field definitions twice.
     """
+    if filters is not None and True not in leaf_sources(filters.root):
+        return FieldCatalog([])
     return FieldCatalog(await registry.all_custom_fields())
 
 

@@ -128,3 +128,27 @@ real use cases, including the reference `Relevé de vacations` scenario.
 **Silently dropping conditions that cannot be compiled.** Rejected with
 prejudice: this is the worst possible behaviour, since it broadens the
 operation's scope without telling anyone.
+
+## Simple search intents
+
+Each field from `GET /api/v1/filters/capabilities` includes an `unfilled` entry.
+Insert its `expression` into the FilterSet. A null expression and
+`NO_EXACT_OPERATOR` indicate an unavailable intent. Nullable core fields
+match null, tags match an empty set, and custom fields match absence or null.
+Text-like custom fields also match an empty string. Zero and false remain values.
+The advanced operator list retains the individual choices.
+
+Send the proposed root group to `POST /api/v1/filters/group-options` as
+`{"filters": {"root": ...}}` before offering all/any. Each mode has the normal
+validation verdict, stable issue code, condition path and optional parameters
+in details. For a nested edit validate the complete tree using `/filters/validate`.
+A conflicting parameter or excessive nesting can invalidate otherwise available
+operators. Existing saved filters continue to use the same schema.
+
+Send the same search and filters to `POST /api/v1/filters/count` and
+`POST /api/v1/documents/query` for a paginated preview. Both use the signed-in
+user's permissions. Count requests a single row for the upstream total, while
+preview reads one bounded page and resolves metadata through the user's registry.
+The two reads can observe different revisions. Debounce edits, abort obsolete HTTP
+requests and discard late replies. Aborting a browser request does not guarantee
+cancellation of an upstream read.
