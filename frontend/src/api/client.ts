@@ -274,6 +274,10 @@ export const filtersApi = {
       method: 'POST', signal: signal ?? null,
       body: JSON.stringify({ filters }),
     }),
+  groupOptions: (filters: FilterSet, signal: AbortSignal) =>
+    apiFetch<Record<'and' | 'or', FilterValidationResponse>>('/filters/group-options', {
+      method: 'POST', signal, body: JSON.stringify({ filters }),
+    }),
   count: (filters: FilterSet, search: SearchSpec | null, signal?: AbortSignal) =>
     apiFetch<FilterCountResponse>('/filters/count', {
       method: 'POST', signal: signal ?? null,

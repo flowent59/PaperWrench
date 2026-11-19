@@ -10,6 +10,8 @@
   "preparePage": "Prepare current page",
   "previewResults": "Preview matches",
   "emptyMatches": "No documents match these criteria. Check or remove a condition to broaden the search.",
+  "combine": "Combine conditions",
+  "anyConditions": "At least one condition",
   "title": "Filters",
   "show": "Filters",
   "hide": "Hide filters",

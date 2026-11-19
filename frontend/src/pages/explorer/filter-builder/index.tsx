@@ -22,7 +22,9 @@
 
 import { AlertTriangle, Info, Plus, Trash2 } from 'lucide-react'
 import * as React from 'react'
+import { useQuery } from '@tanstack/react-query'
 
+import { filtersApi } from '@/api/client'
 import type {
   FieldCapability,
   FilterCondition,
@@ -193,7 +195,8 @@ function AdvancedFilters({
     [fields, grouping],
   )
 
-  const firstField = fields[0]
+  const rootFields = filters.root.operator === 'or' ? groupFields : fields
+  const firstField = rootFields[0]
   const firstGroupField = groupFields[0]
 
   return (
@@ -211,7 +214,7 @@ function AdvancedFilters({
                 <ConditionRow
                   condition={child}
                   path={path}
-                  fields={fields}
+                  fields={rootFields}
                   issues={issues}
                   referenceOptions={referenceOptions}
                   onChange={(condition) => onChange(updateAt(filters, index, condition))}
@@ -274,22 +277,22 @@ function AdvancedFilters({
                     )
                   })}
                 </div>
-                {firstGroupField !== undefined && (
+                {(group.operator === 'or' ? firstGroupField : firstField) !== undefined && (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="mt-2"
                     onClick={() =>
-                      onChange(addToGroup(filters, index, conditionFor(firstGroupField)))
+                      onChange(addToGroup(filters, index, conditionFor((group.operator === 'or' ? firstGroupField : firstField)!)))
                     }
                   >
                     <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                     {messages.filters.addAlternative}
                   </Button>
                 )}
-                <p className="mt-2 text-xs text-muted-foreground">
+                {group.operator === 'or' && <p className="mt-2 text-xs text-muted-foreground">
                   {messages.filters.orGroupCustomFieldsOnly}
-                </p>
+                </p>}
               </div>
             </div>
           )
@@ -311,7 +314,7 @@ function AdvancedFilters({
           {messages.filters.addCondition}
         </Button>
 
-        {orGroups && (
+        {orGroups && filters.root.operator === 'and' && (
           <Button
             variant="outline"
             size="sm"
@@ -366,6 +369,33 @@ export function FilterPreview({ filters }: { filters: FilterSet }) {
   </div>
 }
 
+function GroupChoice({ filters, onChange }: Pick<FilterBuilderProps, 'filters' | 'onChange'>) {
+  const [open, setOpen] = React.useState(false)
+  const options = useQuery({
+    queryKey: ['filters', 'group-options', filters],
+    queryFn: ({ signal }) => filtersApi.groupOptions(filters, signal),
+    enabled: open,
+  })
+  if (filters.root.children.length < 2) return null
+  return <div className="space-y-1">
+    <Button type="button" variant="outline" size="sm" aria-expanded={open}
+      onClick={() => setOpen(!open)}>{messages.filters.combine}</Button>
+    {open && (options.isError ? <p role="alert">{errorMessage(options.error)}</p>
+      : !options.data ? <p role="status">{messages.filters.counting}</p>
+      : <div className="flex flex-wrap gap-2">
+        {(['and', 'or'] as const).map((operator) =>
+          <Button key={operator} type="button" size="sm" variant="outline"
+            aria-pressed={filters.root.operator === operator}
+            disabled={!options.data?.[operator]?.compilable}
+            onClick={() => onChange({ root: { ...filters.root, operator } })}>
+            {operator === 'and' ? messages.filters.allConditions : messages.filters.anyConditions}
+          </Button>)}
+        {options.data.or?.issues.slice(0, 1).map((issue) =>
+          <p className="w-full text-sm" key={issue.code}>{issueMessage(issue)}</p>)}
+      </div>)}
+  </div>
+}
+
 export function FilterBuilder(props: FilterBuilderProps) {
   const [previewOpen, setPreviewOpen] = React.useState(false)
   const [advanced, setAdvanced] = React.useState(false)
@@ -379,7 +409,10 @@ export function FilterBuilder(props: FilterBuilderProps) {
         onClick={() => setAdvanced(true)}>{messages.filters.advancedMode}</Button>
     </div>
     {!simple && <p role="status" className="text-sm text-muted-foreground">{messages.filters.advancedRequired}</p>}
-    {showAdvanced ? <AdvancedFilters {...props} /> : <>
+    {showAdvanced ? <>
+      <GroupChoice filters={props.filters} onChange={props.onChange} />
+      <AdvancedFilters {...props} />
+    </> : <>
       <SimpleFilters {...props} />
       <Button type="button" variant="outline" size="sm" disabled={!props.fields[0]} onClick={() => {
         const field = props.fields[0]
