@@ -93,7 +93,7 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
     await expect(page.getByLabel(period.name, { exact: true })).toHaveValue('unfilled')
     await page.getByLabel('Language', { exact: true }).selectOption('fr')
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
-    await expect(page.getByRole('option', { name: 'Non renseigné' })).toBeVisible()
+    await expect(page.getByLabel(period.name, { exact: true }).locator('option:checked')).toHaveText('Non renseigné')
     const frenchSelection = page.getByRole('link', { name: 'Préparer la page actuelle' })
     await frenchSelection.focus()
     await page.keyboard.press('Enter')
