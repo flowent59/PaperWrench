@@ -13,6 +13,8 @@ import { FilterBuilder } from '@/pages/explorer/filter-builder'
 import { emptyFilterSet } from '@/pages/explorer/filter-builder/model'
 import { filterLibraryKey } from '@/pages/explorer/filter-builder/library-picker'
 
+type FilterMutation = Promise<unknown>
+
 function blank(): FilterLibraryInput {
   return { name: '', description: '', definition: { version: 1, filters: emptyFilterSet() } }
 }
@@ -42,7 +44,7 @@ export function FilterLibraryPage() {
     setError('')
   }
 
-  async function change(action: () => Promise<unknown>) {
+  async function change(action: () => FilterMutation) {
     setBusy(true)
     setError('')
     try {
