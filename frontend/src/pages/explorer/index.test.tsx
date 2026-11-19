@@ -804,6 +804,7 @@ describe('ExplorerPage - Filter Builder (M4)', () => {
     await screen.findByText('Invoice #1')
 
     const user = await openFilters()
+    await user.click(screen.getByRole('button', { name: 'Advanced filters' }))
     await user.click(screen.getByRole('button', { name: 'Add "any of" group' }))
 
     const fieldSelects = await screen.findAllByLabelText('Field', { selector: 'select' })

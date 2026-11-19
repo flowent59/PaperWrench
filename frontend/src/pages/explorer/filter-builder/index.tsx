@@ -22,7 +22,9 @@
 
 import { AlertTriangle, Info, Plus, Trash2 } from 'lucide-react'
 import * as React from 'react'
+import { useQuery } from '@tanstack/react-query'
 
+import { filtersApi } from '@/api/client'
 import type {
   FieldCapability,
   FilterCondition,
@@ -32,8 +34,9 @@ import type {
   GroupingCapabilities,
 } from '@/api/types'
 import { Button } from '@/components/ui/button'
+import { useDocuments, useFilterValidation } from '@/api/queries'
 import { messages } from '@/i18n/messages'
-import { issueMessage } from '@/i18n/errors'
+import { errorMessage, issueMessage } from '@/i18n/errors'
 import { cn } from '@/lib/utils'
 
 import {
@@ -55,6 +58,7 @@ import {
   withOperator,
   withValue,
 } from './model'
+import { canEditSimply, SimpleFilters } from './simple'
 import { ValueInput, type ReferenceOption } from './value-input'
 
 const SELECT_CLASS =
@@ -66,6 +70,7 @@ export interface FilterBuilderProps {
   fields: FieldCapability[]
   grouping: GroupingCapabilities | undefined
   issues: FilterIssue[]
+  embeddedPreview?: boolean
   /** Metadata options per `reference_kind`, for reference-valued conditions. */
   referenceOptions: Record<string, ReferenceOption[]>
 }
@@ -176,7 +181,7 @@ function ConditionRow({
   )
 }
 
-export function FilterBuilder({
+function AdvancedFilters({
   filters,
   onChange,
   fields,
@@ -190,7 +195,8 @@ export function FilterBuilder({
     [fields, grouping],
   )
 
-  const firstField = fields[0]
+  const rootFields = filters.root.operator === 'or' ? groupFields : fields
+  const firstField = rootFields[0]
   const firstGroupField = groupFields[0]
 
   return (
@@ -203,12 +209,12 @@ export function FilterBuilder({
             return (
               <div key={path} className="flex items-start gap-2">
                 <span className="mt-2 w-10 shrink-0 text-xs font-medium uppercase text-muted-foreground">
-                  {index === 0 ? messages.filters.where : messages.filters.and}
+                  {index === 0 ? messages.filters.where : filters.root.operator === 'or' ? messages.filters.or : messages.filters.and}
                 </span>
                 <ConditionRow
                   condition={child}
                   path={path}
-                  fields={fields}
+                  fields={rootFields}
                   issues={issues}
                   referenceOptions={referenceOptions}
                   onChange={(condition) => onChange(updateAt(filters, index, condition))}
@@ -230,14 +236,15 @@ export function FilterBuilder({
           }
 
           const group: FilterGroup = child
+          const alternativeField = group.operator === 'or' ? firstGroupField : firstField
           return (
             <div key={path} className="flex items-start gap-2">
               <span className="mt-2 w-10 shrink-0 text-xs font-medium uppercase text-muted-foreground">
-                {index === 0 ? messages.filters.where : messages.filters.and}
+                {index === 0 ? messages.filters.where : filters.root.operator === 'or' ? messages.filters.or : messages.filters.and}
               </span>
               <div className="flex-1 rounded-md border border-dashed border-border p-3">
                 <p className="mb-2 text-xs text-muted-foreground">
-                  {messages.filters.anyOfTheFollowing}
+                  {group.operator === 'or' ? messages.filters.anyOfTheFollowing : messages.filters.allConditions}
                 </p>
                 <div className="flex flex-col gap-3">
                   {group.children.map((grandchild, childIndex) => {
@@ -252,12 +259,12 @@ export function FilterBuilder({
                     return (
                       <div key={childPath} className="flex items-start gap-2">
                         <span className="mt-2 w-8 shrink-0 text-xs font-medium uppercase text-muted-foreground">
-                          {childIndex === 0 ? '' : messages.filters.or}
+                          {childIndex === 0 ? '' : group.operator === 'or' ? messages.filters.or : messages.filters.and}
                         </span>
                         <ConditionRow
                           condition={grandchild}
                           path={childPath}
-                          fields={groupFields}
+                          fields={group.operator === 'or' ? groupFields : fields}
                           issues={issues}
                           referenceOptions={referenceOptions}
                           onChange={(condition) =>
@@ -271,22 +278,22 @@ export function FilterBuilder({
                     )
                   })}
                 </div>
-                {firstGroupField !== undefined && (
+                {alternativeField !== undefined && (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="mt-2"
                     onClick={() =>
-                      onChange(addToGroup(filters, index, conditionFor(firstGroupField)))
+                      onChange(addToGroup(filters, index, conditionFor(alternativeField)))
                     }
                   >
                     <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                     {messages.filters.addAlternative}
                   </Button>
                 )}
-                <p className="mt-2 text-xs text-muted-foreground">
+                {group.operator === 'or' && <p className="mt-2 text-xs text-muted-foreground">
                   {messages.filters.orGroupCustomFieldsOnly}
-                </p>
+                </p>}
               </div>
             </div>
           )
@@ -308,7 +315,7 @@ export function FilterBuilder({
           {messages.filters.addCondition}
         </Button>
 
-        {orGroups && (
+        {orGroups && filters.root.operator === 'and' && (
           <Button
             variant="outline"
             size="sm"
@@ -343,4 +350,84 @@ export function FilterBuilder({
         ))}
     </div>
   )
+}
+
+export function FilterPreview({ filters }: { filters: FilterSet }) {
+  const validation = useFilterValidation(filters, true)
+  const documents = useDocuments({ filters, page: 1, page_size: 25 }, validation.data?.compilable === true)
+  if (validation.isError) return <p role="alert">{errorMessage(validation.error)}</p>
+  if (validation.data?.compilable === false) return <p role="alert">{messages.filters.notCompilable}</p>
+  if (documents.isError) return <p role="alert">{errorMessage(documents.error)}</p>
+  if (!validation.data || !documents.data || documents.isPlaceholderData) {
+    return <p role="status">{messages.filters.counting}</p>
+  }
+  return <div role="status" className="space-y-1 text-sm">
+    <p>{messages.filters.matching.replace('{count}', String(documents.data.total))}</p>
+    {documents.data.items.length > 0
+      ? <ul className="list-disc pl-5">{documents.data.items.slice(0, 5).map((item) =>
+        <li key={item.id} className="break-words">{item.title}</li>)}</ul>
+      : <p>{messages.filters.emptyMatches}</p>}
+  </div>
+}
+
+function GroupChoice({ filters, onChange }: Pick<FilterBuilderProps, 'filters' | 'onChange'>) {
+  const [open, setOpen] = React.useState(false)
+  const options = useQuery({
+    queryKey: ['filters', 'group-options', filters],
+    queryFn: ({ signal }) => filtersApi.groupOptions(filters, signal),
+    enabled: open,
+  })
+  if (filters.root.children.length < 2) return null
+  return <div className="space-y-1">
+    <Button type="button" variant="outline" size="sm" aria-expanded={open}
+      onClick={() => setOpen(!open)}>{messages.filters.combine}</Button>
+    {open && (options.isError ? <p role="alert">{errorMessage(options.error)}</p>
+      : !options.data ? <p role="status">{messages.filters.counting}</p>
+      : <div className="flex flex-wrap gap-2">
+        {(['and', 'or'] as const).map((operator) =>
+          <Button key={operator} type="button" size="sm" variant="outline"
+            aria-pressed={filters.root.operator === operator}
+            disabled={!options.data?.[operator]?.compilable}
+            onClick={() => onChange({ root: { ...filters.root, operator } })}>
+            {operator === 'and' ? messages.filters.allConditions : messages.filters.anyConditions}
+          </Button>)}
+        {options.data.or?.issues.slice(0, 1).map((issue) =>
+          <p className="w-full text-sm" key={issue.code}>{issueMessage(issue)}</p>)}
+      </div>)}
+  </div>
+}
+
+export function FilterBuilder(props: FilterBuilderProps) {
+  const [previewOpen, setPreviewOpen] = React.useState(false)
+  const [advanced, setAdvanced] = React.useState(false)
+  const simple = canEditSimply(props.filters, props.fields)
+  const showAdvanced = advanced || !simple
+  return <div className="space-y-3">
+    <div className="flex flex-wrap gap-2">
+      <Button type="button" size="sm" variant={showAdvanced ? 'outline' : 'default'}
+        disabled={!simple} onClick={() => setAdvanced(false)}>{messages.filters.simpleMode}</Button>
+      <Button type="button" size="sm" variant={showAdvanced ? 'default' : 'outline'}
+        onClick={() => setAdvanced(true)}>{messages.filters.advancedMode}</Button>
+    </div>
+    {!simple && <p role="status" className="text-sm text-muted-foreground">{messages.filters.advancedRequired}</p>}
+    {showAdvanced ? <>
+      <GroupChoice filters={props.filters} onChange={props.onChange} />
+      <AdvancedFilters {...props} />
+    </> : <>
+      <SimpleFilters {...props} />
+      <Button type="button" variant="outline" size="sm" disabled={!props.fields[0]} onClick={() => {
+        const field = props.fields[0]
+        if (!field) return
+        setAdvanced(true)
+        props.onChange(addCondition(props.filters, conditionFor(field)))
+      }}>{messages.filters.addCondition}</Button>
+      {props.issues.map((issue) => <p key={issue.code + issue.path} className="text-sm text-destructive">
+        {issueMessage(issue)}</p>)}
+    </>}
+    {!props.embeddedPreview && <>
+      <Button type="button" variant="outline" size="sm" aria-expanded={previewOpen}
+        onClick={() => setPreviewOpen(!previewOpen)}>{messages.filters.previewResults}</Button>
+      {previewOpen && <FilterPreview filters={props.filters} />}
+    </>}
+  </div>
 }
