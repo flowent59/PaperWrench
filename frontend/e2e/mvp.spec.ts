@@ -103,6 +103,30 @@ test('compiled MVP: authenticated Explorer → preview → Job → rollback → 
     await page.getByLabel('Langue', { exact: true }).selectOption('en')
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
 
+    await page.getByRole('link', { name: 'Filter Sets', exact: true }).click()
+    await page.getByLabel('Name', { exact: true }).fill('Sandbox senders')
+    await page.getByRole('button', { name: 'Without a correspondent' }).click()
+    await page.getByRole('button', { name: 'Preview matches', exact: true }).click()
+    await expect(page.getByText(/documents match/)).toBeVisible()
+    await page.getByRole('button', { name: 'Save criteria' }).click()
+    await expect(page.getByText('Sandbox senders', { exact: true })).toBeVisible()
+
+    async function insertCriteria() {
+      await page.getByRole('button', { name: 'Use saved criteria' }).click()
+      await page.getByRole('combobox', { name: 'Use saved criteria' }).selectOption({ label: 'Sandbox senders' })
+      await expect(page.getByLabel('Correspondent', { exact: true })).toHaveValue('unfilled')
+    }
+    await page.goto('/documents')
+    await page.getByRole('button', { name: 'Filters', exact: true }).click()
+    await insertCriteria()
+    await page.goto('/transformations')
+    await page.getByRole('radio', { name: 'All documents matching a search' }).check()
+    await page.getByText('Filters', { exact: true }).click()
+    await insertCriteria()
+    const sets = await (await app.get('/api/v1/filter-library')).json()
+    expect((await app.delete(`/api/v1/filter-library/${sets.find((item: { name: string }) =>
+      item.name === 'Sandbox senders').id}`, { headers: writeHeaders })).status()).toBe(204)
+
     const savedViewResponse = await app.post('/api/v1/views', { headers: writeHeaders, data: {
       name: 'M13 saved Explorer view', is_default: true,
       definition: {
