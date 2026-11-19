@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { keepPreviousData, useQuery, type UseQueryResult } from '@tanstack/react-query'
 
 import { analyticsApi, documentsApi, filtersApi, metadataApi, systemApi } from './client'
@@ -94,7 +95,7 @@ export function useDocuments(
 ): UseQueryResult<DocumentPage> {
   return useQuery({
     queryKey: queryKeys.documents(request),
-    queryFn: () => documentsApi.query(request),
+    queryFn: ({ signal }) => documentsApi.query(request, signal),
     enabled,
     // Keeps the currently-rendered page visible while the next one loads,
     // instead of flashing a loading state on every page/sort/search change -
@@ -174,11 +175,15 @@ export function useFilterValidation(
   filters: FilterSet,
   enabled: boolean,
 ): UseQueryResult<FilterValidationResponse> {
+  const [settled, setSettled] = useState(filters)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSettled(filters), 250)
+    return () => window.clearTimeout(timer)
+  }, [filters])
   return useQuery({
     queryKey: queryKeys.filterValidation(filters),
-    queryFn: () => filtersApi.validate(filters),
-    enabled,
-    placeholderData: keepPreviousData,
+    queryFn: ({ signal }) => filtersApi.validate(filters, signal),
+    enabled: enabled && settled === filters,
   })
 }
 
@@ -195,8 +200,7 @@ export function useFilterCount(
 ): UseQueryResult<FilterCountResponse> {
   return useQuery({
     queryKey: queryKeys.filterCount(filters, search),
-    queryFn: () => filtersApi.count(filters, search),
+    queryFn: ({ signal }) => filtersApi.count(filters, search, signal),
     enabled,
-    placeholderData: keepPreviousData,
   })
 }

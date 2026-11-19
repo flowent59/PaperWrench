@@ -243,9 +243,9 @@ export const documentsApi = {
   // A POST for a read is deliberate: the filter tree is a nested structure,
   // and encoding it into a query string would make it neither readable nor
   // reliably round-trippable. It writes nothing.
-  query: (request: DatasetPageRequest) =>
+  query: (request: DatasetPageRequest, signal?: AbortSignal) =>
     apiFetch<DocumentPage>('/documents/query', {
-      method: 'POST',
+      method: 'POST', signal,
       body: JSON.stringify(request),
     }),
 }
@@ -269,14 +269,14 @@ export const qualityApi = {
  */
 export const filtersApi = {
   capabilities: () => apiFetch<FilterCapabilities>('/filters/capabilities'),
-  validate: (filters: FilterSet) =>
+  validate: (filters: FilterSet, signal?: AbortSignal) =>
     apiFetch<FilterValidationResponse>('/filters/validate', {
-      method: 'POST',
+      method: 'POST', signal,
       body: JSON.stringify({ filters }),
     }),
-  count: (filters: FilterSet, search: SearchSpec | null) =>
+  count: (filters: FilterSet, search: SearchSpec | null, signal?: AbortSignal) =>
     apiFetch<FilterCountResponse>('/filters/count', {
-      method: 'POST',
+      method: 'POST', signal,
       body: JSON.stringify({ filters, search }),
     }),
 }

@@ -20,8 +20,8 @@ export interface SelectionState {
   count: number
 }
 
-export function useDocumentSelection(): SelectionState {
-  const [selected, setSelected] = React.useState<ReadonlySet<number>>(() => new Set())
+export function useDocumentSelection(initial: number[] = []): SelectionState {
+  const [selected, setSelected] = React.useState<ReadonlySet<number>>(() => new Set(initial))
 
   const toggle = React.useCallback((id: number) => {
     setSelected((current) => {

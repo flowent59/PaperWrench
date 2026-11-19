@@ -104,22 +104,42 @@ export function ExplorerPage() {
   const qualityTarget = React.useMemo(() => qualityLocation(location.search), [location.search])
   const explicitIds = qualityTarget.ids
   const initialQuery = qualityTarget.query
-  const [page, setPage] = React.useState(1)
-  const [pageSize, setPageSize] = React.useState<DocumentPageSize>(100)
-  const [searchInput, setSearchInput] = React.useState(initialQuery?.search?.text ?? '')
-  const [search, setSearch] = React.useState(initialQuery?.search?.text ?? '')
-  const [searchMode, setSearchMode] = React.useState<SearchMode>(initialQuery?.search?.mode ?? 'title')
+  const navigationKey = ['explorer-navigation', location.key]
+  const restored = queryClient.getQueryData<{
+    page: number
+    pageSize: DocumentPageSize
+    searchInput: string
+    search: string
+    searchMode: SearchMode
+    sorting: SortingState
+    filters: FilterSet
+    filtersOpen: boolean
+    selected: number[]
+  }>(navigationKey)
+  const [page, setPage] = React.useState(restored?.page ?? 1)
+  const [pageSize, setPageSize] = React.useState<DocumentPageSize>(restored?.pageSize ?? 100)
+  const [searchInput, setSearchInput] = React.useState(restored?.searchInput ?? initialQuery?.search?.text ?? '')
+  const [search, setSearch] = React.useState(restored?.search ?? initialQuery?.search?.text ?? '')
+  const [searchMode, setSearchMode] = React.useState<SearchMode>(restored?.searchMode ?? initialQuery?.search?.mode ?? 'title')
   const [sorting, setSorting] = React.useState<SortingState>(() => {
+    if (restored) return restored.sorting
     const value = initialQuery?.ordering
     return value ? [{ id: value.startsWith('-') ? value.slice(1) : value,
       desc: value.startsWith('-') }] : []
   })
-  const [filters, setFilters] = React.useState<FilterSet>(initialQuery?.filters ?? emptyFilterSet)
-  const [filtersOpen, setFiltersOpen] = React.useState(false)
+  const [filters, setFilters] = React.useState<FilterSet>(restored?.filters ?? initialQuery?.filters ?? emptyFilterSet)
+  const [filtersOpen, setFiltersOpen] = React.useState(restored?.filtersOpen ?? false)
   const [showCompiled, setShowCompiled] = React.useState(false)
   const [columnVisibility, setColumnVisibility] = usePersistedColumnVisibility()
   const [columnsMenuOpen, setColumnsMenuOpen] = React.useState(false)
-  const selection = useDocumentSelection()
+  const selection = useDocumentSelection(restored?.selected)
+  React.useEffect(() => {
+    queryClient.setQueryData(['explorer-navigation', location.key], {
+      page, pageSize, searchInput, search, searchMode, sorting, filters, filtersOpen,
+      selected: [...selection.selected],
+    })
+  }, [queryClient, location.key, page, pageSize, searchInput, search, searchMode,
+    sorting, filters, filtersOpen, selection.selected])
   async function saveSelection() {
     const ids = [...selection.selected].sort((a, b) => a - b)
     setCollectionBusy(true)
@@ -140,7 +160,11 @@ export function ExplorerPage() {
     }
   }
 
+  const previousSearch = React.useRef(location.search)
+  const restoredNavigation = React.useRef(restored !== undefined)
   React.useEffect(() => {
+    if (previousSearch.current === location.search) return
+    previousSearch.current = location.search
     const target = qualityLocation(location.search).query
     setPage(1)
     setSearchInput(target?.search?.text ?? '')
@@ -168,7 +192,7 @@ export function ExplorerPage() {
   }, [setColumnVisibility])
 
   React.useEffect(() => {
-    if (defaultRestored.current || !savedViews.isSuccess) return
+    if (restoredNavigation.current || defaultRestored.current || !savedViews.isSuccess) return
     defaultRestored.current = true
     if (initialQuery !== null || qualityTarget.invalid || qualityTarget.ids !== null) return
     const defaultView = savedViews.data.find((item) => item.is_default)
@@ -305,7 +329,7 @@ export function ExplorerPage() {
     [customFieldsQuery.data],
   )
 
-  const rows = documentsQuery.data?.items ?? []
+  const rows = filtersRunnable && !documentsQuery.isPlaceholderData ? documentsQuery.data?.items ?? [] : []
 
   const table = useReactTable({
     data: rows,
@@ -502,6 +526,7 @@ export function ExplorerPage() {
             ) : (
               <>
                 <FilterBuilder
+                  embeddedPreview
                   filters={filters}
                   onChange={onFiltersChange}
                   fields={localizedCapabilities?.fields ?? []}
@@ -609,7 +634,12 @@ export function ExplorerPage() {
         </div>
       )}
 
-      {explicitIds === null && !qualityTarget.invalid && filtersRunnable && !documentsQuery.isPending && !documentsQuery.isError && total > 0 &&
+      {currentPageIds.length > 0 && <Link className="text-sm underline" to="/transformations"
+        state={{ targets: { source: 'ids', document_ids: currentPageIds } }}>
+        {messages.filters.preparePage}
+      </Link>}
+
+      {explicitIds === null && !qualityTarget.invalid && filtersRunnable && !documentsQuery.isPending && !documentsQuery.isPlaceholderData && !documentsQuery.isError && total > 0 &&
         <Link className="text-sm underline" to="/transformations"
           state={{ targets: { source: 'dataset', query: { search: searchSpec,
             filters: filtersEmpty ? null : filters, ordering: ordering ?? null } } }}>
