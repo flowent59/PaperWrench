@@ -10,7 +10,8 @@ import { ValueInput, type ReferenceOption } from './value-input'
 const quickKeys = ['core:document_type', 'core:correspondent', 'core:tags', 'core:created', 'core:added']
 const simpleOperators = ['equals', 'contains', 'greater_or_equal', 'less_or_equal', 'has_all_of', 'has_any_of']
 
-function sameUnfilled(node: FilterNode, expression: FilterNode): boolean {
+function sameUnfilled(node: FilterNode, expression: FilterNode | undefined): boolean {
+  if (!expression) return false
   if (node.kind === 'condition' && expression.kind === 'condition') {
     return fieldKey(node) === fieldKey(expression) && node.operator === expression.operator && node.value == null
   }

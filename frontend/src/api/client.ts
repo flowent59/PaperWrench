@@ -245,7 +245,7 @@ export const documentsApi = {
   // reliably round-trippable. It writes nothing.
   query: (request: DatasetPageRequest, signal?: AbortSignal) =>
     apiFetch<DocumentPage>('/documents/query', {
-      method: 'POST', signal,
+      method: 'POST', signal: signal ?? null,
       body: JSON.stringify(request),
     }),
 }
@@ -271,12 +271,12 @@ export const filtersApi = {
   capabilities: () => apiFetch<FilterCapabilities>('/filters/capabilities'),
   validate: (filters: FilterSet, signal?: AbortSignal) =>
     apiFetch<FilterValidationResponse>('/filters/validate', {
-      method: 'POST', signal,
+      method: 'POST', signal: signal ?? null,
       body: JSON.stringify({ filters }),
     }),
   count: (filters: FilterSet, search: SearchSpec | null, signal?: AbortSignal) =>
     apiFetch<FilterCountResponse>('/filters/count', {
-      method: 'POST', signal,
+      method: 'POST', signal: signal ?? null,
       body: JSON.stringify({ filters, search }),
     }),
 }
