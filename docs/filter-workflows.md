@@ -22,3 +22,11 @@ In Explorer, checked documents persist across pages and when returning through
 browser history in the same session. **Prepare current page** captures that
 page’s IDs. **Use all matching documents** passes the query. Transformations
 still requires a reviewed preview before writing.
+
+## Saved criteria
+
+The **Filter sets** page stores a private name, description and versioned
+FilterSet. Preview the match count and sample documents before saving.
+Use **Use saved criteria** in any filter editor to replace its current filters
+with an independent copy. PaperWrench checks field IDs and operators before
+insertion. Existing rules and schedules keep their approved expressions.

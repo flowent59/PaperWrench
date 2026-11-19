@@ -14,6 +14,7 @@ from paperwrench.api.v1 import analytics
 from paperwrench.api.v1 import auth
 from paperwrench.api.v1 import collections
 from paperwrench.api.v1 import documents
+from paperwrench.api.v1 import filter_library
 from paperwrench.api.v1 import filters
 from paperwrench.api.v1 import inspector
 from paperwrench.api.v1 import jobs
@@ -36,6 +37,7 @@ protected.include_router(metadata.router)
 protected.include_router(documents.router)
 protected.include_router(collections.router)
 protected.include_router(filters.router)
+protected.include_router(filter_library.router)
 protected.include_router(inspector.router)
 protected.include_router(transformations.router)
 protected.include_router(previews.router)
