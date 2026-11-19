@@ -12,5 +12,19 @@
   "paperlessVersion": "Version de Paperless",
   "documents": "Documents",
   "maxApiVersion": "Version maximale de l'API",
-  "url": "URL"
+  "url": "URL",
+  "preferences": "Préférences",
+  "languageScope": "Enregistrée dans votre compte PaperWrench.",
+  "theme": "Thème",
+  "light": "Clair",
+  "dark": "Sombre",
+  "themeScope": "Enregistré dans ce navigateur.",
+  "operatorScope": "L’opérateur configure l’adresse du serveur et le stockage des identifiants.",
+  "retryBackend": "PaperWrench est injoignable. Vérifiez votre connexion et réessayez.",
+  "configurePaperless": "Paperless attend une configuration. Demandez à l’opérateur de renseigner son adresse.",
+  "checkCredentials": "Paperless a refusé l’authentification. Vérifiez votre jeton dans Compte ou reconnectez-vous.",
+  "checkPaperless": "Paperless est injoignable. Vérifiez son état, puis réessayez.",
+  "checkVersion": "L’API Paperless est incompatible. Demandez à l’opérateur de vérifier la version installée.",
+  "checkAgain": "Relancer le diagnostic",
+  "cancelEdit": "Annuler"
 }

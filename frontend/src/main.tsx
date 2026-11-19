@@ -17,6 +17,8 @@ import { QualityPageView } from '@/pages/quality'
 import { CollectionsPage, CollectionPage } from '@/pages/collections'
 import { AnalyticsPage } from '@/pages/analytics'
 
+import { SettingsPage } from '@/pages/settings'
+
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -54,6 +56,7 @@ createRoot(container).render(
               <Route path="collections" element={<CollectionsPage />} />
               <Route path="collections/:collectionId" element={<CollectionPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             </Routes>
