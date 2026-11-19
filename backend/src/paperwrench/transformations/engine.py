@@ -19,14 +19,19 @@ from paperwrench.paperless.mutations import core_payload
 from paperwrench.paperless.value_validation import EDITABLE_CUSTOM_TYPES
 from paperwrench.paperless.value_validation import validate_custom_present
 from paperwrench.transformations.model import ClearOperation
+from paperwrench.transformations.model import CopyOperation
 from paperwrench.transformations.model import CoreValue
 from paperwrench.transformations.model import EvaluationResult
 from paperwrench.transformations.model import FieldValue
+from paperwrench.transformations.model import FillOperation
+from paperwrench.transformations.model import MissingState
+from paperwrench.transformations.model import NormalizeOperation
 from paperwrench.transformations.model import Operation
 from paperwrench.transformations.model import ProposedChange
 from paperwrench.transformations.model import ReplaceOperation
 from paperwrench.transformations.model import ResultStatus
 from paperwrench.transformations.model import SetOperation
+from paperwrench.transformations.model import TagOperation
 from paperwrench.transformations.model import TemplateOperation
 from paperwrench.transformations.model import Transformation
 from paperwrench.transformations.model import TransformationIssue
@@ -196,6 +201,38 @@ def _validate_template_shape(operation: TemplateOperation) -> set[str]:
     return used
 
 
+def _copy_type(field: FieldRef, definition: CustomField | None) -> str:
+    if definition is not None:
+        return "text" if definition.data_type in _TEXT_CUSTOM_TYPES else str(definition.data_type)
+    assert isinstance(field, CoreFieldRef)
+    return {
+        "title": "text", "created": "date", "archive_serial_number": "integer",
+    }.get(field.name.value, field.key)
+
+
+def _missing_states(field: FieldRef, definition: CustomField | None) -> set[MissingState]:
+    if definition is not None:
+        return {"absent", "null", "empty_text"} if definition.data_type in _TEXT_CUSTOM_TYPES else {
+            "absent", "null",
+        }
+    assert isinstance(field, CoreFieldRef)
+    if field.name.value == "tags":
+        return {"no_tags"}
+    if field.name.value in {
+        "correspondent", "document_type", "storage_path", "archive_serial_number",
+    }:
+        return {"null"}
+    return set()
+
+
+def _is_unfilled(before: FieldValue, when: list[MissingState]) -> bool:
+    if before.kind is Kind.ABSENT:
+        return "absent" in when
+    if before.kind is Kind.NULL:
+        return "null" in when
+    return (before.raw == "" and "empty_text" in when) or (before.raw == [] and "no_tags" in when)
+
+
 def _validate_static(
     operation: Operation, definitions: dict[int, CustomField]
 ) -> None:
@@ -215,8 +252,26 @@ def _validate_static(
             raise _EvaluationError(
                 "INVALID_CLEAR", "Core field cannot be cleared this way", field.key
             )
-    elif isinstance(operation, ReplaceOperation):
+    elif isinstance(operation, ReplaceOperation | NormalizeOperation):
         _validate_text_target(field, definition)
+    elif isinstance(operation, TagOperation):
+        if not isinstance(field, CoreFieldRef) or field.name.value != "tags":
+            raise _EvaluationError(
+                "INVALID_OPERATION", "Tag changes require the tags field", field.key,
+            )
+    elif isinstance(operation, FillOperation):
+        _validate_present(field, operation.value, definition)
+        if not set(operation.when).issubset(_missing_states(field, definition)):
+            raise _EvaluationError(
+                "INVALID_OPERATION", "Missing states do not apply to this field", field.key,
+            )
+    elif isinstance(operation, CopyOperation):
+        source = operation.source_field
+        source_type = _copy_type(source, _definition(source, definitions))
+        if source.key == field.key or source_type != _copy_type(field, definition):
+            raise _EvaluationError(
+                "INVALID_OPERATION", "Choose a compatible source field", field.key,
+            )
     else:
         _validate_text_target(field, definition)
         for name in sorted(_validate_template_shape(operation)):
@@ -244,7 +299,7 @@ def validate(
 
 
 def _intended(
-    operation: SetOperation | ClearOperation | ReplaceOperation | TemplateOperation,
+    operation: Operation,
     before: FieldValue,
     definition: CustomField | None,
     document: Document,
@@ -273,6 +328,38 @@ def _intended(
         if field.name.value == "tags":
             return _state(field, definition, Kind.PRESENT, [])
         raise _EvaluationError("INVALID_CLEAR", "Core field cannot be cleared", field.key)
+    if isinstance(operation, FillOperation):
+        _validate_static(operation, definitions)
+        if not _is_unfilled(before, operation.when):
+            return before
+        return _state(field, definition, Kind.PRESENT, operation.value)
+    if isinstance(operation, TagOperation):
+        _validate_static(operation, definitions)
+        current = list(dict.fromkeys(document.tags))
+        remove = set(operation.remove)
+        tags = list(dict.fromkeys([tag for tag in current if tag not in remove] + operation.add))
+        return _state(field, definition, Kind.PRESENT, tags)
+    if isinstance(operation, CopyOperation):
+        _validate_static(operation, definitions)
+        source = operation.source_field
+        source_value = _read(source, document, _definition(source, definitions))
+        if source_value.kind is not Kind.PRESENT:
+            raise _EvaluationError("INVALID_VALUE", "Source field has no value to copy", source.key)
+        _validate_present(field, source_value.raw, definition)
+        return _state(field, definition, Kind.PRESENT, source_value.raw)
+    if isinstance(operation, NormalizeOperation):
+        _validate_text_target(field, definition)
+        if before.kind is not Kind.PRESENT:
+            return before
+        if not isinstance(before.raw, str):
+            raise _EvaluationError("INVALID_VALUE", "Expected text to normalize", field.key)
+        normalize = {
+            "trim": str.strip, "spaces": lambda text: " ".join(text.split()),
+            "lower": str.lower, "upper": str.upper, "casefold": str.casefold,
+        }[operation.mode]
+        value = normalize(before.raw)
+        _validate_present(field, value, definition)
+        return _state(field, definition, Kind.PRESENT, value)
     if isinstance(operation, ReplaceOperation):
         _validate_text_target(field, definition)
         if before.kind is not Kind.PRESENT or not isinstance(before.raw, str):

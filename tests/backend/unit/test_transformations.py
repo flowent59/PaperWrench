@@ -293,3 +293,51 @@ def test_evaluate_api_never_writes_paperless(client: TestClient) -> None:
         "Relevé de vacations \u2013 Juillet 2026"
     )
     assert not any(route.called for route in write_routes)
+
+
+def test_differential_tags_and_unicode_normalization(
+    document: Document, definitions: dict[int, CustomField],
+) -> None:
+    current = document.model_copy(update={"tags": [3, 1], "title": "  Straße\u00a0  ÉTÉ\t "})
+    delta = {"operation": "tags_delta", "field": core("tags"), "add": [3, 8, 8], "remove": [2]}
+    result = one(current, definitions, delta)
+    assert result.intended.raw == [3, 1, 8]
+    assert one(current.model_copy(update={"tags": [3, 1, 8]}), definitions, delta).status == (
+        "unchanged"
+    )
+    assert one(current, definitions, {
+        "operation": "normalize", "field": core("title"), "mode": "spaces",
+    }).intended.raw == "Straße ÉTÉ"
+    assert one(current, definitions, {
+        "operation": "normalize", "field": core("title"), "mode": "casefold",
+    }).intended.raw == "  strasse\u00a0  été\t "
+
+
+def test_copy_preserves_money_and_validates_destination_options(
+    document: Document, definitions: dict[int, CustomField],
+) -> None:
+    definitions[10] = CustomField(id=10, name="Other currency field", data_type="monetary")
+    definitions[11] = CustomField(id=11, name="Other options", data_type="select")
+    current = document.model_copy(update={"custom_fields": [
+        CustomFieldValue(field=2, value="EUR999999999999.99"),
+        CustomFieldValue(field=5, value="option-id"),
+    ]})
+    copied = one(current, definitions, {
+        "operation": "copy", "field": custom(10), "source_field": custom(2),
+    })
+    assert copied.intended.raw == "EUR999999999999.99"
+    refused = one(current, definitions, {
+        "operation": "copy", "field": custom(11), "source_field": custom(5),
+    })
+    assert refused.status == "error" and refused.issue.code == "INVALID_VALUE"
+
+
+def test_fill_checks_explicit_state_and_preserves_zero_and_false(
+    document: Document, definitions: dict[int, CustomField],
+) -> None:
+    for field_id, value in [(3, True), (6, 7), (8, "filled"), (9, "filled")]:
+        states = ["empty_text"] if field_id == 8 else ["absent", "null"]
+        result = one(document, definitions, {
+            "operation": "fill", "field": custom(field_id), "when": states, "value": value,
+        })
+        assert result.status == ("unchanged" if field_id in {3, 6} else "change")

@@ -655,11 +655,18 @@ export type TransformationTarget =
   | { source: 'ids'; document_ids: number[] }
   | { source: 'dataset'; query: { search?: SearchSpec | null; filters?: FilterSet | null; ordering?: string | null } }
 
+export type FillState = 'absent' | 'null' | 'empty_text' | 'no_tags'
+export type Normalization = 'trim' | 'spaces' | 'lower' | 'upper' | 'casefold'
+
 export type TransformationOperation =
   | { operation: 'set'; field: FieldRef; value: unknown }
   | { operation: 'clear'; field: FieldRef; state?: 'absent' | 'null' | null }
   | { operation: 'replace'; field: FieldRef; find: string; replacement: string }
   | { operation: 'template'; field: FieldRef; template: string; bindings: Record<string, FieldRef> }
+  | { operation: 'fill'; field: FieldRef; value: unknown; when: FillState[] }
+  | { operation: 'normalize'; field: FieldRef; mode: Normalization }
+  | { operation: 'copy'; field: FieldRef; source_field: FieldRef }
+  | { operation: 'tags_delta'; field: FieldRef; add: number[]; remove: number[] }
 
 export interface Transformation {
   targets: TransformationTarget
