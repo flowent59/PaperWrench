@@ -21,6 +21,8 @@ from paperwrench.api.v1.rules import _spec
 from paperwrench.auth.service import AuthSession
 from paperwrench.db.base import utcnow
 from paperwrench.db.models import Job
+from paperwrench.db.models import LocalCredential
+from paperwrench.db.models import PaperlessIdentity
 from paperwrench.db.models import Preview
 from paperwrench.db.models import RuleSchedule
 from paperwrench.db.models import ScheduleRun
@@ -41,6 +43,7 @@ class ApproveSchedule(BaseModel):
     rule_id: int
     recurrence: Recurrence
     preview: CreateJob
+    autonomous: bool = False
     acknowledge_unattended: Literal[True]
 
 
@@ -50,6 +53,7 @@ class ScheduleView(BaseModel):
     rule_id: int
     rule_revision: int
     approved_at: datetime
+    autonomous: bool
     enabled: bool
     next_run_at: datetime
     status: str
@@ -72,10 +76,23 @@ class RunView(BaseModel):
 def view(row: RuleSchedule) -> ScheduleView:
     return ScheduleView(
         id=row.id, rule_id=row.rule_id, rule_revision=row.rule_revision,
-        approved_at=row.approved_at, enabled=row.enabled, next_run_at=row.next_run_at,
+        approved_at=row.approved_at, enabled=row.enabled, autonomous=row.autonomous,
+        next_run_at=row.next_run_at,
         status=row.status, notification=row.notification,
         recurrence=Recurrence.model_validate_json(row.recurrence_json),
     )
+
+
+@router.get("/options")
+def authorization_options(
+    request: Request, auth: AuthSession = Depends(get_auth_session),
+) -> dict[str, bool]:
+    settings = request.app.state.credential_vault.settings
+    with session_scope() as db:
+        available = (settings.autonomous_schedules and settings.credential_storage_available
+                     and auth.identity_verified
+                     and db.get(LocalCredential, auth.paperless_user_id) is not None)
+    return {"autonomous_available": available}
 
 
 @router.get("", response_model=list[ScheduleView])
@@ -96,6 +113,16 @@ async def approve(
     body = data.preview
     with session_scope() as db:
         db.execute(text("BEGIN IMMEDIATE"))
+        if data.autonomous:
+            vault = request.app.state.credential_vault
+            vault.require_available()
+            credential = db.get(LocalCredential, owner_id)
+            binding = db.get(PaperlessIdentity, owner_id)
+            if (not vault.settings.autonomous_schedules or credential is None
+                    or not auth.identity_verified or binding is None
+                    or binding.upstream_user_id != auth.upstream_user_id
+                    or binding.paperless_url != vault.settings.paperless_url):
+                raise limit("Autonomous runs require operator permission and a remembered token.")
         rule = rule_row(db, data.rule_id, owner_id)
         spec = _spec(db, RuleDefinition.model_validate_json(rule.definition_json), owner_id)
         preview = db.get(Preview, body.preview_id)
@@ -120,6 +147,7 @@ async def approve(
         row.approval_preview_id = body.preview_id
         row.approved_at = utcnow()
         row.recurrence_json = data.recurrence.model_dump_json()
+        row.autonomous = data.autonomous
         row.enabled = True
         row.status = "enabled"
         row.notification = None
@@ -127,7 +155,10 @@ async def approve(
         row.next_run_at = data.recurrence.next_after(utcnow())
         db.flush()
         result = view(row)
-    request.app.state.schedules.bind(result.id, auth.session_id)
+    if result.autonomous:
+        request.app.state.schedules.unbind(result.id)
+    else:
+        request.app.state.schedules.bind(result.id, auth.session_id)
     return result
 
 
@@ -141,6 +172,7 @@ def disable(
         if row is None or row.owner_id != owner_id:
             raise NotFoundError("Schedule not found.")
         row.enabled = False
+        row.autonomous = False
         row.status = "disabled"
         result = view(row)
     request.app.state.schedules.unbind(schedule_id)

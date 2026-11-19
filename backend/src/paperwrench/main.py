@@ -249,7 +249,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         recover()
         app.state.jobs = JobEngine(None, None, settings, instance_id)
         app.state.jobs.start()
-        app.state.schedules = ScheduleEngine(app.state.jobs, app.state.sessions, app.state.previews)
+        app.state.schedules = ScheduleEngine(app.state.jobs, app.state.sessions, app.state.previews,
+                                             app.state.credential_vault)
         app.state.schedules.start()
 
         heartbeat = asyncio.create_task(

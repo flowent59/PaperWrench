@@ -8,7 +8,7 @@ import { messages } from '@/i18n/messages'
 import { errorMessage } from '@/i18n/errors'
 import { formatDateTime } from '@/i18n/format'
 
-interface ApprovalAction { (recurrence: ScheduleRecurrence): Promise<void> }
+interface ApprovalAction { (recurrence: ScheduleRecurrence, autonomous: boolean): Promise<void> }
 
 export function ScheduleApproval({ disabled, approve }: { disabled: boolean; approve: ApprovalAction }) {
   const m = messages.schedules
@@ -16,6 +16,8 @@ export function ScheduleApproval({ disabled, approve }: { disabled: boolean; app
   const [frequency, setFrequency] = useState<'daily' | 'weekly'>('daily')
   const [time, setTime] = useState('09:00')
   const [weekday, setWeekday] = useState(0)
+  const options = useQuery({ queryKey: ['schedule-options'], queryFn: schedulesApi.options })
+  const [autonomous, setAutonomous] = useState(false)
   const [consent, setConsent] = useState(false)
   return <fieldset className="space-y-3 rounded border p-3" disabled={disabled}>
     <legend className="font-medium">{m.approveTitle}</legend>
@@ -36,9 +38,11 @@ export function ScheduleApproval({ disabled, approve }: { disabled: boolean; app
     </div>
     <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={consent}
       onChange={(e) => setConsent(e.target.checked)} />{m.consent}</label>
+    {options.data?.autonomous_available && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={autonomous}
+      onChange={(e) => { setAutonomous(e.target.checked); setConsent(false) }} />{m.autonomous}</label>}
     <Button disabled={disabled || !consent || !timezone.trim() || !time} onClick={() => {
       const [hour = 9, minute = 0] = time.split(':').map(Number)
-      void approve({ timezone, frequency, weekday, hour, minute })
+      void approve({ timezone, frequency, weekday, hour, minute }, autonomous && options.data?.autonomous_available === true)
     }}>{m.enable}</Button>
   </fieldset>
 }
@@ -73,6 +77,7 @@ export function Schedules() {
         {item.recurrence.frequency === 'weekly' ? ` (${Object.values(m.days)[item.recurrence.weekday]})` : ''}
         {' '}{String(item.recurrence.hour).padStart(2, '0')}:{String(item.recurrence.minute).padStart(2, '0')}
         {' '}{item.recurrence.timezone}</p>
+      {item.enabled && item.autonomous && <p>{m.autonomousActive}</p>}
       {item.enabled && <p>{m.next}: {formatDateTime(item.next_run_at)}</p>}
       {item.notification && <div role="alert" className="rounded border border-destructive p-2">
         <p>{m.failure} ({item.notification})</p>

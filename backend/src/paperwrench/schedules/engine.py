@@ -6,13 +6,19 @@ occurrence; writes retain the job engine's verification and manual recovery.
 
 import asyncio
 
+from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy import text
 
+from paperwrench.auth.credentials import CredentialVault
+from paperwrench.auth.credentials import invalid_credentials
+from paperwrench.auth.credentials import revoke_autonomous_schedules
 from paperwrench.auth.service import SessionStore
 from paperwrench.db.base import utcnow
 from paperwrench.db.models import Job
 from paperwrench.db.models import JobStatus
+from paperwrench.db.models import LocalCredential
+from paperwrench.db.models import PaperlessIdentity
 from paperwrench.db.models import RuleSchedule
 from paperwrench.db.models import SavedRule
 from paperwrench.db.models import ScheduleRun
@@ -23,6 +29,8 @@ from paperwrench.jobs import store
 from paperwrench.jobs.engine import JobEngine
 from paperwrench.jobs.model import CreateJob
 from paperwrench.logging import get_logger
+from paperwrench.paperless import MetadataRegistry
+from paperwrench.paperless import PaperlessClient
 from paperwrench.previews.service import PreviewService
 from paperwrench.previews.service import stale
 from paperwrench.schedules.recurrence import Recurrence
@@ -31,7 +39,9 @@ logger = get_logger(__name__)
 
 
 class ScheduleEngine:
-    def __init__(self, jobs: JobEngine, sessions: SessionStore, previews: PreviewService) -> None:
+    def __init__(self, jobs: JobEngine, sessions: SessionStore, previews: PreviewService,
+                 vault: CredentialVault | None = None) -> None:
+        self.vault = vault
         self.jobs = jobs
         self.sessions = sessions
         self.previews = previews
@@ -48,6 +58,13 @@ class ScheduleEngine:
     def start(self) -> None:
         with session_scope() as db:
             for schedule in db.scalars(select(RuleSchedule).where(RuleSchedule.enabled.is_(True))):
+                if (schedule.autonomous and self.vault and self.vault.settings.autonomous_schedules
+                        and self.vault.settings.credential_storage_available):
+                    if schedule.next_run_at <= utcnow():
+                        schedule.next_run_at = Recurrence.model_validate_json(
+                            schedule.recurrence_json,
+                        ).next_after(utcnow())
+                    continue
                 schedule.enabled = False
                 schedule.status = "needs_approval"
                 schedule.notification = "AUTH_REQUIRED"
@@ -92,6 +109,7 @@ class ScheduleEngine:
         async with self.tick_lock:
             self.jobs.check_available()
             self.reconcile()
+            await self.jobs.release_finished_clients()
             with session_scope() as db:
                 ids = list(db.scalars(select(RuleSchedule.id).where(
                     RuleSchedule.enabled.is_(True), RuleSchedule.next_run_at <= utcnow(),
@@ -143,12 +161,37 @@ class ScheduleEngine:
             owner_id, schedule_id = run.owner_id, schedule.id
             rule_id, approved_spec = schedule.rule_id, schedule.approved_spec_json
             race = schedule.acknowledge_external_race
+            autonomous = schedule.autonomous
+        ciphertext: str | None = None
+        private_client: PaperlessClient | None = None
         try:
-            auth = await self.sessions.resolve(self.bindings.get(schedule_id))
-            if auth.paperless_user_id != owner_id:
-                raise stale("Schedule credentials do not belong to its owner.")
-            # Force upstream credential verification for every occurrence.
-            await auth.client.get_profile()
+            if autonomous:
+                if self.vault is None or not self.vault.settings.autonomous_schedules:
+                    raise invalid_credentials()
+                with session_scope() as db:
+                    credential = db.get(LocalCredential, owner_id)
+                    identity = db.get(PaperlessIdentity, owner_id)
+                    if (credential is None or identity is None
+                            or identity.paperless_url != self.vault.settings.paperless_url):
+                        raise invalid_credentials()
+                    ciphertext = credential.encrypted_token
+                    settings = self.vault.settings.model_copy(update={
+                        "paperless_token": SecretStr(self.vault.decrypt(credential)),
+                        "paperless_token_file": None,
+                    })
+                    upstream_id, username = identity.upstream_user_id, credential.username
+                client = private_client = PaperlessClient(settings)
+                profile = await client.get_profile()
+                if (not profile["identity_verified"] or profile["upstream_user_id"] != upstream_id
+                        or profile["username"] != username):
+                    raise invalid_credentials()
+                registry = MetadataRegistry(client)
+            else:
+                auth = await self.sessions.resolve(self.bindings.get(schedule_id))
+                if auth.paperless_user_id != owner_id:
+                    raise stale("Schedule credentials do not belong to its owner.")
+                client, registry = auth.client, auth.registry
+                await client.get_profile()
             with session_scope() as db:
                 rule = db.get(SavedRule, rule_id)
                 if rule is None or rule.owner_id != owner_id or rule.revision != run.rule_revision:
@@ -157,7 +200,7 @@ class ScheduleEngine:
                 if spec.model_dump_json() != approved_spec:
                     raise stale("Collection changed; a new approval is required.")
             result = await build_rule_preview(
-                rule_id, self.previews, auth.client, auth.registry, owner_id,
+                rule_id, self.previews, client, registry, owner_id,
             )
             preview_id = result.id
             if result.transformation.model_dump_json() != approved_spec or result.errors:
@@ -166,7 +209,8 @@ class ScheduleEngine:
                 self.finish(run_id, "unchanged")
                 return
             # Recheck logout/expiry after potentially long read-only preparation.
-            await self.sessions.resolve(self.bindings.get(schedule_id))
+            if not autonomous:
+                await self.sessions.resolve(self.bindings.get(schedule_id))
             self.jobs.check_available()
             body = CreateJob(
                 preview_id=result.id, preview_token=result.preview_token,
@@ -175,9 +219,20 @@ class ScheduleEngine:
                 acknowledge=True, acknowledge_external_race=race,
             )
             job_id = store.create_job(body, owner_id, rule_id, schedule_run_id=run_id)
-            self.jobs.bind(job_id, owner_id, auth.client, auth.registry)
+            self.jobs.bind(job_id, owner_id, client, registry)
+            if private_client is not None:
+                self.jobs.owned_clients[job_id] = private_client
+                private_client = None
             self.jobs.wake.set()
         except PaperWrenchError as exc:
+            if ciphertext is not None and exc.code in {
+                ErrorCode.PAPERLESS_UNAUTHORIZED, ErrorCode.AUTH_INVALID_CREDENTIALS,
+            }:
+                with session_scope() as db:
+                    db.execute(text("BEGIN IMMEDIATE"))
+                    current = db.get(LocalCredential, owner_id)
+                    if current is not None and current.encrypted_token == ciphertext:
+                        revoke_autonomous_schedules(db, owner_id)
             pause = exc.code not in {
                 ErrorCode.PAPERLESS_UNREACHABLE, ErrorCode.PAPERLESS_ERROR, ErrorCode.CONFLICT,
             }
@@ -186,6 +241,8 @@ class ScheduleEngine:
             logger.error("schedule_occurrence_failed", run_id=run_id, reason="internal_failure")
             self.finish(run_id, "failed", "INTERNAL_ERROR", pause=True)
         finally:
+            if private_client is not None:
+                await private_client.invalidate_credentials()
             if preview_id is not None:
                 self.previews.discard(preview_id, owner_id)
 

@@ -257,3 +257,86 @@ def test_restart_never_replays_claimed_occurrence(
     assert len(runs) == 1 and runs[0]["status"] == "interrupted"
     with session_scope() as db:
         assert db.scalar(select(func.count()).select_from(Job)) == 0
+
+
+@pytest.mark.parametrize("failure", [
+    "none", "rejected", "different_identity", "downtime", "rotation", "deletion", "operator",
+])
+@respx.mock
+def test_autonomous_occurrence_after_restart(
+    client: TestClient, auth_record: AuthSession, failure: str,
+) -> None:
+    from cryptography.fernet import Fernet
+    from pydantic import SecretStr
+
+    from paperwrench.auth.credentials import CredentialVault
+    from paperwrench.db.models import LocalCredential
+    from paperwrench.db.models import PaperlessIdentity
+
+    state = cast(FastAPI, client.app).state
+    engine = state.schedules
+    settings = state.sessions.settings.model_copy(update={
+        "credential_key": SecretStr(Fernet.generate_key().decode()),
+    })
+    engine.vault = state.credential_vault = CredentialVault(settings)
+    auth_record.identity_verified = True
+    auth_record.upstream_user_id = 1
+    document = doc(1)
+    mock_docs(document)
+    _, body = setup_rule(client, auth_record)
+    body["autonomous"] = True
+    assert client.post("/api/v1/schedules", json=body).status_code >= 400
+    with session_scope() as db:
+        db.add(PaperlessIdentity(owner_id=1, upstream_user_id=1,
+                                 paperless_url=settings.paperless_url))
+        db.add(LocalCredential(owner_id=1, username="test", password_hash="unused",
+            paperless_url=settings.paperless_url,
+            encrypted_token=engine.vault.encrypt(1, "test", "remembered-token")))
+    schedule_id = approve(client, body)
+    if failure in {"rotation", "deletion"}:
+        if failure == "rotation":
+            response = client.put("/api/v1/auth/credentials", json={
+                "token": "replacement", "password": "sufficient-password",
+            })
+        else:
+            response = client.delete("/api/v1/auth/credentials")
+        assert response.is_success, response.text
+        schedule = client.get("/api/v1/schedules").json()[0]
+        assert not schedule["enabled"] and not schedule["autonomous"]
+        assert schedule["notification"] == "AUTH_REQUIRED"
+        return
+    if failure == "operator":
+        settings.autonomous_schedules = False
+    due(schedule_id)
+    assert client.portal is not None
+    client.portal.call(engine.close)
+    state.sessions._sessions.clear()
+    client.portal.call(engine.start)
+    tick(client)
+    assert client.get(f"/api/v1/schedules/{schedule_id}/runs").json() == []
+    if failure == "operator":
+        assert not client.get("/api/v1/schedules").json()[0]["enabled"]
+        return
+    profile = respx.get("http://paperless.test/api/profile/").respond(
+        401 if failure == "rejected" else 503 if failure == "downtime" else 200,
+        json={"id": 2 if failure == "different_identity" else 1, "username": "test"},
+    )
+    respx.get(f"{BASE}1/").mock(side_effect=lambda _: httpx.Response(200, json=document))
+
+    def patch(request: httpx.Request) -> httpx.Response:
+        document.update(json.loads(request.content))
+        return httpx.Response(200, json=document)
+
+    writes = respx.patch(f"{BASE}1/").mock(side_effect=patch)
+    due(schedule_id)
+    tick(client)
+    assert profile.called
+    run = client.get(f"/api/v1/schedules/{schedule_id}/runs").json()[0]
+    if failure == "none":
+        wait_for_job(client, run["job_id"])
+        tick(client)
+        assert writes.call_count == 1
+    else:
+        assert run["status"] == "failed" and not writes.called
+    row = client.get("/api/v1/schedules").json()[0]
+    assert row["enabled"] == (failure in {"none", "downtime"})
