@@ -136,6 +136,9 @@ class Settings(BaseSettings):
         validation_alias="PAPERWRENCH_SESSION_COOKIE_SECURE",
         description="Force Secure cookies; unset selects it from the request scheme.",
     )
+    autonomous_schedules: bool = Field(
+        default=True, validation_alias="PAPERWRENCH_AUTONOMOUS_SCHEDULES"
+    )
     remember_tokens: bool = Field(default=True, validation_alias="PAPERWRENCH_REMEMBER_TOKENS")
     credential_key: SecretStr = Field(
         default=SecretStr(""), validation_alias="PAPERWRENCH_CREDENTIAL_KEY"

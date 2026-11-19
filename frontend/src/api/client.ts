@@ -421,11 +421,12 @@ export const jobsApi = {
   resume: (id: number) => apiFetch<import('./types').JobView>(`/jobs/${id}/resume`, { method: 'POST' }),
 }
 export const schedulesApi = {
+  options: () => apiFetch<{ autonomous_available: boolean }>('/schedules/options'),
   list: () => apiFetch<import('./types').RuleSchedule[]>('/schedules'),
   approve: (ruleId: number, recurrence: import('./types').ScheduleRecurrence,
-    preview: CreatedPreview, transformation: Transformation, race: boolean) =>
+    preview: CreatedPreview, transformation: Transformation, race: boolean, autonomous = false) =>
     apiFetch<import('./types').RuleSchedule>('/schedules', { method: 'POST', body: JSON.stringify({
-      rule_id: ruleId, recurrence, acknowledge_unattended: true,
+      rule_id: ruleId, recurrence, autonomous, acknowledge_unattended: true,
       preview: { preview_id: preview.id, preview_token: preview.preview_token, transformation,
         target_fingerprint: preview.target_fingerprint, result_fingerprint: preview.result_fingerprint,
         version: preview.version, acknowledge: true, acknowledge_external_race: race },

@@ -13,9 +13,12 @@ from argon2.exceptions import InvalidHashError
 from argon2.exceptions import VerificationError
 from cryptography.fernet import Fernet
 from cryptography.fernet import InvalidToken
+from sqlalchemy import update
+from sqlalchemy.orm import Session
 
 from paperwrench.config import Settings
 from paperwrench.db.models import LocalCredential
+from paperwrench.db.models import RuleSchedule
 from paperwrench.errors import ErrorCode
 from paperwrench.errors import PaperWrenchError
 from paperwrench.logging import register_secret
@@ -26,6 +29,15 @@ def invalid_credentials() -> PaperWrenchError:
         "Sign-in failed. Check your credentials or supply a new valid Paperless token.",
         status_code=401,
         code=ErrorCode.AUTH_INVALID_CREDENTIALS,
+    )
+
+
+def revoke_autonomous_schedules(db: Session, owner_id: int) -> None:
+    db.execute(
+        update(RuleSchedule)
+        .where(RuleSchedule.owner_id == owner_id, RuleSchedule.autonomous.is_(True))
+        .values(autonomous=False, enabled=False, status="needs_approval",
+                notification="AUTH_REQUIRED")
     )
 
 

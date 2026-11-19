@@ -571,6 +571,7 @@ class RuleSchedule(Base):
     approval_preview_id: Mapped[str] = mapped_column(String(32), nullable=False)
     approved_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, nullable=False)
     recurrence_json: Mapped[str] = mapped_column(Text, nullable=False)
+    autonomous: Mapped[bool] = mapped_column(default=False, server_default="0", nullable=False)
     enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
     next_run_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, index=True)
     acknowledge_external_race: Mapped[bool] = mapped_column(default=False, nullable=False)

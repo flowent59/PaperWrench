@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from paperwrench.api.deps import get_auth_session
 from paperwrench.auth.credentials import CredentialVault
 from paperwrench.auth.credentials import invalid_credentials
+from paperwrench.auth.credentials import revoke_autonomous_schedules
 from paperwrench.auth.service import SESSION_COOKIE
 from paperwrench.auth.service import AuthSession
 from paperwrench.config import Settings
@@ -154,6 +155,7 @@ def _save_credential(
             status_code=409,
             code=ErrorCode.AUTH_IDENTITY_CONFLICT,
         )
+    revoke_autonomous_schedules(db, record.paperless_user_id)
     if credential is None:
         credential = LocalCredential(owner_id=record.paperless_user_id)
         db.add(credential)
@@ -338,6 +340,7 @@ async def delete_credentials(
 ) -> None:
     credential = db.get(LocalCredential, record.paperless_user_id)
     if credential is not None:
+        revoke_autonomous_schedules(db, record.paperless_user_id)
         db.delete(credential)
         db.commit()
     await request.app.state.sessions.delete_owner(record.paperless_user_id)

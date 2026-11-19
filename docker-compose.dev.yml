@@ -44,6 +44,7 @@ services:
       PAPERLESS_DBUSER: paperless
       PAPERLESS_DBPASS: paperless
       PAPERLESS_URL: http://localhost:8010
+      PAPERLESS_ALLOWED_HOSTS: localhost,127.0.0.1,paperless
       PAPERLESS_SECRET_KEY: dev-only-not-a-secret
       PAPERLESS_TIME_ZONE: Europe/Paris
       # French data must round-trip perfectly: accents, EUR, dd/mm/yyyy.

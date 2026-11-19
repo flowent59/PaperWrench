@@ -8,7 +8,7 @@ import { Schedules } from './schedules'
 
 afterEach(() => vi.unstubAllGlobals())
 
-it('requires a reviewed preview and explicit unattended consent, including zero-change previews', async () => {
+it.each([false, true])('requires explicit consent for autonomous=%s', async (autonomous) => {
   const spec = { targets: { source: 'ids', document_ids: [1] },
     operations: [{ operation: 'set', field: { source: 'core', name: 'title' }, value: 'New' }] }
   const preview = { id: 'a'.repeat(32), preview_token: 'token', transformation: spec,
@@ -18,6 +18,7 @@ it('requires a reviewed preview and explicit unattended consent, including zero-
     result_fingerprint: 'r', confirmed: false }
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
+    if (url.endsWith('/schedules/options')) return new Response(JSON.stringify({ autonomous_available: true }))
     if (url.endsWith('/preview')) return new Response(JSON.stringify(preview))
     if (url.includes('/documents')) return new Response(JSON.stringify({
       items: [], page: 1, page_count: 1, total: 1, page_size: 25,
@@ -35,6 +36,11 @@ it('requires a reviewed preview and explicit unattended consent, including zero-
   await waitFor(() => expect(screen.getByLabelText(messages.schedules.consent)).toBeEnabled())
   expect(enable).toBeDisabled()
   fireEvent.click(screen.getByLabelText(messages.schedules.consent))
+  if (autonomous) {
+    fireEvent.click(await screen.findByLabelText(messages.schedules.autonomous))
+    expect(enable).toBeDisabled()
+    fireEvent.click(screen.getByLabelText(messages.schedules.consent))
+  }
   expect(enable).toBeEnabled()
   fireEvent.click(enable)
   await screen.findByText(messages.schedules.approved)
@@ -43,6 +49,7 @@ it('requires a reviewed preview and explicit unattended consent, including zero-
   const sent = JSON.parse(String(requests.find(([url, init]) =>
     String(url).endsWith('/schedules') && init?.method === 'POST')?.[1].body))
   expect(sent.acknowledge_unattended).toBe(true)
+  expect(sent.autonomous).toBe(autonomous)
   expect(sent.rule_id).toBe(7)
   expect(sent.preview.preview_token).toBe('token')
 })

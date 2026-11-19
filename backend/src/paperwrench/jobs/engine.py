@@ -153,6 +153,7 @@ class JobEngine:
         self.settings = settings
         self.instance_id = instance_id
         self._credentials: dict[int, tuple[int, PaperlessClient, MetadataRegistry]] = {}
+        self.owned_clients: dict[int, PaperlessClient] = {}
         self.stopped = False
         self.wake = asyncio.Event()
         self.workers: list[asyncio.Task[None]] = []
@@ -297,11 +298,29 @@ class JobEngine:
             logger.error("job_worker_stopped", reason="internal_failure")
             self.stop_scheduling()
 
+    async def release_finished_clients(self) -> None:
+        if not self.owned_clients:
+            return
+        with session_scope() as db:
+            active = set(db.scalars(select(Job.id).where(
+                Job.id.in_(self.owned_clients.keys()),
+                Job.status.in_((JobStatus.RUNNING, JobStatus.PENDING)),
+            )))
+        for job_id in self.owned_clients.keys() - active:
+            client = self.owned_clients.pop(job_id)
+            binding = self._credentials.get(job_id)
+            if binding and binding[1] is client:
+                self._credentials.pop(job_id)
+            await client.invalidate_credentials()
+
     async def close(self) -> None:
         self.stop_scheduling()
         for worker in self.workers:
             worker.cancel()
         await asyncio.gather(*self.workers, return_exceptions=True)
+        for client in self.owned_clients.values():
+            await client.invalidate_credentials()
+        self.owned_clients.clear()
 
     def _finish(
         self,

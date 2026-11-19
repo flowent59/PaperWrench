@@ -809,6 +809,7 @@ export interface ScheduleRecurrence {
 }
 
 export interface RuleSchedule {
+  autonomous: boolean
   id: number
   rule_id: number
   rule_revision: number

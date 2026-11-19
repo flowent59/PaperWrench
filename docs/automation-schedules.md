@@ -16,15 +16,20 @@ Filter approval includes future documents matching that exact filter. Changes to
 a rule revision, a dynamic collection's filter or a static collection's membership
 require another reviewed approval. There is no account-wide or cross-user schedule.
 
-Credentials retain ADR-0016's memory-only lifetime. Schedules depend on the login
-session that approved them, even if another session for the same user remains open.
-Logout, revocation or expiry prevents further runs; restarting pauses all schedules.
-Sign in, review a fresh preview and approve again to reactivate. **The default
-session lifetime is eight hours**, configurable with `PAPERWRENCH_SESSION_TTL_SECONDS`
-up to seven days. An occurrence after session expiry will not run. Closing a browser
-tab alone does not log out. This implementation does not provide indefinite unattended
-operation across restarts or persist tokens; that requires a separate credential-vault
-design. Schedule definitions and execution history persist without credentials.
+Session-bound execution is the default. The session that approved the schedule must
+still be active when it runs. Logout, expiry and restart require a fresh approval.
+
+For autonomous execution, remember a token in Account settings, review the rule
+preview and grant the additional consent on that schedule. This uses the encrypted
+credential vault and the verified Paperless identity. Authorization covers future
+matching documents until disabled. After restart, only future occurrences run.
+Replacing or deleting the remembered credential pauses its autonomous schedules.
+A rejected credential pauses execution and appears in the owner's notifications.
+Disable a schedule to revoke future execution while retaining its job history.
+
+Operators can set `PAPERWRENCH_AUTONOMOUS_SCHEDULES=false` and restart to disable
+this mode globally. The schedule API accepts `autonomous: true` only with the
+usual approval and a remembered credential. Existing schedules use session mode.
 
 ## Recurrence and failures
 

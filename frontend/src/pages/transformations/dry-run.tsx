@@ -122,11 +122,11 @@ export function DryRun({ build, onPreviewCreated, ruleId }: DryRunProps) {
     } finally { if (alive.current) setBusy(false) }
   }
 
-  async function approveSchedule(recurrence: ScheduleRecurrence) {
+  async function approveSchedule(recurrence: ScheduleRecurrence, autonomous: boolean) {
     if (ruleId === undefined || !preview || !spec) return
     setBusy(true); setError('')
     try {
-      await schedulesApi.approve(ruleId, recurrence, preview, spec, raceAcknowledged)
+      await schedulesApi.approve(ruleId, recurrence, preview, spec, raceAcknowledged, autonomous)
       if (alive.current) {
         setPreview({ ...preview, confirmed: true, preview_token: '' })
         setScheduleApproved(true)
