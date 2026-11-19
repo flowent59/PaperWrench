@@ -1049,6 +1049,14 @@ class TestFilterEngineEmptyMissingLive:
             params = _compile(_set(_cf(periode, operator)), catalog)
             return scratch_document in await _matching_ids(raw_live, params)
 
+        async def unfilled() -> bool:
+            from paperwrench.filters.capabilities import unfilled_capability
+            field = catalog.resolve(_cf(periode, "is_missing").field)
+            expression = unfilled_capability(field).expression
+            assert expression is not None
+            params = _compile(_set(expression), catalog)
+            return scratch_document in await _matching_ids(raw_live, params)
+
         async def set_value(value: Any) -> None:
             current = await raw_live.get(f"/api/documents/{scratch_document}/")
             current.raise_for_status()
@@ -1077,6 +1085,8 @@ class TestFilterEngineEmptyMissingLive:
             "a different thing from one that was set to nothing"
         )
 
+        assert await unfilled()
+
         # -- 2. NULL: the field is attached, its value is explicitly null ---
         await set_value(None)
         assert await matches("is_missing") is False
@@ -1084,6 +1094,8 @@ class TestFilterEngineEmptyMissingLive:
         assert await matches("is_null") is True
         assert await matches("has_value") is False
         assert await matches("is_empty") is True
+
+        assert await unfilled()
 
         # -- 3. EMPTY STRING: attached, present, and genuinely "" -----------
         await set_value("")
@@ -1096,8 +1108,11 @@ class TestFilterEngineEmptyMissingLive:
         assert await matches("has_value") is True
         assert await matches("is_empty") is True
 
+        assert await unfilled()
+
         # -- 4. A REAL VALUE ------------------------------------------------
         await set_value("mars 2024")
+        assert not await unfilled()
         assert await matches("is_missing") is False
         assert await matches("is_present") is True
         assert await matches("is_null") is False

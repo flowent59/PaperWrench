@@ -65,6 +65,7 @@ from paperwrench.filters import FieldCatalog
 from paperwrench.filters import SearchMode
 from paperwrench.filters import SearchSpec
 from paperwrench.filters import validate_and_compile
+from paperwrench.filters.compiler import leaf_sources
 from paperwrench.paperless import Correspondent
 from paperwrench.paperless import CustomField
 from paperwrench.paperless import Document
@@ -422,7 +423,11 @@ async def build_query_params(
     """
     validate_page_size(request.page_size)
 
-    all_fields = await registry.all_custom_fields()
+    custom_order = (request.ordering or "").removeprefix("-").startswith(
+        CUSTOM_FIELD_ORDERING_PREFIX
+    )
+    custom_filter = request.filters is not None and True in leaf_sources(request.filters.root)
+    all_fields = await registry.all_custom_fields() if custom_order or custom_filter else []
     sortable_custom_field_ids = _sortable_custom_field_ids(all_fields)
     paperless_ordering = resolve_ordering(
         request.ordering, sortable_custom_field_ids=sortable_custom_field_ids

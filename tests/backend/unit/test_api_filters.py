@@ -535,3 +535,39 @@ def test_no_filter_endpoint_ever_writes_to_paperless(client: TestClient) -> None
     )
 
     assert not write_route.called
+
+
+@respx.mock
+def test_unfilled_templates_and_contextual_grouping(client: TestClient) -> None:
+    _mock_metadata()
+    capabilities = client.get("/api/v1/filters/capabilities").json()
+    fields = {field["key"]: field["unfilled"] for field in capabilities["fields"]}
+    assert fields["core:title"]["unavailable_reason"] == "NO_EXACT_OPERATOR"
+    assert fields["core:tags"]["states"] == ["no_tags"]
+    assert fields[f"custom_field:{MONTANT}"]["states"] == ["absent", "null"]
+    text = fields[f"custom_field:{PERIODE}"]
+    assert text["states"] == ["absent", "null", "empty_text"]
+    body = {"filters": _filters(text["expression"], fields["core:correspondent"]["expression"])}
+    options = client.post("/api/v1/filters/group-options", json=body).json()
+    assert options["and"]["compilable"]
+    assert not options["or"]["compilable"]
+    issue = options["or"]["issues"][0]
+    assert issue["code"] == "MIXED_OR_UNSUPPORTED" and issue["path"] == "root"
+
+
+@respx.mock
+def test_invalid_core_request_needs_no_upstream_even_with_cold_catalog(client: TestClient) -> None:
+    query = {"filters": _filters(_condition("core", "title", "is_null"))}
+    for endpoint in ("/filters/count", "/documents/query"):
+        assert client.post(f"/api/v1{endpoint}", json=query).status_code == 422
+    assert not respx.calls
+
+
+@respx.mock
+def test_compilation_paths_address_original_tree(client: TestClient) -> None:
+    first = _condition("core", "title", "contains", "invoice")
+    second = _condition("core", "title", "contains", "salary")
+    tree = _filters(first, _filters(second)["root"])
+    result = client.post("/api/v1/filters/validate", json={"filters": tree}).json()
+    assert result["issues"][0]["code"] == "PARAMETER_CONFLICT"
+    assert result["issues"][0]["path"] == "root.children[1].children[0]"

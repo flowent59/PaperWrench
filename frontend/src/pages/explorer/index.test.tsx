@@ -725,7 +725,7 @@ describe('ExplorerPage - Filter Builder (M4)', () => {
     ).toHaveLength(2)
     expect(
       screen.getByText(
-        'Paperless-ngx cannot combine these core and custom fields with OR.',
+        /Split these conditions into separate searches\./,
       ),
     ).toBeInTheDocument()
     expect(screen.queryByText('Filter is not valid')).not.toBeInTheDocument()

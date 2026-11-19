@@ -18,6 +18,8 @@ meta-model, it needs a list of fields and a list of operators per field.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -31,7 +33,12 @@ from paperwrench.filters.catalog import value_shape
 from paperwrench.filters.compiler import CUSTOM_FIELD_QUERY_MAX_ATOMS
 from paperwrench.filters.compiler import CUSTOM_FIELD_QUERY_MAX_DEPTH
 from paperwrench.filters.model import LIST_OPERATORS
+from paperwrench.filters.model import CoreFieldRef
+from paperwrench.filters.model import CustomFieldRef
+from paperwrench.filters.model import FilterCondition
+from paperwrench.filters.model import FilterGroup
 from paperwrench.filters.model import FilterOperator
+from paperwrench.filters.model import GroupOperator
 from paperwrench.filters.model import SearchMode
 from paperwrench.filters.validation import MAX_CONDITIONS
 from paperwrench.filters.validation import MAX_DEPTH
@@ -65,11 +72,43 @@ class OperatorCapability(BaseModel):
     note: str | None = None
 
 
+class UnfilledCapability(BaseModel):
+    states: list[Literal["absent", "null", "empty_text", "no_tags"]]
+    expression: FilterCondition | FilterGroup | None
+    unavailable_reason: Literal["NO_EXACT_OPERATOR"] | None = None
+
+
+def unfilled_capability(field: ResolvedField) -> UnfilledCapability:
+    if FilterOperator.IS_MISSING not in field.operators:
+        return UnfilledCapability(
+            states=[], expression=None, unavailable_reason="NO_EXACT_OPERATOR",
+        )
+    if field.custom_field_id is None:
+        assert field.core_field is not None
+        return UnfilledCapability(
+            states=["no_tags" if field.field_type is FieldType.TAG_SET else "null"],
+            expression=FilterCondition(field=CoreFieldRef(name=field.core_field),
+                                       operator=FilterOperator.IS_MISSING),
+        )
+    ref = CustomFieldRef(field_id=field.custom_field_id)
+    text = FilterOperator.IS_EMPTY in field.operators
+    return UnfilledCapability(
+        states=["absent", "null", "empty_text"] if text else ["absent", "null"],
+        expression=FilterGroup(operator=GroupOperator.OR, children=[
+            FilterCondition(field=ref, operator=FilterOperator.IS_MISSING),
+            FilterCondition(field=ref, operator=(
+                FilterOperator.IS_EMPTY if text else FilterOperator.IS_NULL
+            )),
+        ]),
+    )
+
+
 class FieldCapability(BaseModel):
     """One filterable field and everything the UI needs to render it."""
 
     #: Stable identity: ``core:title``, ``custom_field:17``. This is what the
     #: frontend echoes back inside a ``FieldRef``.
+    unfilled: UnfilledCapability
     key: str
     label: str
     field_type: FieldType
@@ -193,6 +232,7 @@ def _operator_capability(field_type: FieldType, operator: FilterOperator) -> Ope
 
 def _field_capability(resolved: ResolvedField, labels: dict[str, str]) -> FieldCapability:
     return FieldCapability(
+        unfilled=unfilled_capability(resolved),
         key=resolved.key,
         label=resolved.label,
         field_type=resolved.field_type,
