@@ -36,7 +36,7 @@ export function SettingsPage() {
     }
   }
 
-  return <main className="mx-auto max-w-4xl space-y-5 p-4 sm:p-6">
+  return <div className="mx-auto max-w-4xl space-y-5 p-4 sm:p-6">
     <h1 className="text-2xl font-semibold">{messages.nav.settings}</h1>
     <div className="grid gap-4 md:grid-cols-2">
       <section className="space-y-3 rounded-lg border p-4">
@@ -74,5 +74,5 @@ export function SettingsPage() {
         </Button>
       </section>
     </div>
-  </main>
+  </div>
 }
