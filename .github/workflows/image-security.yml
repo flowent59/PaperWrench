@@ -1,8 +1,8 @@
 name: Published image security
 
 on:
-  schedule:
-    - cron: '23 5 * * *'
+  # Scheduled run disabled: it was failing daily and consuming CI minutes.
+  # Re-add a `schedule:` trigger here once the audit is fixed.
   workflow_dispatch:
 
 permissions:
