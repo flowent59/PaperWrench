@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/flowent59/PaperWrench/compare/v0.6.4...v0.7.0) (2026-11-23)
+
+
+### Features
+
+* **filters:** ajouter une bibliothèque privée de critères ([#134](https://github.com/flowent59/PaperWrench/issues/134)) ([5c3e4a1](https://github.com/flowent59/PaperWrench/commit/5c3e4a1c0a119c4a633893f070b357a97fd03309))
+* **filters:** exposer les intentions de recherche et les groupes compatibles ([#129](https://github.com/flowent59/PaperWrench/issues/129)) ([e229a6a](https://github.com/flowent59/PaperWrench/commit/e229a6adf50485d5d94dc92f3d723fc010842923))
+* **filters:** simplifier les filtres et la sélection de documents ([#132](https://github.com/flowent59/PaperWrench/issues/132)) ([7f9f908](https://github.com/flowent59/PaperWrench/commit/7f9f908648bb120f650c1e85931935b46008f95b))
+* **schedules:** autoriser les plannings hors session par consentement explicite ([#128](https://github.com/flowent59/PaperWrench/issues/128)) ([05f9ceb](https://github.com/flowent59/PaperWrench/commit/05f9ceb70101411e6b3d117db1270577e60785d9))
+* **settings:** réunir préférences, compte et diagnostic ([#131](https://github.com/flowent59/PaperWrench/issues/131)) ([e89396e](https://github.com/flowent59/PaperWrench/commit/e89396e4c353c96416dae3bfdae541d74c76e868))
+* **transformations:** ajouter nettoyage, copie et remplissage conditionnel ([#133](https://github.com/flowent59/PaperWrench/issues/133)) ([d0762cb](https://github.com/flowent59/PaperWrench/commit/d0762cbc980b163ae44ae64c684e6bf2e880762d))
+
 ## [0.6.4](https://github.com/flowent59/PaperWrench/compare/v0.6.3...v0.6.4) (2026-10-29)
 
 
